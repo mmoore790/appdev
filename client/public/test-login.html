@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Login</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #2e7d32;
+    }
+    form {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 5px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #2e7d32;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1b5e20;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e8f5e9;
+      border-radius: 4px;
+      display: none;
+    }
+    .error {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <h1>Test Login</h1>
+  <p>Use this form to test authentication with the API.</p>
+  
+  <form id="loginForm">
+    <div>
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required placeholder="Enter username">
+    </div>
+    <div>
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required placeholder="Enter password">
+    </div>
+    <button type="submit">Login</button>
+  </form>
+  
+  <div id="result" class="result"></div>
+  
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const resultElement = document.getElementById('result');
+      
+      try {
+        resultElement.textContent = 'Logging in...';
+        resultElement.style.display = 'block';
+        resultElement.classList.remove('error');
+        
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password }),
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Store auth token if available
+          const authToken = response.headers.get('X-Auth-Token');
+          if (authToken) {
+            localStorage.setItem('authToken', authToken);
+            console.log('Auth token stored in localStorage');
+          }
+          
+          // Success
+          resultElement.innerHTML = `
+            <h3>Login successful!</h3>
+            <p>User information:</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+            <p>Now testing /api/auth/me endpoint...</p>
+          `;
+          
+          // Test the me endpoint with token
+          const storedToken = localStorage.getItem('authToken');
+          const headers = storedToken ? { 'Authorization': `Bearer ${storedToken}` } : {};
+          
+          const meResponse = await fetch('/api/auth/me', {
+            credentials: 'include',
+            headers
+          });
+          
+          const meData = await meResponse.json();
+          
+          if (meResponse.ok) {
+            resultElement.innerHTML += `
+              <h3>Auth verification successful!</h3>
+              <pre>${JSON.stringify(meData, null, 2)}</pre>
+              <p><a href="/" id="mainAppLink">Go to main application</a></p>
+              <script>
+                // Auto redirect after 2 seconds
+                setTimeout(() => {
+                  window.location.href = '/';
+                }, 2000);
+              </script>
+            `;
+          } else {
+            resultElement.innerHTML += `
+              <h3>Auth verification failed</h3>
+              <pre>${JSON.stringify(meData, null, 2)}</pre>
+            `;
+          }
+        } else {
+          // Error
+          resultElement.classList.add('error');
+          resultElement.innerHTML = `
+            <h3>Login failed</h3>
+            <p>${data.message || 'Unknown error'}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        }
+      } catch (error) {
+        resultElement.classList.add('error');
+        resultElement.textContent = 'Error: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>

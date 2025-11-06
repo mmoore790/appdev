@@ -1,0 +1,25 @@
+Warning: validateDOMNesting(...): <a> cannot appear as a descendant of &lt;a&gt;.
+    at a
+    at a
+    at https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=95164c78:337:18
+    at div
+    at div
+    at _c11 (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/components/ui/card.tsx:123:13)
+    at div
+    at _c (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/components/ui/card.tsx:20:11)
+    at StatCard (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/components/ui/stat-card.tsx:21:3)
+    at div
+    at div
+    at Dashboard (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/pages/dashboard.tsx?t=1747743041745:33:20)
+    at ProtectedRoute (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/App.tsx?t=1747743041745&v=IhBdqxsD3IKZ1ZEKonB_2:41:38)
+    at Route (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=95164c78:323:16)
+    at Switch (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=95164c78:379:17)
+    at Router
+    at main
+    at div
+    at div
+    at AuthAwareLayout (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/src/App.tsx?t=1747743041745&v=IhBdqxsD3IKZ1ZEKonB_2:212:31)
+    at Provider (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-5AJU3CG7.js?v=95164c78:38:15)
+    at TooltipProvider (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=95164c78:61:5)
+    at QueryClientProvider (https://57b04063-bd97-43d8-b8e9-e8a78f6fb894-00-10uxylissl793.kirk.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=95164c78:2805:3)
+    at App

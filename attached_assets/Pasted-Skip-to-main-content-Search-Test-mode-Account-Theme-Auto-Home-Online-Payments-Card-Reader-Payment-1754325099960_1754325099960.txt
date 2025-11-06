@@ -1,0 +1,129 @@
+Skip to main content
+
+Search
+
+Test mode
+Account
+Theme
+
+Auto
+Home
+Online Payments
+Card Reader Payments
+API & SDKs
+Support
+Introduction
+Get Started
+Register application
+Authorization
+Response Handling
+Webhooks
+Guides
+Accept a payment
+Recurrent payments
+Refunds
+Save card with payment widget
+Alternative Payment Methods
+Introduction
+Integration Guide
+Apple Pay
+Google Pay
+Features
+3-D Secure flow
+Open Banking
+Tools
+Payment widget
+Swift Checkout Implementation
+PHP SDK
+Plugins
+WooCommerce
+WIX
+PrestaShop
+Hosted Checkout
+Hosted Checkout is a new integration product that offers a complete checkout flow for payment collection. It aims at being easy to integrate and requires little to no code. The solution offers a summary of the checkout details and provides a complete flow for handling payment collection, covering the possible outcomes of payment attempts all the way to the success page. All SumUp supported payment methods, with the exception of PIX and Boleto, are available in Hosted Checkout, according to availability per merchant.
+
+Hosted Checkout Form
+Getting started
+Hosted Checkouts is available to all SumUp merchants and getting started with it is super easy!
+
+The only requirement to access this product is the ability to create online checkouts (see more).
+
+How does it work?
+Once you're able to create checkouts, you can opt-in for Hosted Checkout by providing an extra parameter to your POST request payload. The parameter name should be hosted_checkout and the value should be an object with the following structure: { "enabled": true }.
+
+The response should then include the following properties, proving that hosted checkouts is available:
+
+hosted_checkout will be returned as provided in the request
+hosted_checkout_url will provide the URL of the page handling the payment flow
+Here's an example of creating a checkout with Hosted Checkouts enabled:
+
+curl -X POST https://api.sumup.com/v0.1/checkouts \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer <AUTH_TOKEN>' \ 
+    -d '{
+        "amount": 12.00,
+        "checkout_reference": "b50pr914-6k0e-3091-a592-890010285b3d", 
+        "currency": "EUR",
+        "description": "A sample checkout",
+        "merchant_code": "MCXXXXXX",
+        "hosted_checkout": { "enabled": true }
+    }'
+The response body containing the hosted_checkout and hosted_checkout_url parameters:
+
+{
+    "amount": 12,
+    "checkout_reference": "b50pr914-6k0e-3091-a592-890010285b3d",
+    "checkout_type": "checkout",
+    "currency": "EUR",
+    "date":"2000-01-01T12:49:24.899+00:00",
+    "description": "A sample checkout",
+    "id": "64553e20-3f0e-49e4-8af3-fd0eca86ce91",
+    "merchant_code": "MCXXXXXX",
+    "merchant_country": "DE",
+    "merchant_name": "Sample Shop",
+    "purpose": "CHECKOUT",
+    "status": "PENDING",
+    "transactions": [],
+    "hosted_checkout": { "enabled": true },
+    "hosted_checkout_url": "https://checkout.sumup.com/pay/8f9316a3-cda9-42a9-9771-54d534315676"
+}
+Configuring Hosted Checkouts
+Redirecting to a different page after successful payment
+This product is meant to suit a broad range of use cases, from a simple self-contained payment solution, to a checkout step integrated within a longer flow. When creating a checkout, it's possible to provide a redirect_url parameter to include a redirect link in the success page.
+
+Differently from what's stated in our API docs, the absence of this parameter does not affect the availability of payment methods in Hosted Checkouts.
+
+Hosted Checkout status pages
+With Hosted Checkout your payment flow is covered from start to finish. All successful payments will be presented with a success page informing them of the completed payment. Hosted Checkout also accommodates other payment outcomes:
+
+Successful payments. This page will include the "Back to merchant website" button only if the redirect_url was provided at checkout creation.
+Payment Successful
+Failed payments will include express checkout payment methods for a quick retry.
+Payment Failed
+Expired session page will be shown for all unpaid checkouts after checkout expiration (if configured).
+Session Timed Out
+Not found page, for all URLs that do not match any existing session in our system
+Session Not Found
+This product is currently in beta and may be subject to change and we're currently working on many new features soon to be available! Keep an eye on this page as we'll continue to add features in the upcoming months.
+
+Feel free to reach out with feature requests via our contact form.
+
+Was this helpful?
+Links
+Card Reader Payments
+Online Payments
+API Reference
+Help
+More
+SumUp Homepage
+Handbook
+Affiliates
+Business Guide
+Press
+Careers
+Help Center
+Copyright © 2025 SumUp
+Legal Notice
+Privacy Policy
+Terms & Conditions
+Cookie Policy
