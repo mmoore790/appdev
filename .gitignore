@@ -1,2 +1,32 @@
-node_modules
-node_modules
+# Node dependencies
+node_modules/
+/backend/node_modules/
+/frontend/node_modules/
+
+# Build artifacts
+dist/
+/backend/dist/
+/frontend/dist/
+
+# Secrets
+.env
+.env.*
+/backend/.env
+/frontend/.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# Replit junk
+.replit
+.config
+.local
+
+# Other
+/tmp
+cookies.txt
+cookies_new.txt
