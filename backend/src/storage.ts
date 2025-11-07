@@ -618,8 +618,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createActivity(activityData: InsertActivity): Promise<Activity> {
+    const { metadata, ...rest } = activityData;
+    const normalisedMetadata =
+      metadata == null
+        ? null
+        : typeof metadata === 'object'
+          ? metadata as Record<string, unknown>
+          : { value: metadata };
     const [activity] = await db.insert(activities).values({
-      ...activityData,
+      ...rest,
+      metadata: normalisedMetadata,
       timestamp: new Date().toISOString()
     }).returning();
     return activity;
@@ -1149,24 +1157,25 @@ export class DatabaseStorage implements IStorage {
 
   async createPartOnOrder(partData: InsertPartOnOrder): Promise<PartOnOrder> {
     // Convert decimal costs to pence if provided
-    const processedData = {
-      ...partData,
-      estimatedCost: partData.estimatedCost ? Math.round(partData.estimatedCost * 100) : undefined,
-      actualCost: partData.actualCost ? Math.round(partData.actualCost * 100) : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      const processedData = {
+        ...partData,
+        createdBy: partData.createdBy ?? 1,
+        estimatedCost: partData.estimatedCost ? Math.round(partData.estimatedCost * 100) : undefined,
+        actualCost: partData.actualCost ? Math.round(partData.actualCost * 100) : undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
     const [newPart] = await db.insert(partsOnOrder).values(processedData).returning();
 
     // Create initial tracking update
-    await this.createPartOrderUpdate({
-      partOrderId: newPart.id,
-      updateType: 'ordered',
-      newStatus: 'ordered',
-      notes: `Part ordered from ${newPart.supplier} for customer ${newPart.customerName}`,
-      createdBy: partData.createdBy || 1
-    });
+        await this.createPartOrderUpdate({
+          partOrderId: newPart.id,
+          updateType: 'ordered',
+          newStatus: 'ordered',
+          notes: `Part ordered from ${newPart.supplier} for customer ${newPart.customerName}`,
+          createdBy: partData.createdBy ?? 1
+        });
 
     // Create activity log
     await this.createActivity({
@@ -1317,13 +1326,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(partOrderUpdates.createdAt));
   }
 
-  async createPartOrderUpdate(updateData: InsertPartOrderUpdate): Promise<PartOrderUpdate> {
-    const [newUpdate] = await db.insert(partOrderUpdates).values({
-      ...updateData,
-      createdAt: new Date().toISOString()
-    }).returning();
+    async createPartOrderUpdate(updateData: InsertPartOrderUpdate): Promise<PartOrderUpdate> {
+      const [newUpdate] = await db.insert(partOrderUpdates).values({
+        ...updateData,
+        createdBy: updateData.createdBy ?? 1
+      }).returning();
 
-    return newUpdate;
+      return newUpdate;
   }
 }
 

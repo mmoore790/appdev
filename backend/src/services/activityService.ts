@@ -2,11 +2,11 @@
 import { storage } from "../storage";
 
 export interface ActivityData {
-  userId: number;
+  userId?: number | null;
   activityType: string;
   description: string;
-  entityType?: string;
-  entityId?: number;
+  entityType?: string | null;
+  entityId?: number | null;
   metadata?: any;
 }
 
@@ -15,14 +15,17 @@ export interface ActivityData {
  */
 export async function logActivity(data: ActivityData): Promise<void> {
   try {
+    const userId = data.userId ?? 0;
+    const entityType = data.entityType ?? '';
+    const entityId = data.entityId ?? 0;
+
     await storage.createActivity({
-      userId: data.userId,
+      userId,
       activityType: data.activityType,
       description: data.description,
-      entityType: data.entityType || '',
-      entityId: data.entityId || 0,
-      timestamp: new Date().toISOString(),
-      metadata: data.metadata ? JSON.stringify(data.metadata) : null
+      entityType,
+      entityId,
+      metadata: data.metadata ?? null
     });
   } catch (error) {
     console.error("Error logging activity:", error);

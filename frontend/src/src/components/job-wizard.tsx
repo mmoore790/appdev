@@ -189,7 +189,7 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     } else {
       // Create new customer
       try {
-        const newCustomer = await apiRequest('POST', '/api/customers', {
+          const newCustomer = await apiRequest<Customer>('POST', '/api/customers', {
           name: wizardData.customerName,
           email: wizardData.customerEmail || null,
           phone: wizardData.customerPhone || null

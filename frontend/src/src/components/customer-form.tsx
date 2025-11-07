@@ -10,6 +10,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import type { Customer } from "@shared/schema";
 
 // Define the customer schema for form validation
 const customerSchema = z.object({
@@ -43,8 +44,8 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
   });
 
   // Fetch customer data if in edit mode
-  const { data: customer, isLoading } = useQuery({
-    queryKey: customerId ? [`/api/customers/${customerId}`] : null,
+  const { data: customer, isLoading } = useQuery<Customer>({
+    queryKey: [`/api/customers/${customerId}`],
     enabled: !!customerId
   });
 

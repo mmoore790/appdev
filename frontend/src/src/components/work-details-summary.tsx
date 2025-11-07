@@ -21,20 +21,25 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
   const printRef = useRef<HTMLDivElement>(null);
 
   // Fetch job data
-  const { data: job } = useQuery({
+  const { data: jobData } = useQuery({
     queryKey: [`/api/jobs/${jobId}`],
     enabled: !!jobId
   });
 
   // Fetch customers for customer name
-  const { data: customers = [] } = useQuery({
+  const { data: customersData } = useQuery({
     queryKey: ["/api/customers"],
   });
 
   // Fetch users for technician name
-  const { data: users = [] } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ["/api/users"],
   });
+
+  const job = (jobData as any) || null;
+  const jobDetails = job as any;
+  const customers = Array.isArray(customersData) ? customersData : [];
+  const users = Array.isArray(usersData) ? usersData : [];
 
   // Get customer name
   const getCustomerName = (customerId: number) => {
@@ -105,7 +110,7 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
     printWindow.document.write(`
       <html>
         <head>
-          <title>Service Details - ${job?.jobId}</title>
+          <title>Service Details - ${jobDetails?.jobId}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -368,15 +373,15 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
                   <div className="info-grid">
                     <div className="info-item">
                       <div className="info-label">Job ID:</div>
-                      <div>{job.jobId}</div>
+                      <div>{jobDetails.jobId}</div>
                     </div>
                     <div className="info-item">
                       <div className="info-label">Customer:</div>
-                      <div>{getCustomerName(job.customerId)}</div>
+                      <div>{getCustomerName(jobDetails.customerId)}</div>
                     </div>
                     <div className="info-item">
                       <div className="info-label">Equipment:</div>
-                      <div>{job.equipmentDescription || "Custom Equipment"}</div>
+                      <div>{jobDetails.equipmentDescription || "Custom Equipment"}</div>
                     </div>
                     <div className="info-item">
                       <div className="info-label">Date:</div>

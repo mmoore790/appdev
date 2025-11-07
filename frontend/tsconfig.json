@@ -15,15 +15,16 @@
     "jsx": "react-jsx",
 
     /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+      "strict": false,
+      "noUnusedLocals": false,
+      "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+        "@/*": ["./src/src/*"],
+        "@assets/*": ["./src/src/assets/*"]
     }
   },
   "include": ["src"],

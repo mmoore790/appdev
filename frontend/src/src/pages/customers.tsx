@@ -29,11 +29,11 @@ export default function Customers() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
-  const { data: customers, isLoading } = useQuery({
+  const { data: customersData, isLoading } = useQuery({
     queryKey: [searchQuery ? `/api/customers?search=${searchQuery}` : "/api/customers"],
   });
 
-  const filteredCustomers = customers || [];
+  const filteredCustomers = Array.isArray(customersData) ? customersData : [];
   const totalPages = Math.ceil(filteredCustomers.length / pageSize);
   const paginatedCustomers = filteredCustomers.slice(
     (page - 1) * pageSize,

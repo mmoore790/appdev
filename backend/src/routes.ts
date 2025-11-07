@@ -323,22 +323,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const equipmentData = insertEquipmentSchema.parse(req.body);
       const newEquipment = await storage.createEquipment(equipmentData);
+
+      const equipmentDetails = {
+        serialNumber: newEquipment.serialNumber,
+        typeId: newEquipment.typeId,
+        customerId: newEquipment.customerId,
+      };
       
       // Log equipment creation activity
       await logActivity({
         userId: (req.session as any)?.userId || 1,
         activityType: 'equipment_created',
         description: getActivityDescription('equipment_created', 'equipment', newEquipment.id, {
-          equipmentName: `${newEquipment.brand} ${newEquipment.model}`,
-          brand: newEquipment.brand,
-          model: newEquipment.model
+          equipmentName: equipmentDetails.serialNumber
+            ? `Serial ${equipmentDetails.serialNumber}`
+            : `Equipment ${newEquipment.id}`,
+          ...equipmentDetails
         }),
         entityType: 'equipment',
         entityId: newEquipment.id,
         metadata: {
-          brand: newEquipment.brand,
-          model: newEquipment.model,
-          serialNumber: newEquipment.serialNumber
+          ...equipmentDetails
         }
       });
       
@@ -544,25 +549,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Check if status changed to ready for pickup - send email notification
-      if (currentJob.status !== 'ready_for_pickup' && updatedJob.status === 'ready_for_pickup') {
-        try {
-          if (updatedJob.customerId) {
-            const customer = await storage.getCustomer(updatedJob.customerId);
-            if (customer && customer.email) {
-              await sendJobCompletedEmail(updatedJob, customer);
-              console.log(`Job ready for pickup email sent for job ${updatedJob.jobId} to ${customer.email}`);
+        // Check if status changed to ready for pickup - send email notification
+        if (currentJob.status !== 'ready_for_pickup' && updatedJob.status === 'ready_for_pickup') {
+          try {
+            if (updatedJob.customerId) {
+              const customer = await storage.getCustomer(updatedJob.customerId);
+              if (customer && customer.email) {
+                await sendJobCompletedEmail(customer.email, updatedJob);
+                console.log(`Job ready for pickup email sent for job ${updatedJob.jobId} to ${customer.email}`);
+              }
             }
+          } catch (emailError) {
+            console.error(`Failed to send job ready for pickup email for job ${updatedJob.jobId}:`, emailError);
           }
-        } catch (emailError) {
-          console.error(`Failed to send job ready for pickup email for job ${updatedJob.jobId}:`, emailError);
         }
-      }
       
-      // Log other significant changes
-      const changedFields = Object.keys(jobData).filter(key => 
-        key !== 'status' && currentJob[key] !== updatedJob[key]
-      );
+        // Log other significant changes
+        const jobUpdatesPayload = jobData as Record<string, unknown>;
+        const currentJobRecord = currentJob as Record<string, unknown>;
+        const updatedJobRecord = updatedJob as Record<string, unknown>;
+        const changedFields = Object.keys(jobUpdatesPayload).filter((key) => {
+          if (key === 'status') {
+            return false;
+          }
+          return currentJobRecord[key] !== updatedJobRecord[key];
+        });
       
       if (changedFields.length > 0) {
         await logActivity({
@@ -1034,26 +1045,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create new callback request
   app.post("/api/callbacks", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const callbackData = insertCallbackRequestSchema.parse(req.body);
-      const newCallback = await storage.createCallbackRequest(callbackData);
-      
-      // Log callback creation activity
+        const callbackData = insertCallbackRequestSchema.parse(req.body);
+        const newCallback = await storage.createCallbackRequest(callbackData);
+        const callbackMetadata = {
+          customerName: newCallback.customerName,
+          phone: newCallback.phoneNumber,
+          reason: newCallback.subject,
+          details: newCallback.details,
+          requestedTime: newCallback.requestedAt
+        };
+        
+        // Log callback creation activity
       await logActivity({
         userId: (req.session as any)?.userId || 1,
         activityType: 'callback_created',
-        description: getActivityDescription('callback_created', 'callback', newCallback.id, {
-          customerName: newCallback.customerName,
-          phone: newCallback.phone,
-          reason: newCallback.reason
-        }),
+          description: getActivityDescription('callback_created', 'callback', newCallback.id, callbackMetadata),
         entityType: 'callback',
         entityId: newCallback.id,
-        metadata: {
-          customerName: newCallback.customerName,
-          phone: newCallback.phone,
-          reason: newCallback.reason,
-          requestedTime: newCallback.requestedTime
-        }
+          metadata: callbackMetadata
       });
       
       res.status(201).json(newCallback);
@@ -1111,22 +1120,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Log callback completion activity
-      await logActivity({
-        userId: (req.session as any)?.userId || 1,
-        activityType: 'callback_completed',
-        description: getActivityDescription('callback_completed', 'callback', completedCallback.id, {
+        const completedMetadata = {
           customerName: completedCallback.customerName,
-          phone: completedCallback.phone
-        }),
-        entityType: 'callback',
-        entityId: completedCallback.id,
-        metadata: {
-          customerName: completedCallback.customerName,
-          phone: completedCallback.phone,
+          phone: completedCallback.phoneNumber,
           completionNotes: notes,
           completionTime: new Date().toISOString()
-        }
-      });
+        };
+
+        await logActivity({
+          userId: (req.session as any)?.userId || 1,
+          activityType: 'callback_completed',
+          description: getActivityDescription('callback_completed', 'callback', completedCallback.id, completedMetadata),
+          entityType: 'callback',
+          entityId: completedCallback.id,
+          metadata: completedMetadata
+        });
       
       res.json(completedCallback);
     } catch (error) {
@@ -1392,14 +1400,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             checkoutReference: checkoutReference
           });
 
-          const paymentLink = session.url!;
+            const paymentLink = session.url!;
 
-          // Update payment request with Stripe data
-          const finalPaymentRequest = await storage.updatePaymentRequest(paymentRequest.id, {
+            // Update payment request with Stripe data
+            const finalPaymentRequest = (await storage.updatePaymentRequest(paymentRequest.id, {
             checkoutId: session.id,
             paymentLink: paymentLink,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Expires in 24 hours
-          });
+            })) ?? paymentRequest;
 
           // Send email notification to customer if email provided
           if (paymentData.customerEmail) {
@@ -1882,37 +1890,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // VERIFY: Get additional proof from Stripe API
             let stripeVerification = null;
-            try {
-              const stripeService = StripeService.fromEnvironment();
-              if (stripeService && session.payment_intent) {
-                const paymentIntent = await stripeService.stripe.paymentIntents.retrieve(session.payment_intent);
-                
-                // Only proceed if payment intent is actually succeeded
-                if (paymentIntent.status === 'succeeded') {
-                  stripeVerification = {
-                    payment_intent_id: paymentIntent.id,
-                    status: paymentIntent.status,
-                    amount: paymentIntent.amount,
-                    currency: paymentIntent.currency,
-                    created: new Date(paymentIntent.created * 1000).toISOString(),
-                    receipt_url: paymentIntent.charges?.data?.[0]?.receipt_url || null,
-                    payment_method_id: paymentIntent.payment_method,
-                    last_4: paymentIntent.charges?.data?.[0]?.payment_method_details?.card?.last4 || null,
-                    brand: paymentIntent.charges?.data?.[0]?.payment_method_details?.card?.brand || null
-                  };
-                  console.log(`✅ Stripe verification successful for ${session.id}:`, JSON.stringify(stripeVerification, null, 2));
-                } else {
-                  console.log(`❌ Payment intent ${paymentIntent.id} status is ${paymentIntent.status}, not succeeded`);
-                  return res.json({ received: true, error: 'Payment not succeeded' });
+              try {
+                const stripeService = StripeService.fromEnvironment();
+                if (stripeService && session.payment_intent) {
+                  const paymentIntentId = typeof session.payment_intent === 'string'
+                    ? session.payment_intent
+                    : session.payment_intent.id;
+
+                  if (paymentIntentId) {
+                    const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
+                    
+                    // Only proceed if payment intent is actually succeeded
+                      if (paymentIntent.status === 'succeeded') {
+                        const charge = (paymentIntent as any).charges?.data?.[0];
+                      stripeVerification = {
+                        payment_intent_id: paymentIntent.id,
+                        status: paymentIntent.status,
+                        amount: paymentIntent.amount,
+                        currency: paymentIntent.currency,
+                        created: new Date(paymentIntent.created * 1000).toISOString(),
+                          receipt_url: charge?.receipt_url || null,
+                          payment_method_id: paymentIntent.payment_method,
+                          last_4: charge?.payment_method_details?.card?.last4 || null,
+                          brand: charge?.payment_method_details?.card?.brand || null
+                      };
+                      console.log(`✅ Stripe verification successful for ${session.id}:`, JSON.stringify(stripeVerification, null, 2));
+                    } else {
+                      console.log(`❌ Payment intent ${paymentIntent.id} status is ${paymentIntent.status}, not succeeded`);
+                      return res.json({ received: true, error: 'Payment not succeeded' });
+                    }
+                  }
                 }
-              }
-            } catch (error) {
+              } catch (error) {
               console.error('❌ Error verifying payment with Stripe:', error);
               return res.json({ received: true, error: 'Failed to verify payment' });
             }
             
             // Update payment request status with comprehensive proof
-            const transactionDetails = {
+              const amountInPence = matchingRequest.amount ?? 0;
+              const transactionDetails = {
               transactionId: session.payment_intent?.toString() || session.id,
               transactionCode: session.id,
               authCode: session.payment_intent?.toString() || session.id,
@@ -1924,8 +1940,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updatePaymentStatus(matchingRequest.id, 'paid', transactionDetails);
             
             // Automatically mark the job as paid with verified proof
-            const job = await storage.getJob(matchingRequest.jobId);
-            if (job) {
+              if (matchingRequest.jobId) {
+                const job = await storage.getJob(matchingRequest.jobId);
+                if (job) {
               const ukVerificationTime = new Date().toLocaleString('en-GB', { 
                 timeZone: 'Europe/London',
                 year: 'numeric',
@@ -1956,36 +1973,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 second: '2-digit'
               });
               
-              await storage.updateJob(matchingRequest.jobId, {
-                paymentStatus: 'paid',
-                paymentAmount: matchingRequest.amount, // Amount is already in pence
-                paymentMethod: 'stripe',
-                paymentNotes,
-                paidAt: ukTime
-              });
-              
-              console.log(`✅ Job ${job.jobId} automatically marked as paid with Stripe verification proof`);
-              
-              // Log the activity with verification details (use system user ID 1)
-              try {
-                await storage.createActivity({
-                  userId: 1, // System activity
-                  activityType: 'job_payment_completed',
-                  description: `✅ VERIFIED Stripe Payment: ${job.jobId} - £${(matchingRequest.amount / 100).toFixed(2)} ${stripeVerification?.receipt_url ? `| Receipt: ${stripeVerification.receipt_url}` : ''}`,
-                  metadata: {
-                    jobId: matchingRequest.jobId,
-                    paymentAmount: matchingRequest.amount,
-                    stripeSessionId: session.id,
-                    paymentIntentId: stripeVerification?.payment_intent_id,
-                    receiptUrl: stripeVerification?.receipt_url,
-                    verified: true,
-                    verificationDate: new Date().toISOString()
-                  }
+                await storage.updateJob(matchingRequest.jobId, {
+                  paymentStatus: 'paid',
+                  paymentAmount: amountInPence, // Amount is already in pence
+                  paymentMethod: 'stripe',
+                  paymentNotes,
+                  paidAt: ukTime
                 });
-              } catch (activityError) {
-                console.error("Error logging payment activity:", activityError);
+                
+                console.log(`✅ Job ${job.jobId} automatically marked as paid with Stripe verification proof`);
+                
+                // Log the activity with verification details (use system user ID 1)
+                try {
+                  await storage.createActivity({
+                    userId: 1, // System activity
+                    activityType: 'job_payment_completed',
+                    description: `✅ VERIFIED Stripe Payment: ${job.jobId} - £${(amountInPence / 100).toFixed(2)} ${stripeVerification?.receipt_url ? `| Receipt: ${stripeVerification.receipt_url}` : ''}`,
+                    metadata: {
+                      jobId: matchingRequest.jobId,
+                      paymentAmount: amountInPence,
+                      stripeSessionId: session.id,
+                      paymentIntentId: stripeVerification?.payment_intent_id,
+                      receiptUrl: stripeVerification?.receipt_url,
+                      verified: true,
+                      verificationDate: new Date().toISOString()
+                    },
+                    entityType: 'job',
+                    entityId: job.id
+                  });
+                  } catch (activityError) {
+                    console.error("Error logging payment activity:", activityError);
+                  }
+                }
               }
-            }
           } else {
             console.log(`No payment request found for session ${session.id}`);
           }

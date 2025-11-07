@@ -23,11 +23,11 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-export async function apiRequest(
+export async function apiRequest<T = unknown>(
   urlOrOptions: string | { method: string; url?: string; data?: unknown },
   optionsOrData?: { method?: string; data?: unknown } | unknown,
   maybeData?: unknown
-): Promise<any> {
+): Promise<T> {
   let method: string;
   let url: string;
   let data: unknown | undefined;
@@ -78,7 +78,7 @@ export async function apiRequest(
 
     // If status is OK but no content, return empty object
     if (res.status === 204) {
-      return {};
+        return {} as T;
     }
 
     // Check for client or server errors
@@ -90,22 +90,19 @@ export async function apiRequest(
     try {
       const jsonResponse = await res.json();
       console.log(`[API Response] ${method} ${url} response:`, jsonResponse);
-      return jsonResponse;
+        return jsonResponse as T;
     } catch (jsonError) {
       console.error(`[API Error] Failed to parse JSON response from ${method} ${url}:`, jsonError);
       throw new Error('Invalid JSON response from server');
     }
   } catch (fetchError: any) {
     console.error(`[API Error] ${method} ${url} failed:`, fetchError);
-    throw fetchError;
+      throw fetchError;
   }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn: <T>(options: {
-  on401: UnauthorizedBehavior;
-}) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior }) =>
+export const getQueryFn = <T>({ on401: unauthorizedBehavior }: { on401: UnauthorizedBehavior }): QueryFunction<T> =>
   async ({ queryKey }) => {
     // Get auth token from localStorage if available
     const authToken = localStorage.getItem('authToken');
@@ -121,12 +118,12 @@ export const getQueryFn: <T>(options: {
       headers
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
-    }
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null as T;
+      }
 
     await throwIfResNotOk(res);
-    return await res.json();
+      return (await res.json()) as T;
   };
 
 export const queryClient = new QueryClient({

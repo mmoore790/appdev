@@ -144,7 +144,7 @@ export default function Callbacks() {
   });
 
   // Query for callbacks based on selected tab and date filter
-  const { data: callbacks = [], isLoading } = useQuery({
+  const { data: callbacksData, isLoading } = useQuery({
     queryKey: ['/api/callbacks', selectedTab, user?.id, dateFilter.from.toISOString(), dateFilter.to.toISOString()],
     queryFn: async () => {
       let url = '/api/callbacks';
@@ -168,16 +168,20 @@ export default function Callbacks() {
   });
 
   // Query for users (for the assignee dropdown)
-  const { data: users = [] } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ['/api/users'],
     queryFn: () => apiRequest('GET', '/api/users')
   });
 
   // Query for customers (for the customer dropdown)
-  const { data: customers = [] } = useQuery({
+  const { data: customersData } = useQuery({
     queryKey: ['/api/customers'],
     queryFn: () => apiRequest('GET', '/api/customers')
   });
+
+  const callbacks = Array.isArray(callbacksData) ? callbacksData : [];
+  const users = Array.isArray(usersData) ? usersData : [];
+  const customers = Array.isArray(customersData) ? customersData : [];
 
   // Create callback mutation
   const createMutation = useMutation({
