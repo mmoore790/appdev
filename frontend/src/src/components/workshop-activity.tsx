@@ -1,8 +1,8 @@
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { formatTimeAgo } from "@/lib/utils";
+import { Card, CardContent, CardFooter } from "./ui/card"; // Adjusted path
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"; // Adjusted path
+import { Button } from "./ui/button"; // Adjusted path
+import { Skeleton } from "./ui/skeleton"; // Adjusted path
+import { formatTimeAgo } from "../lib/utils"; // Adjusted path
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { X } from "lucide-react";

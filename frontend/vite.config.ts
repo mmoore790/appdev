@@ -1,31 +1,30 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
-  ],
+  // 1. Removed all Replit-specific plugins
+  plugins: [react()],
+  
+  // 2. 'root' is 'frontend/src' (where your index.html is)
+  root: path.resolve(import.meta.dirname, "src"),
+  
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      // 3. '@' alias points to your *actual* code: 'frontend/src/src'
+      "@": path.resolve(import.meta.dirname, "src", "src"),
+      
+      // 4. '@assets' alias points to your assets folder
+      "@assets": path.resolve(import.meta.dirname, "src", "src", "assets"),
+      
+      // 5. '@shared' alias points to your BACKEND schema folder
+      "@shared": path.resolve(import.meta.dirname, "..", "backend", "src", "shared"),
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    // 6. Build output will be in 'frontend/dist'
+    outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
 });

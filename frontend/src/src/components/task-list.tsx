@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Clock, User, MoreVertical, Edit, FileText } from "lucide-react";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { TaskForm } from "@/components/task-form";
-import { cn, formatTimeAgo, getTaskPriorityColor } from "@/lib/utils";
-import { apiRequest } from "@/lib/queryClient";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./ui/card";
+import { Checkbox } from "./ui/checkbox";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "./ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { TaskForm } from "./task-form";
+import { cn, formatTimeAgo, getTaskPriorityColor } from "../lib/utils";
+import { apiRequest } from "../lib/queryClient";
 import { Link } from "wouter";
 
 interface TaskListProps {
