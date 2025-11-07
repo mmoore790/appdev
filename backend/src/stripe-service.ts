@@ -20,10 +20,10 @@ interface CheckoutSessionData {
 export class StripeService {
   private stripe: Stripe;
 
-  constructor(secretKey: string) {
-    this.stripe = new Stripe(secretKey, {
-      apiVersion: '2025-07-30.basil',
-    });
+    constructor(secretKey: string) {
+      this.stripe = new Stripe(secretKey, {
+        apiVersion: '2025-08-27.basil',
+      });
   }
 
   /**
@@ -63,6 +63,12 @@ export class StripeService {
   async getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
     return await this.stripe.checkout.sessions.retrieve(sessionId);
   }
+
+    async retrievePaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+      return await this.stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['charges.data']
+      });
+    }
 
   /**
    * List checkout sessions by metadata

@@ -15,5 +15,12 @@
         "@shared/*": ["./src/shared/*"]
       }
     },
-    "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": [
+    "src/**/routes-backup.ts",
+    "src/**/storage-backup.ts",
+    "src/**/test-*.ts",
+    "src/**/test-*.mjs",
+    "src/vite.ts"
+  ]
   }

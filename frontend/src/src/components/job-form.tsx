@@ -138,7 +138,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
     },
     enabled: !!jobId,
     staleTime: 0,
-    cacheTime: 0,
+    gcTime: 0,
     refetchOnMount: 'always'
   });
 

@@ -400,9 +400,9 @@ export async function sendEmail(apiKey: string, params: any): Promise<boolean> {
   return false;
 }
 
-export async function sendRegistrationApprovalEmail(to: string, username: string, password: string): Promise<boolean> {
+export async function sendRegistrationApprovalEmail(to: string, fullName: string, username: string): Promise<boolean> {
   // This function is not implemented yet but exported for compatibility
-  console.log('sendRegistrationApprovalEmail called');
+  console.log('sendRegistrationApprovalEmail called', { to, fullName, username });
   return false;
 }
 
@@ -418,9 +418,9 @@ export async function sendJobReadyForPickupEmail(customerEmail: string, jobDetai
   return false;
 }
 
-export async function sendRegistrationRejectionEmail(to: string, reason: string): Promise<boolean> {
+export async function sendRegistrationRejectionEmail(to: string, fullName: string, reason?: string): Promise<boolean> {
   // This function is not implemented yet but exported for compatibility
-  console.log('sendRegistrationRejectionEmail called');
+  console.log('sendRegistrationRejectionEmail called', { to, fullName, reason });
   return false;
 }
 
@@ -495,15 +495,37 @@ export async function sendJobCompletedEmail(customerEmail: string, jobDetails: a
   return false;
 }
 
-export async function sendPaymentRequestEmail(customerEmail: string, paymentDetails: any): Promise<boolean> {
+export async function sendPaymentRequestEmail(
+  customerEmail: string,
+  paymentLink: string,
+  description: string,
+  amount: string,
+  checkoutReference: string
+): Promise<boolean> {
   // This function is not implemented yet but exported for compatibility
-  console.log('sendPaymentRequestEmail called');
+  console.log('sendPaymentRequestEmail called', {
+    customerEmail,
+    paymentLink,
+    description,
+    amount,
+    checkoutReference
+  });
   return false;
 }
 
-export async function sendPaymentRequestEmailNoLink(customerEmail: string, paymentDetails: any): Promise<boolean> {
+export async function sendPaymentRequestEmailNoLink(
+  customerEmail: string,
+  description: string,
+  amount: string,
+  checkoutReference: string
+): Promise<boolean> {
   // This function is not implemented yet but exported for compatibility
-  console.log('sendPaymentRequestEmailNoLink called');
+  console.log('sendPaymentRequestEmailNoLink called', {
+    customerEmail,
+    description,
+    amount,
+    checkoutReference
+  });
   return false;
 }
 

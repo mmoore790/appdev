@@ -68,8 +68,7 @@ export async function addStatusChangeUpdate(
       jobId,
       note,
       isPublic,
-      createdBy: userId,
-      createdAt: new Date().toISOString(),
+        createdBy: userId
     });
   } catch (error) {
     console.error("Error creating status change update:", error);
