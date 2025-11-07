@@ -2,6 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+const backendUrl =
+  process.env.VITE_BACKEND_URL ??
+  process.env.BACKEND_URL ??
+  "http://localhost:3001";
+
 export default defineConfig({
   // 1. Removed all Replit-specific plugins
   plugins: [react()],
@@ -19,6 +24,17 @@ export default defineConfig({
       
       // 5. '@shared' alias points to your BACKEND schema folder
       "@shared": path.resolve(import.meta.dirname, "..", "backend", "src", "shared"),
+    },
+  },
+
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: backendUrl,
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   

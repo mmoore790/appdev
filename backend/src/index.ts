@@ -8,10 +8,28 @@ import cors from 'cors';
 
 const app = express();
 
-// Add CORS middleware here
+// Configure CORS to allow the frontend dev server and any configured origins
+const envOrigins = [
+  process.env.CORS_ORIGIN,
+  process.env.FRONTEND_URL,
+].filter(Boolean).join(',');
+
+const allowedOrigins = Array.from(
+  new Set(
+    (envOrigins
+      ? envOrigins.split(',')
+      : [
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          'http://localhost:5174',
+          'http://127.0.0.1:5174',
+        ]).map((origin) => origin.trim()).filter(Boolean),
+  ),
+);
+
 app.use(cors({
-  origin: 'http://localhost:5174', // Your frontend's URL
-  credentials: true                 // Allows session cookies
+  origin: allowedOrigins,
+  credentials: true, // Allows session cookies
 }));
 
 app.use(express.json());
