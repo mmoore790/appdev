@@ -1,35 +1,38 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
-import { neon } from "@neondatabase/serverless";
-import path from "path";
 import { schedulerService } from "./services/schedulerService";
+import cors from 'cors';
 
 const app = express();
+
+// Add CORS middleware here
+app.use(cors({
+  origin: 'http://localhost:5174', // Your frontend's URL
+  credentials: true                 // Allows session cookies
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // PostgreSQL session store for proper persistence in hosted environments
 const PgSession = ConnectPgSimple(session);
-const sql = neon(process.env.DATABASE_URL!);
-
-// Session table will be created automatically by connect-pg-simple
 
 // Session configuration with PostgreSQL store
 app.use(session({
   store: new PgSession({
-    conString: process.env.DATABASE_URL,
+    conString: process.env.DATABASE_URL, // This uses the pg driver, which is correct
     tableName: 'session',
-    createTableIfMissing: true, // Let connect-pg-simple create the table
-    pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
-    errorLog: console.error // Log any store errors
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 15,
+    errorLog: console.error
   }),
   secret: process.env.SESSION_SECRET || 'moorehorticulture-secret',
-  resave: false, // Don't save session if unmodified  
-  saveUninitialized: true, // Create session for all requests to ensure proper cookie handling
-  rolling: true, // Reset expiration time on each request
+  resave: false,
+  saveUninitialized: true,
+  rolling: true,
   cookie: {
     secure: false, // Set to true in production with HTTPS
     httpOnly: true,
@@ -56,6 +59,7 @@ declare module 'express-session' {
   }
 }
 
+// Logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -79,7 +83,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      console.log(logLine); // Replaced missing 'log' function
     }
   });
 
@@ -95,12 +99,6 @@ app.use((req, res, next) => {
 
     res.status(status).json({ message });
     throw err;
-  });
-
-  // Add a specific route for the job tracker page before vite middleware
-  // This ensures this particular route won't get caught in the vite catch-all
-  app.get('/track', (req, res) => {
-    res.sendFile(path.resolve('./client/index.html'));
   });
   
   // Add a direct test job data endpoint that will always return test data
@@ -133,25 +131,15 @@ app.use((req, res, next) => {
     }));
   });
   
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
+  // The port should be 3001 to match your frontend .env file
+  // Port 5000 was from Replit.
+  const port = 3001;
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    console.log(`✅ Backend server running at http://localhost:${port}`);
     
     // Start the scheduler service after server is running
     schedulerService.start();

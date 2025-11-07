@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer = require('nodemailer');
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import { storage } from '../storage';
 import { format } from 'date-fns';
@@ -14,7 +14,7 @@ interface CallbackEmailData {
 }
 
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private transporter?: nodemailer.Transporter;
   private mailerSend: MailerSend | null = null;
 
   constructor() {
@@ -27,7 +27,7 @@ export class EmailService {
     }
     // Fallback to SMTP if configured
     else if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      this.transporter = nodemailer.createTransporter({
+      this.transporter = nodemailer.createTransport({ // <-- Add (
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: false,
@@ -35,7 +35,7 @@ export class EmailService {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
         },
-      });
+      }); // <-- Add )
       console.log('✅ Email service initialized with SMTP');
     }
     // Demo mode if no credentials
