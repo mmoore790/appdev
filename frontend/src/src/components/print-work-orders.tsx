@@ -16,19 +16,23 @@ export function PrintWorkOrders({ trigger }: PrintWorkOrdersProps) {
   const componentRef = useRef<HTMLDivElement>(null);
 
   // Fetch all jobs
-  const { data: jobs = [] } = useQuery({
+  const { data: jobsData } = useQuery({
     queryKey: ["/api/jobs"],
   });
 
   // Fetch customers for customer names
-  const { data: customers = [] } = useQuery({
+  const { data: customersData } = useQuery({
     queryKey: ["/api/customers"],
   });
 
   // Fetch users for assignee names
-  const { data: users = [] } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ["/api/users"],
   });
+
+  const jobs = Array.isArray(jobsData) ? jobsData : [];
+  const customers = Array.isArray(customersData) ? customersData : [];
+  const users = Array.isArray(usersData) ? usersData : [];
 
   // Filter non-completed jobs
   const activeJobs = jobs.filter((job: any) => job.status !== 'completed');

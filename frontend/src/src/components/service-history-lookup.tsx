@@ -20,49 +20,75 @@ export function ServiceHistoryLookup() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
 
   // Fetch data for dropdowns
-  const { data: customers } = useQuery({
+  const customersQuery = useQuery({
     queryKey: ["/api/customers"],
   });
-
-  const { data: equipmentTypes } = useQuery({
+  const equipmentTypesQuery = useQuery({
     queryKey: ["/api/equipment-types"],
   });
-
-  const { data: equipment } = useQuery({
+  const equipmentQuery = useQuery({
     queryKey: ["/api/equipment"],
   });
-
-  const { data: jobs } = useQuery({
+  const jobsQuery = useQuery({
     queryKey: ["/api/jobs"],
   });
-
-  const { data: users } = useQuery({
+  const usersQuery = useQuery({
     queryKey: ["/api/users"],
   });
 
+  const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+  const equipmentTypes = Array.isArray(equipmentTypesQuery.data) ? equipmentTypesQuery.data : [];
+  const equipment = Array.isArray(equipmentQuery.data) ? equipmentQuery.data : [];
+  const jobs = Array.isArray(jobsQuery.data) ? jobsQuery.data : [];
+  const users = Array.isArray(usersQuery.data) ? usersQuery.data : [];
+
   // Search for services based on selected search type and query
-  const { data: services, isLoading: isServicesLoading } = useQuery({
-    queryKey: searchType === "equipment" && selectedEquipmentId 
-      ? [`/api/services?equipmentId=${selectedEquipmentId}`]
+  const idleServicesKey = "service-history/idle";
+  const serviceQueryKey =
+    searchType === "equipment" && selectedEquipmentId
+      ? `/api/services?equipmentId=${selectedEquipmentId}`
       : searchType === "customer" && selectedCustomerId
-      ? [`/api/jobs?customerId=${selectedCustomerId}`]
+      ? `/api/jobs?customerId=${selectedCustomerId}`
       : searchType === "job" && selectedJobId
-      ? [`/api/services?jobId=${selectedJobId}`]
-      : null,
-    enabled: isSearching && (
-      (searchType === "equipment" && !!selectedEquipmentId) ||
-      (searchType === "customer" && !!selectedCustomerId) ||
-      (searchType === "job" && !!selectedJobId)
-    )
+      ? `/api/services?jobId=${selectedJobId}`
+      : idleServicesKey;
+
+  const {
+    data: rawServices = [],
+    isLoading: isServicesLoading,
+  } = useQuery({
+    queryKey: [serviceQueryKey],
+    enabled:
+      isSearching &&
+      serviceQueryKey !== idleServicesKey &&
+      (
+        (searchType === "equipment" && !!selectedEquipmentId) ||
+        (searchType === "customer" && !!selectedCustomerId) ||
+        (searchType === "job" && !!selectedJobId)
+      ),
   });
+  const services = Array.isArray(rawServices) ? rawServices : [];
 
   // Fetch services for the customer jobs
-  const { data: customerServices, isLoading: isCustomerServicesLoading } = useQuery({
-    queryKey: searchType === "customer" && selectedCustomerId && services?.length > 0
-      ? [`/api/services?jobId=${services[0].id}`]
-      : null,
-    enabled: searchType === "customer" && !!selectedCustomerId && isSearching && !!services && services.length > 0
+  const idleCustomerServicesKey = "service-history/customer-idle";
+  const customerServicesQueryKey =
+    searchType === "customer" && selectedCustomerId && services.length > 0
+      ? `/api/services?jobId=${services[0].id}`
+      : idleCustomerServicesKey;
+
+  const {
+    data: rawCustomerServices = [],
+    isLoading: isCustomerServicesLoading,
+  } = useQuery({
+    queryKey: [customerServicesQueryKey],
+    enabled:
+      searchType === "customer" &&
+      !!selectedCustomerId &&
+      isSearching &&
+      services.length > 0 &&
+      customerServicesQueryKey !== idleCustomerServicesKey,
   });
+  const customerServices = Array.isArray(rawCustomerServices) ? rawCustomerServices : [];
 
   // Function to handle search
   const handleSearch = () => {

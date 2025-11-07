@@ -107,20 +107,30 @@ export function JobServiceForm({ jobId, onServiceAdded }: JobServiceFormProps) {
   }, [jobId]);
 
   // Fetch the latest service record for this job (or empty array if none exists)
-  const { data: services = [], isLoading: isServicesLoading, refetch: refetchServices } = useQuery({
+  const {
+    data: servicesData,
+    isLoading: isServicesLoading,
+    refetch: refetchServices
+  } = useQuery({
     queryKey: [`/api/services?jobId=${jobId}`],
     enabled: !!jobId
   });
   
+  const services = Array.isArray(servicesData) ? servicesData : [];
+
   // Get the latest service record if it exists
   const latestService = Array.isArray(services) && services.length > 0 ? 
     services.sort((a, b) => new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime())[0] : 
     null;
 
   // Fetch users for technician selection
-  const { data: users = [], isLoading: isUsersLoading } = useQuery({
+  const {
+    data: usersData,
+    isLoading: isUsersLoading
+  } = useQuery({
     queryKey: ["/api/users"],
   });
+  const users = Array.isArray(usersData) ? usersData : [];
 
   // Mutation to add a service
   const addService = useMutation({

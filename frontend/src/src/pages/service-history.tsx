@@ -27,35 +27,40 @@ export default function ServiceHistory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
 
-  const { data: services, isLoading } = useQuery({
+  const { data: servicesData, isLoading } = useQuery({
     queryKey: ["/api/services"],
   });
 
-  const { data: equipmentTypes } = useQuery({
+  const { data: equipmentTypesData } = useQuery({
     queryKey: ["/api/equipment-types"],
   });
 
-  const { data: jobs } = useQuery({
+  const { data: jobsData } = useQuery({
     queryKey: ["/api/jobs"],
   });
 
-  const { data: users } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ["/api/users"],
   });
 
+  const services = Array.isArray(servicesData) ? servicesData : [];
+  const equipmentTypes = Array.isArray(equipmentTypesData) ? equipmentTypesData : [];
+  const jobs = Array.isArray(jobsData) ? jobsData : [];
+  const users = Array.isArray(usersData) ? usersData : [];
+
   // Filter and process services data
-  const filteredServices = services?.filter(service => {
+  const filteredServices = services.filter((service: any) => {
     // Match search query against service details and job id
     const matchesSearch = searchQuery.trim() === "" || 
       service.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
       service.serviceType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (jobs?.find(j => j.id === service.jobId)?.jobId || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (jobs.find((j: any) => j.id === service.jobId)?.jobId || "").toLowerCase().includes(searchQuery.toLowerCase());
     
     // Filter by equipment type if selected
     if (equipmentFilter === "all") return matchesSearch;
     
     // Find the job for this service
-    const job = jobs?.find(j => j.id === service.jobId);
+    const job = jobs.find((j: any) => j.id === service.jobId);
     if (!job) return false;
     
     // Find the equipment for this job
@@ -73,13 +78,13 @@ export default function ServiceHistory() {
   // Get mechanic name from user id
   const getMechanicName = (userId: number | null | undefined) => {
     if (!userId) return "Unassigned";
-    const user = users?.find(u => u.id === userId);
+    const user = users.find((u: any) => u.id === userId);
     return user ? user.fullName : "Unknown";
   };
 
   // Get job ID from job record
   const getJobId = (jobId: number) => {
-    const job = jobs?.find(j => j.id === jobId);
+    const job = jobs.find((j: any) => j.id === jobId);
     return job ? job.jobId : `Job #${jobId}`;
   };
 
