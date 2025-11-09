@@ -1,0 +1,76 @@
+import { Router, Request, Response, NextFunction } from "express";
+import { insertEquipmentSchema } from "@shared/schema";
+import { equipmentService } from "../services/domains/equipmentService";
+import { isAuthenticated } from "../auth";
+import { z } from "zod";
+
+export class EquipmentController {
+  public readonly router = Router();
+
+  constructor() {
+    this.router.get("/", isAuthenticated, this.listEquipment);
+    this.router.get("/:id", isAuthenticated, this.getEquipment);
+    this.router.post("/", isAuthenticated, this.createEquipment);
+    this.router.put("/:id", isAuthenticated, this.updateEquipment);
+  }
+
+  private async listEquipment(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const equipment = await equipmentService.listEquipment();
+      res.json(equipment);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async getEquipment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      const equipment = await equipmentService.getEquipmentById(id);
+
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+
+      res.json(equipment);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async createEquipment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = insertEquipmentSchema.parse(req.body);
+      const actorId = (req.session as any)?.userId ?? undefined;
+      const equipment = await equipmentService.createEquipment(data, actorId);
+      res.status(201).json(equipment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid equipment data",
+          errors: error.errors,
+        });
+      }
+      next(error);
+    }
+  }
+
+  private async updateEquipment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      const data = insertEquipmentSchema.parse(req.body);
+      const equipment = await equipmentService.updateEquipment(id, data);
+      res.json(equipment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid equipment data",
+          errors: error.errors,
+        });
+      }
+      next(error);
+    }
+  }
+}
+
+export const equipmentController = new EquipmentController();
