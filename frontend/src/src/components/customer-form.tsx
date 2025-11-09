@@ -11,28 +11,51 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer } from "@shared/schema";
+import { Loader2 } from "lucide-react";
 
 // Define the customer schema for form validation
 const customerSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  name: z
+    .string()
+    .min(2, { message: "Name must be at least 2 characters" })
+    .transform((value) => value.trim())
+    .refine((value) => value.length >= 2, {
+      message: "Name must be at least 2 characters",
+    }),
   email: z.string().email({ message: "Invalid email address" }).optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal(""))
+  notes: z.string().optional().or(z.literal("")),
 });
+
+type CustomerFormValues = z.infer<typeof customerSchema>;
+
+type CustomerPayload = {
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+};
 
 interface CustomerFormProps {
   customerId?: number;
   editMode?: boolean;
   onComplete?: () => void;
+  onCancel?: () => void;
 }
 
-export function CustomerForm({ customerId, editMode = false, onComplete }: CustomerFormProps) {
+export function CustomerForm({
+  customerId,
+  editMode = false,
+  onComplete,
+  onCancel,
+}: CustomerFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Form setup
-  const form = useForm<z.infer<typeof customerSchema>>({
+  const form = useForm<CustomerFormValues>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
       name: "",
@@ -43,10 +66,37 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
     }
   });
 
+  const normalizePayload = (values: CustomerFormValues): CustomerPayload => {
+    const toOptional = (value?: string | null) => {
+      if (value == null) {
+        return undefined;
+      }
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    return {
+      name: values.name.trim(),
+      email: toOptional(values.email),
+      phone: toOptional(values.phone),
+      address: toOptional(values.address),
+      notes: toOptional(values.notes),
+    };
+  };
+
+  const getErrorMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "An unexpected error occurred.";
+
   // Fetch customer data if in edit mode
-  const { data: customer, isLoading } = useQuery<Customer>({
-    queryKey: [`/api/customers/${customerId}`],
-    enabled: !!customerId
+  const {
+    data: customer,
+    isLoading: isCustomerLoading,
+    isError: isCustomerError,
+    error: customerError,
+  } = useQuery<Customer>({
+    queryKey: ["/api/customers", customerId],
+    queryFn: () => apiRequest<Customer>("GET", `/api/customers/${customerId}`),
+    enabled: Boolean(editMode && customerId),
   });
 
   // Update form values when customer data is loaded
@@ -64,64 +114,90 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
 
   // Create customer mutation
   const createCustomer = useMutation({
-    mutationFn: async (data: z.infer<typeof customerSchema>) => {
-      return apiRequest("POST", "/api/customers", data);
+    mutationFn: async (payload: CustomerPayload) => {
+      return apiRequest("POST", "/api/customers", payload);
     },
     onSuccess: () => {
       toast({
         title: "Customer created",
-        description: "The customer has been successfully created."
+        description: "The customer has been successfully created.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      if (onComplete) onComplete();
+      form.reset({
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+        notes: "",
+      });
+      onComplete?.();
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: `Failed to create customer: ${error.message}`,
-        variant: "destructive"
+        description: `Failed to create customer: ${getErrorMessage(error)}`,
+        variant: "destructive",
       });
-    }
+    },
   });
 
   // Update customer mutation
   const updateCustomer = useMutation({
-    mutationFn: async (data: z.infer<typeof customerSchema>) => {
-      return apiRequest("PUT", `/api/customers/${customerId}`, data);
+    mutationFn: async (payload: CustomerPayload) => {
+      return apiRequest("PUT", `/api/customers/${customerId}`, payload);
     },
     onSuccess: () => {
       toast({
         title: "Customer updated",
-        description: "The customer has been successfully updated."
+        description: "The customer has been successfully updated.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/customers/${customerId}`] });
-      if (onComplete) onComplete();
+      if (customerId != null) {
+        queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId] });
+      }
+      onComplete?.();
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: `Failed to update customer: ${error.message}`,
-        variant: "destructive"
+        description: `Failed to update customer: ${getErrorMessage(error)}`,
+        variant: "destructive",
       });
-    }
+    },
   });
 
   // Form submission handler
-  function onSubmit(data: z.infer<typeof customerSchema>) {
+  function onSubmit(values: CustomerFormValues) {
+    const payload = normalizePayload(values);
     if (editMode && customerId) {
-      updateCustomer.mutate(data);
+      updateCustomer.mutate(payload);
     } else {
-      createCustomer.mutate(data);
+      createCustomer.mutate(payload);
     }
   }
 
-  if (isLoading && editMode) {
+  const isSubmitting = createCustomer.isPending || updateCustomer.isPending;
+
+  if (isCustomerLoading && editMode) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Loading Customer...</CardTitle>
           <CardDescription>Please wait while we fetch the customer details.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  if (isCustomerError && editMode) {
+    const message = getErrorMessage(customerError);
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Unable to load customer</CardTitle>
+          <CardDescription>
+            We ran into a problem fetching the customer details. {message}
+          </CardDescription>
         </CardHeader>
       </Card>
     );
@@ -154,8 +230,8 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
                 </FormItem>
               )}
             />
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="email"
@@ -169,7 +245,7 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
                 name="phone"
@@ -184,7 +260,7 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
                 )}
               />
             </div>
-            
+
             <FormField
               control={form.control}
               name="address"
@@ -198,7 +274,7 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
               name="notes"
@@ -206,10 +282,10 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Additional information or special instructions" 
+                    <Textarea
+                      placeholder="Additional information or special instructions"
                       className="min-h-[100px]"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -221,18 +297,28 @@ export function CustomerForm({ customerId, editMode = false, onComplete }: Custo
             <Button
               type="button"
               variant="outline"
-              onClick={onComplete}
+              onClick={() => {
+                if (isSubmitting) {
+                  return;
+                }
+                if (onCancel) {
+                  onCancel();
+                } else {
+                  onComplete?.();
+                }
+              }}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               type="submit"
               className="bg-green-700 hover:bg-green-800"
-              disabled={createCustomer.isPending || updateCustomer.isPending}
+              disabled={isSubmitting}
             >
-              {createCustomer.isPending || updateCustomer.isPending ? (
+              {isSubmitting ? (
                 <span className="flex items-center">
-                  <span className="material-icons animate-spin mr-2">refresh</span>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </span>
               ) : (

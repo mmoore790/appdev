@@ -64,7 +64,7 @@ export function Sidebar({ className }: SidebarProps) {
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
     { path: "/parts-on-order", label: "Parts on Order", icon: <Package size={20} /> },
     { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} /> },
-    { path: "/customers", label: "Customers", icon: <BarChart3 size={20} /> },
+    { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
     { path: "/payments", label: "Payments", icon: <CreditCard size={20} /> },
     { path: "/settings", label: "Settings", icon: <Settings size={20} /> },
