@@ -1,38 +1,38 @@
 import React, { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { Customer, Job, Service, User } from "@shared/schema";
 import { formatDate } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Badge } from "./ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Printer } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
 interface WorkDetailsSummaryProps {
   jobId: number;
-  services: any[];
+  services: Service[];
 }
 
 export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps) {
   const { toast } = useToast();
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-  const [selectedService, setSelectedService] = useState<any>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   // Fetch job data
-  const { data: job } = useQuery({
+  const { data: job } = useQuery<Job>({
     queryKey: [`/api/jobs/${jobId}`],
     enabled: !!jobId
   });
 
   // Fetch customers for customer name
-  const { data: customers = [] } = useQuery({
+  const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
   // Fetch users for technician name
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
 
@@ -67,7 +67,7 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
   };
 
   // Calculate total cost of parts
-  const calculateTotalPartsCost = (parts: any[]) => {
+  const calculateTotalPartsCost = (parts: Array<Record<string, any>>) => {
     if (!parts || !Array.isArray(parts)) return 0;
     
     return parts.reduce((total, part) => {
@@ -78,7 +78,7 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
   };
 
   // Handle print service
-  const handlePrintService = (service: any) => {
+  const handlePrintService = (service: Service) => {
     setSelectedService(service);
     setIsPrintDialogOpen(true);
   };
@@ -209,21 +209,22 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
   };
 
   // Parse parts data
-  const parseParts = (partsData: any) => {
+  const parseParts = (partsData: unknown): Array<Record<string, any>> => {
     if (!partsData) return [];
     
     try {
       // If it's already an array, return it
-      if (Array.isArray(partsData)) return partsData;
-      
+      if (Array.isArray(partsData)) return partsData as Array<Record<string, any>>;
+
       // If it's a string, try to parse it
-      if (typeof partsData === 'string') {
-        return JSON.parse(partsData);
+      if (typeof partsData === "string") {
+        const parsed = JSON.parse(partsData);
+        return Array.isArray(parsed) ? parsed : [parsed];
       }
-      
+
       // If it's an object but not an array, return it as a single-item array
-      if (typeof partsData === 'object') {
-        return [partsData];
+      if (typeof partsData === "object") {
+        return [partsData as Record<string, any>];
       }
     } catch (error) {
       console.error("Error parsing parts data:", error);
@@ -234,7 +235,11 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
 
   // Get the latest service record
   const latestService = services.length > 0 
-    ? services.sort((a, b) => new Date(b.performedAt || "").getTime() - new Date(a.performedAt || "").getTime())[0] 
+    ? [...services].sort(
+        (a, b) =>
+          new Date((b.performedAt as string | undefined) ?? (b.createdAt as string | undefined) ?? "").getTime() -
+          new Date((a.performedAt as string | undefined) ?? (a.createdAt as string | undefined) ?? "").getTime()
+      )[0] 
     : null;
 
   return (
