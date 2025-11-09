@@ -16,6 +16,7 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Account from "@/pages/account";
 import Payments from "@/pages/payments";
+import Customers from "@/pages/customers";
 import PaymentSuccess from "@/pages/payment-success";
 import PaymentCancel from "@/pages/payment-cancel";
 import Callbacks from "@/pages/callbacks";
@@ -80,6 +81,9 @@ function Router() {
       </Route>
       <Route path="/analytics">
         {() => <ProtectedRoute component={Analytics} />}
+      </Route>
+      <Route path="/customers">
+        {() => <ProtectedRoute component={Customers} />}
       </Route>
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
