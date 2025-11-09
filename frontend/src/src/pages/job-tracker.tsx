@@ -11,7 +11,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Search, CheckCircle, Clock, Wrench, Package, CornerDownRight, ArrowLeft } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatDate } from "@/lib/utils";
-import logoPath from "@assets/logo-m.png";
 import { Link } from "wouter";
 
 // Form validation schema
@@ -331,11 +330,6 @@ export default function JobTracker() {
       <div className="max-w-3xl mx-auto relative">
         {/* Header with logo */}
         <div className="text-center mb-8">
-          <img 
-            src={logoPath} 
-            alt="Moore Horticulture Equipment Logo" 
-            className="h-24 mx-auto mb-4"
-          />
           <h1 className="text-3xl font-bold text-gray-900">Job Status Tracker</h1>
           <p className="mt-2 text-gray-600">
             Track the status of your equipment repair or service

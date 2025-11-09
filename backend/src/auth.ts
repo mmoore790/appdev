@@ -393,10 +393,10 @@ export const initAuthRoutes = (app: any) => {
     }
   });
 
-  // Register endpoint (creates a registration request)
+  // Register endpoint (creates a user directly)
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const { username, password, email, fullName, requestedRole, department, reason } = req.body;
+      const { username, password, email, fullName, requestedRole } = req.body;
 
       if (!username || !password || !email || !fullName) {
         return res.status(400).json({
@@ -413,37 +413,35 @@ export const initAuthRoutes = (app: any) => {
       // Hash password before storing
       const hashedPassword = await hashPassword(password);
 
-      // Create registration request
-      const registrationData: InsertRegistrationRequest = {
+      // Create the user directly
+      const userData: InsertUser = {
         username,
         password: hashedPassword,
         email,
         fullName,
-        requestedRole: requestedRole || "staff",
-        department,
-        reason
+        role: requestedRole || "staff", // Default to "staff"
+        isActive: true // Activate the user immediately
       };
+      
+      const newUser = await storage.createUser(userData);
 
-      // Log registration request submission
+      // Log user creation
       await logActivity({
-        userId: null, // User not yet created/logged in
-        activityType: 'registration_request',
-        description: `New registration request submitted for ${username}`,
-        entityType: 'registration_request',
-        entityId: null, // ID will be available after creation in storage
+        userId: null, 
+        activityType: 'user_registration',
+        description: `New user registered: ${username}`,
+        entityType: 'user',
+        entityId: newUser.id,
         metadata: {
-          username,
-          email,
-          requestedRole,
-          department,
-          reason: reason || 'N/A'
+          username: newUser.username,
+          email: newUser.email,
+          role: newUser.role
         }
       });
 
-      await storage.createRegistrationRequest(registrationData);
-
+      // Send a success response. The frontend will handle the redirect.
       return res.status(201).json({
-        message: "Registration request submitted. An administrator will review your request."
+        message: "Registration successful. Please log in."
       });
     } catch (error) {
       console.error("Registration error:", error);

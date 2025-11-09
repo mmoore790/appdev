@@ -25,7 +25,6 @@ const registerSchema = z.object({
     required_error: "Please select a role",
   }),
   department: z.string().min(2, "Department must be at least 2 characters"),
-  reason: z.string().min(10, "Please provide a reason for your registration"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
@@ -50,7 +49,6 @@ export default function RegisterPage() {
       fullName: "",
       requestedRole: "staff",
       department: "",
-      reason: "",
     },
   });
 
@@ -72,7 +70,6 @@ export default function RegisterPage() {
           fullName: data.fullName,
           requestedRole: data.requestedRole,
           department: data.department,
-          reason: data.reason,
         }),
       });
 
@@ -120,7 +117,7 @@ export default function RegisterPage() {
             <div className="flex justify-center mb-4">
               <img src={logoPath} alt="Moore Horticulture Equipment Logo" className="h-20 object-contain" />
             </div>
-            <CardTitle className="text-2xl font-bold text-center text-green-700">Register</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center text-green-700">Register User</CardTitle>
             <CardDescription className="text-center">
               Create a new account to access the system
             </CardDescription>
@@ -229,7 +226,6 @@ export default function RegisterPage() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="staff">Standard User</SelectItem>
-                          <SelectItem value="mechanic">Mechanic</SelectItem>
                           <SelectItem value="admin">Administrator</SelectItem>
                         </SelectContent>
                       </Select>
@@ -246,24 +242,6 @@ export default function RegisterPage() {
                       <FormLabel>Department</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., Workshop, Sales, Admin" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="reason"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Reason for Registration</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Please explain why you need access to the system"
-                          className="min-h-[80px]" 
-                          {...field} 
-                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

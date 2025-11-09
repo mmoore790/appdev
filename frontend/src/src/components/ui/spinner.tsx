@@ -1,5 +1,3 @@
-import logoPath from "@assets/logo-m.png";
-
 interface SpinnerProps {
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -35,11 +33,6 @@ export function Spinner({
         
         {showLogo && (
           <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center">
-            <img 
-              src={logoPath} 
-              alt="Moore Horticulture Equipment" 
-              className={`${logoSizeClasses[size]} opacity-80`}
-            />
           </div>
         )}
       </div>

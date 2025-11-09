@@ -42,8 +42,8 @@ const PgSession = ConnectPgSimple(session);
 app.use(session({
   store: new PgSession({
     conString: process.env.DATABASE_URL, // This uses the pg driver, which is correct
-    tableName: 'session',
-    createTableIfMissing: true,
+    tableName: 'sessions',
+    createTableIfMissing: false,
     pruneSessionInterval: 60 * 15,
     errorLog: console.error
   }),
