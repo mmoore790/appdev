@@ -1,4 +1,4 @@
-import { storage } from "../storage";
+import { jobUpdateRepository } from "../repositories";
 import { type JobUpdate, type InsertJobUpdate } from "@shared/schema";
 
 /**
@@ -8,7 +8,7 @@ import { type JobUpdate, type InsertJobUpdate } from "@shared/schema";
  */
 export async function createJobUpdate(updateData: InsertJobUpdate): Promise<JobUpdate> {
   try {
-    return await storage.createJobUpdate(updateData);
+    return await jobUpdateRepository.create(updateData);
   } catch (error) {
     console.error("Error in job update service:", error);
     throw error;
@@ -22,7 +22,7 @@ export async function createJobUpdate(updateData: InsertJobUpdate): Promise<JobU
  */
 export async function getJobUpdates(jobId: number): Promise<JobUpdate[]> {
   try {
-    return await storage.getJobUpdates(jobId);
+    return await jobUpdateRepository.findByJob(jobId);
   } catch (error) {
     console.error("Error getting job updates:", error);
     return [];
@@ -36,7 +36,7 @@ export async function getJobUpdates(jobId: number): Promise<JobUpdate[]> {
  */
 export async function getPublicJobUpdates(jobId: number): Promise<JobUpdate[]> {
   try {
-    return await storage.getPublicJobUpdates(jobId);
+    return await jobUpdateRepository.findPublicByJob(jobId);
   } catch (error) {
     console.error("Error getting public job updates:", error);
     return [];
@@ -61,14 +61,14 @@ export async function addStatusChangeUpdate(
   try {
     const formattedOldStatus = formatStatus(oldStatus);
     const formattedNewStatus = formatStatus(newStatus);
-    
+
     const note = `Status changed from "${formattedOldStatus}" to "${formattedNewStatus}"`;
-    
-    return await storage.createJobUpdate({
+
+    return await jobUpdateRepository.create({
       jobId,
       note,
       isPublic,
-        createdBy: userId
+      createdBy: userId
     });
   } catch (error) {
     console.error("Error creating status change update:", error);

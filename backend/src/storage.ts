@@ -361,51 +361,40 @@ export class DatabaseStorage implements IStorage {
     
     return job;
   }
+  
+    async createJob(jobData: InsertJob): Promise<Job> {
+      let finalCustomerId = jobData.customerId;
 
-  async createJob(jobData: InsertJob): Promise<Job> {
-    let finalCustomerId = jobData.customerId;
-    
-    // If no customerId but we have customerName, create or find customer
-    if (!finalCustomerId && jobData.customerName) {
-      // Try to find existing customer by name
-      const existingCustomers = await db.select().from(customers).where(eq(customers.name, jobData.customerName));
-      
-      if (existingCustomers.length > 0) {
-        finalCustomerId = existingCustomers[0].id;
-      } else {
-        // Create new customer
-        const newCustomer = await this.createCustomer({
-          name: jobData.customerName,
-          email: jobData.customerEmail || undefined,
-        });
-        finalCustomerId = newCustomer.id;
+      if (!finalCustomerId && jobData.customerName) {
+        const existingCustomers = await db
+          .select()
+          .from(customers)
+          .where(eq(customers.name, jobData.customerName));
+
+        if (existingCustomers.length > 0) {
+          finalCustomerId = existingCustomers[0].id;
+        } else {
+          const newCustomer = await this.createCustomer({
+            name: jobData.customerName,
+            email: jobData.customerEmail || undefined,
+          });
+          finalCustomerId = newCustomer.id;
+        }
       }
+
+      const jobInsertData = {
+        ...jobData,
+        customerId: finalCustomerId || null,
+        status: jobData.status || (jobData.assignedTo ? "in_progress" : "waiting_assessment"),
+      };
+
+      const cleanJobData = Object.fromEntries(
+        Object.entries(jobInsertData).filter(([_, value]) => value !== undefined)
+      );
+
+      const [job] = await db.insert(jobs).values(cleanJobData as any).returning();
+      return job;
     }
-    
-    const jobInsertData = {
-      ...jobData,
-      customerId: finalCustomerId || null,
-      status: jobData.status || (jobData.assignedTo ? "in_progress" : "waiting_assessment")
-    };
-    
-    // Remove undefined fields to avoid Drizzle issues
-    const cleanJobData = Object.fromEntries(
-      Object.entries(jobInsertData).filter(([_, value]) => value !== undefined)
-    );
-    
-    const [job] = await db.insert(jobs).values(cleanJobData as any).returning();
-    
-    // Create activity log
-    await this.createActivity({
-      userId: jobData.assignedTo || 1,
-      activityType: 'job_created',
-      description: `Job ${job.jobId} created`,
-      entityType: 'job',
-      entityId: job.id
-    });
-    
-    return job;
-  }
 
   async updateJob(id: number, jobData: Partial<Job>): Promise<Job | undefined> {
     const [job] = await db
@@ -499,15 +488,6 @@ export class DatabaseStorage implements IStorage {
       performedAt: serviceData.performedAt || new Date().toISOString()
     }).returning();
     
-    // Create activity log
-    await this.createActivity({
-      userId: serviceData.performedBy || 1,
-      activityType: 'service_created',
-      description: `Service record created for job`,
-      entityType: 'service',
-      entityId: service.id
-    });
-    
     return service;
   }
 
@@ -539,15 +519,6 @@ export class DatabaseStorage implements IStorage {
       ...taskData,
       createdAt: new Date().toISOString()
     }).returning();
-    
-    // Create activity log
-    await this.createActivity({
-      userId: taskData.assignedTo || 1,
-      activityType: 'task_created',
-      description: `Task "${task.title}" created`,
-      entityType: 'task',
-      entityId: task.id
-    });
     
     return task;
   }

@@ -1,5 +1,5 @@
 
-import { storage } from "../storage";
+import { activityRepository } from "../repositories";
 
 export interface ActivityData {
   userId?: number | null;
@@ -8,6 +8,22 @@ export interface ActivityData {
   entityType?: string | null;
   entityId?: number | null;
   metadata?: any;
+}
+
+export function getRecentActivities(limit?: number) {
+  return activityRepository.findAll(limit);
+}
+
+export function getActivitiesForUser(userId: number, limit?: number) {
+  return activityRepository.findByUser(userId, limit);
+}
+
+export function getActivitiesForEntity(entityType: string, entityId: number) {
+  return activityRepository.findByEntity(entityType, entityId);
+}
+
+export function cleanupOldActivities(limit: number) {
+  return activityRepository.cleanupOld(limit);
 }
 
 /**
@@ -19,7 +35,7 @@ export async function logActivity(data: ActivityData): Promise<void> {
     const entityType = data.entityType ?? '';
     const entityId = data.entityId ?? 0;
 
-    await storage.createActivity({
+    await activityRepository.create({
       userId,
       activityType: data.activityType,
       description: data.description,
