@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Collision,
+  CollisionDetection,
   DndContext,
   DragEndEvent,
   DragOverEvent,
   DragStartEvent,
   PointerSensor,
+  UniqueIdentifier,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
   DragOverlay,
@@ -176,6 +181,33 @@ const normalizeBoardStatus = (status: unknown): TaskStatus => {
   }
 
   return "pending";
+};
+
+const collisionDetectionStrategy: CollisionDetection = args => {
+  const getDroppableData = (id: UniqueIdentifier) =>
+    args.droppableContainers.find(container => container.id === id)?.data?.current;
+
+  const getColumnCollisions = (collisions: Collision[]) =>
+    collisions.filter(({ id }) => getDroppableData(id)?.type === "column");
+
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    return pointerCollisions;
+  }
+
+  const rectangleCollisions = rectIntersection(args);
+  if (rectangleCollisions.length > 0) {
+    const columnCollisions = getColumnCollisions(rectangleCollisions);
+    return columnCollisions.length > 0 ? columnCollisions : rectangleCollisions;
+  }
+
+  const cornerCollisions = closestCorners(args);
+  if (cornerCollisions.length > 0) {
+    const columnCollisions = getColumnCollisions(cornerCollisions);
+    return columnCollisions.length > 0 ? columnCollisions : cornerCollisions;
+  }
+
+  return [];
 };
 
 interface UpdateTaskStatusVariables {
@@ -825,14 +857,14 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         </Card>
       </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToWindowEdges]}
-        >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={collisionDetectionStrategy}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            modifiers={[restrictToWindowEdges]}
+          >
           <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/60 px-4 py-3">
               <div>
