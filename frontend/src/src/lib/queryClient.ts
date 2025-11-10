@@ -1,67 +1,45 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { ApiError, request as sendApiRequest } from "./api";
 
-async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    try {
-      // Try to parse as JSON first to get detailed error
-      const errorData = await res.json();
-      if (errorData && typeof errorData === 'object' && 'message' in errorData) {
-        throw new Error(errorData.message);
-      } else {
-        throw new Error(`${res.status}: ${res.statusText}`);
-      }
-    } catch (jsonError) {
-      // If JSON parsing fails, try to get text
-      try {
-        const text = await res.text();
-        throw new Error(`${res.status}: ${text || res.statusText}`);
-      } catch (textError) {
-        // If all else fails
-        throw new Error(`${res.status}: ${res.statusText}`);
-      }
-    }
-  }
-}
+type ApiRequestInput = string | { method: string; url?: string; data?: unknown };
+type ApiRequestOptions = { method?: string; data?: unknown };
+
+const hasWindow = typeof window !== "undefined";
 
 export async function apiRequest<T = unknown>(
-  urlOrOptions: string | { method: string; url?: string; data?: unknown },
-  optionsOrData?: { method?: string; data?: unknown } | unknown,
+  urlOrOptions: ApiRequestInput,
+  optionsOrData?: ApiRequestOptions | unknown,
   maybeData?: unknown
 ): Promise<T> {
   let method: string;
-  let url: string;
+  let url: string | undefined;
   let data: unknown | undefined;
-  
-  // Handle different parameter formats
-  if (typeof urlOrOptions === 'string') {
-    // Old format: apiRequest(method, url, data)
-    if (typeof optionsOrData === 'string') {
+
+  if (typeof urlOrOptions === "string") {
+    if (typeof optionsOrData === "string") {
       url = optionsOrData;
       method = urlOrOptions;
       data = maybeData;
     } else {
-      // Format: apiRequest(url, options)
       url = urlOrOptions;
-      const options = optionsOrData as { method?: string; data?: unknown } || {};
-      method = options.method || 'GET';
+      const options = (optionsOrData as ApiRequestOptions) ?? {};
+      method = options.method ?? "GET";
       data = options.data;
     }
   } else {
-    // New format: apiRequest({ url, method, data })
     const options = urlOrOptions;
     method = options.method;
-    url = options.url || '';
+    url = options.url;
     data = options.data;
   }
-  
-  // Get auth token from localStorage if available
-  const authToken = localStorage.getItem('authToken');
-  
-  // Prepare headers with token if available
-  const headers: Record<string, string> = {};
-  if (data) {
-    headers["Content-Type"] = "application/json";
+
+  if (!url) {
+    throw new Error("apiRequest requires a URL.");
   }
+
+  const authToken = hasWindow ? localStorage.getItem("authToken") : null;
+
+  const headers: Record<string, string> = {};
   if (authToken) {
     headers["Authorization"] = `Bearer ${authToken}`;
   }
@@ -69,62 +47,50 @@ export async function apiRequest<T = unknown>(
   console.log(`[API Request] ${method} ${url} with data:`, data);
 
   try {
-    const res = await fetch(url, {
-      method: method,
-      headers,
-      body: data ? JSON.stringify(data) : undefined,
-      credentials: "include",
+    const result = await sendApiRequest<T | undefined>(url, {
+      method,
+      body: data,
+      headers: Object.keys(headers).length ? headers : undefined,
     });
 
-    // If status is OK but no content, return empty object
-    if (res.status === 204) {
-        return {} as T;
-    }
-
-    // Check for client or server errors
-    if (!res.ok) {
-      await throwIfResNotOk(res);
-    }
-
-    // Parse JSON response, with error handling
-    try {
-      const jsonResponse = await res.json();
-      console.log(`[API Response] ${method} ${url} response:`, jsonResponse);
-        return jsonResponse as T;
-    } catch (jsonError) {
-      console.error(`[API Error] Failed to parse JSON response from ${method} ${url}:`, jsonError);
-      throw new Error('Invalid JSON response from server');
-    }
-  } catch (fetchError: any) {
-    console.error(`[API Error] ${method} ${url} failed:`, fetchError);
-      throw fetchError;
+    const normalizedResult = (result === undefined ? ({} as T) : (result as T));
+    console.log(`[API Response] ${method} ${url} response:`, normalizedResult);
+    return normalizedResult;
+  } catch (error) {
+    console.error(`[API Error] ${method} ${url} failed:`, error);
+    throw error;
   }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn = <T>({ on401: unauthorizedBehavior }: { on401: UnauthorizedBehavior }): QueryFunction<T> =>
-  async ({ queryKey }) => {
-    // Get auth token from localStorage if available
-    const authToken = localStorage.getItem('authToken');
-    
-    // Prepare headers with token if available
+export const getQueryFn = <T>({
+  on401: unauthorizedBehavior,
+}: {
+  on401: UnauthorizedBehavior;
+}): QueryFunction<T> => {
+  return async ({ queryKey }) => {
+    const endpoint = queryKey[0] as string;
+
+    const authToken = hasWindow ? localStorage.getItem("authToken") : null;
+
     const headers: Record<string, string> = {};
     if (authToken) {
       headers["Authorization"] = `Bearer ${authToken}`;
     }
-    
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
-      headers
-    });
 
-      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+    try {
+      return await sendApiRequest<T>(endpoint, {
+        method: "GET",
+        headers: Object.keys(headers).length ? headers : undefined,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401 && unauthorizedBehavior === "returnNull") {
         return null as T;
       }
-
-    await throwIfResNotOk(res);
-      return (await res.json()) as T;
+      throw error;
+    }
   };
+};
 
 export const queryClient = new QueryClient({
   defaultOptions: {
