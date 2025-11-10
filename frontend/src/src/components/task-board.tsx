@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -175,6 +175,47 @@ const normalizeBoardStatus = (status: unknown): TaskStatus => {
   return "pending";
 };
 
+type StatusOverridesMap = Record<number, BoardStatus>;
+
+const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[] => {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return Array.isArray(tasks) ? tasks : [];
+  }
+
+  if (!overrides || Object.keys(overrides).length === 0) {
+    return tasks;
+  }
+
+  let didOverride = false;
+
+  const updatedTasks = tasks.map(task => {
+    if (!task || typeof task.id !== "number") {
+      return task;
+    }
+
+    const override = overrides[task.id];
+    if (!override) {
+      return task;
+    }
+
+    const normalized = normalizeBoardStatus(task.status);
+    if (normalized === override) {
+      return task;
+    }
+
+    didOverride = true;
+    return { ...task, status: override };
+  });
+
+  return didOverride ? updatedTasks : tasks;
+};
+
+interface UpdateTaskStatusVariables {
+  taskId: number;
+  newStatus: BoardStatus;
+  previousStatus?: BoardStatus;
+}
+
 const sortTasksForColumn = (tasks: any[]) =>
   tasks.slice().sort((a, b) => {
     const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
@@ -241,9 +282,16 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
 };
 
 export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardProps) {
-  const derived = useMemo(() => deriveBoardState(tasks), [tasks]);
+  const sanitizedTasks = useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
+  const [statusOverrides, setStatusOverrides] = useState<StatusOverridesMap>({});
+  const tasksWithOverrides = useMemo(
+    () => applyStatusOverrides(sanitizedTasks, statusOverrides),
+    [sanitizedTasks, statusOverrides]
+  );
+  const derived = useMemo(() => deriveBoardState(tasksWithOverrides), [tasksWithOverrides]);
   const [columns, setColumns] = useState<ColumnState>(derived.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
+  const skipHydrationRef = useRef(false);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
@@ -258,10 +306,52 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const { toast } = useToast();
 
   useEffect(() => {
-    const { columns: nextColumns, archived: nextArchived } = deriveBoardState(tasks);
-    setColumns(nextColumns);
-    setArchivedTasks(nextArchived);
-  }, [tasks]);
+    if (skipHydrationRef.current) {
+      skipHydrationRef.current = false;
+      return;
+    }
+
+    setColumns(derived.columns);
+    setArchivedTasks(derived.archived);
+  }, [derived]);
+
+  useEffect(() => {
+    setStatusOverrides(prev => {
+      if (Object.keys(prev).length === 0) {
+        return prev;
+      }
+
+      const next: StatusOverridesMap = { ...prev };
+      let changed = false;
+      const validTaskIds = new Set<number>();
+
+      sanitizedTasks.forEach(task => {
+        if (!task || typeof task.id !== "number") {
+          return;
+        }
+        validTaskIds.add(task.id);
+        const normalized = normalizeBoardStatus(task.status);
+        if (next[task.id] && next[task.id] === normalized) {
+          delete next[task.id];
+          changed = true;
+        }
+      });
+
+      Object.keys(prev).forEach(key => {
+        const numericId = Number(key);
+        if (!validTaskIds.has(numericId) && next[numericId] !== undefined) {
+          delete next[numericId];
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        return prev;
+      }
+
+      return Object.keys(next).length === 0 ? {} : next;
+    });
+  }, [sanitizedTasks]);
 
   const removeTaskFromColumns = (taskId: number) => {
     setColumns(prev => ({
@@ -280,8 +370,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   };
 
   const activeTask = useMemo(
-    () => tasks.find(task => task.id === activeTaskId) ?? null,
-    [activeTaskId, tasks]
+    () => tasksWithOverrides.find(task => task.id === activeTaskId) ?? null,
+    [activeTaskId, tasksWithOverrides]
   );
 
   const sensors = useSensors(
@@ -290,25 +380,75 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   );
 
   const updateTaskStatusMutation = useMutation({
-    mutationFn: async ({ taskId, newStatus }: { taskId: number; newStatus: BoardStatus }) => {
+    mutationFn: async ({ taskId, newStatus }: UpdateTaskStatusVariables) => {
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
     },
+    onMutate: async ({ taskId, newStatus, previousStatus }: UpdateTaskStatusVariables) => {
+      if (previousStatus) {
+        skipHydrationRef.current = true;
+      }
+
+      setStatusOverrides(prev => {
+        if (prev[taskId] === newStatus) {
+          return prev;
+        }
+        const next = { ...prev, [taskId]: newStatus };
+        return next;
+      });
+
+      await queryClient.cancelQueries({ queryKey: ["/api/tasks"] });
+      const previousTasks = queryClient.getQueryData<any[]>(["/api/tasks"]);
+
+      queryClient.setQueryData<any[]>(["/api/tasks"], current => {
+        if (!Array.isArray(current)) {
+          return current;
+        }
+        return current.map(task => (task.id === taskId ? { ...task, status: newStatus } : task));
+      });
+
+      return { previousTasks, previousStatus };
+    },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
       toast({
         title: "Task updated",
         description: `Moved to ${STATUS_CONFIG.find(status => status.id === variables.newStatus)?.title ?? "new column"}.`
       });
     },
-    onError: () => {
+    onError: (_error, variables, context) => {
+      if (context?.previousTasks) {
+        queryClient.setQueryData(["/api/tasks"], context.previousTasks);
+      }
+
+      let overridesSnapshot: StatusOverridesMap | null = null;
+      setStatusOverrides(prev => {
+        const next: StatusOverridesMap = { ...prev };
+        if (context?.previousStatus) {
+          next[variables.taskId] = context.previousStatus;
+        } else {
+          delete next[variables.taskId];
+        }
+        const normalizedNext = Object.keys(next).length === 0 ? {} : next;
+        overridesSnapshot = normalizedNext;
+        return normalizedNext;
+      });
+
+      skipHydrationRef.current = true;
+      const appliedOverrides = overridesSnapshot ?? {};
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+        applyStatusOverrides(sanitizedTasks, appliedOverrides)
+      );
+      setColumns(resetColumns);
+      setArchivedTasks(resetArchived);
+
       toast({
         title: "Update failed",
         description: "We couldn't update that task. Please try again.",
         variant: "destructive"
       });
-      const { columns: resetColumns } = deriveBoardState(tasks);
-      setColumns(resetColumns);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
     }
   });
 
@@ -450,8 +590,11 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const { active, over } = event;
     if (!over) {
       setActiveTaskId(null);
-      const { columns: resetColumns } = deriveBoardState(tasks);
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+        applyStatusOverrides(sanitizedTasks, statusOverrides)
+      );
       setColumns(resetColumns);
+      setArchivedTasks(resetArchived);
       return;
     }
 
@@ -478,28 +621,46 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         }));
       }
     } else {
+      let didMove = false;
       setColumns(prev => {
-        const updated = { ...prev };
-        const sourceIndex = updated[activeColumnId].findIndex(task => task.id === activeId);
-        if (sourceIndex === -1) return prev;
-        const [movedTask] = updated[activeColumnId].splice(sourceIndex, 1);
-        movedTask.status = overColumnId;
+        const sourceTasks = prev[activeColumnId];
+        const targetTasks = prev[overColumnId];
+        const sourceIndex = sourceTasks.findIndex(task => task.id === activeId);
+        if (sourceIndex === -1) {
+          return prev;
+        }
+
+        didMove = true;
+        const updatedSource = [...sourceTasks];
+        const [movedTask] = updatedSource.splice(sourceIndex, 1);
+        const updatedTask = { ...movedTask, status: overColumnId };
+        const updatedTarget = [...targetTasks];
 
         const targetIndex =
           over.data.current?.type === "column"
-            ? updated[overColumnId].length
-            : updated[overColumnId].findIndex(task => task.id === overId);
+            ? updatedTarget.length
+            : updatedTarget.findIndex(task => task.id === overId);
 
         if (targetIndex >= 0) {
-          updated[overColumnId].splice(targetIndex, 0, movedTask);
+          updatedTarget.splice(targetIndex, 0, updatedTask);
         } else {
-          updated[overColumnId].push(movedTask);
+          updatedTarget.push(updatedTask);
         }
-        return updated;
+
+        return {
+          ...prev,
+          [activeColumnId]: updatedSource,
+          [overColumnId]: updatedTarget
+        };
       });
 
-      if (typeof activeId === "number") {
-        updateTaskStatusMutation.mutate({ taskId: activeId, newStatus: overColumnId });
+      if (didMove && typeof activeId === "number") {
+        skipHydrationRef.current = true;
+        updateTaskStatusMutation.mutate({
+          taskId: activeId,
+          newStatus: overColumnId,
+          previousStatus: activeColumnId
+        });
       }
     }
 
@@ -507,8 +668,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   };
 
   const filteredForMetrics = useMemo(
-    () => tasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
-    [tasks]
+    () => tasksWithOverrides.filter(task => task.status !== "archived" && task.status !== "deleted"),
+    [tasksWithOverrides]
   );
 
   const totalCounts = useMemo(() => {
