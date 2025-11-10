@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -33,6 +33,15 @@ interface SidebarProps {
   className?: string;
 }
 
+type UserRole = "admin" | "staff" | "mechanic" | (string & {});
+
+interface NavItem {
+  path: string;
+  label: string;
+  icon: ReactNode;
+  allowedRoles?: UserRole[];
+}
+
 export function Sidebar({ className }: SidebarProps) {
   const [location] = useLocation();
   const { user, isLoading } = useAuth();
@@ -58,18 +67,23 @@ export function Sidebar({ className }: SidebarProps) {
   // We'll let the Sheet component handle scroll locking instead of manually managing it
   // This should fix scrolling issues on mobile
 
-  const navItems = [
-    { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
+  const navItems: NavItem[] = [
+    { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} />, allowedRoles: ["admin"] },
     { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
     { path: "/parts-on-order", label: "Parts on Order", icon: <Package size={20} /> },
-    { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} /> },
+    { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
     { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
-    { path: "/payments", label: "Payments", icon: <CreditCard size={20} /> },
-    { path: "/settings", label: "Settings", icon: <Settings size={20} /> },
+    { path: "/payments", label: "Payments", icon: <CreditCard size={20} />, allowedRoles: ["admin"] },
+    { path: "/settings", label: "Settings", icon: <Settings size={20} />, allowedRoles: ["admin"] },
     { path: "/account", label: "Account", icon: <User size={20} /> },
   ];
+
+  const userRole: UserRole = (user?.role as UserRole | undefined) ?? "staff";
+  const filteredNavItems = navItems.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(userRole)
+  );
 
   const handleLogout = () => {
     fetch('/api/auth/logout', {
@@ -102,7 +116,7 @@ export function Sidebar({ className }: SidebarProps) {
       "flex-1 pb-4 space-y-1",
       isMobile ? "px-1" : "px-2"
     )}>
-      {navItems.map((item) => (
+      {filteredNavItems.map((item) => (
         <div key={item.path} onClick={() => setMobileMenuOpen(false)}>
           <Link href={item.path}>
             <div
