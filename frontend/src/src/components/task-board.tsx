@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -124,6 +124,8 @@ const STATUS_CONFIG: StatusConfig[] = [
 const isBoardStatus = (value: string): value is BoardStatus =>
   STATUS_CONFIG.some(status => status.id === value);
 
+const BOARD_SEQUENCE: BoardStatus[] = ["pending", "in_progress", "review", "completed"];
+
 const DUE_TONE_CLASSES: Record<DueDateTone, string> = {
   muted: "text-neutral-500",
   warning: "text-amber-600",
@@ -132,6 +134,7 @@ const DUE_TONE_CLASSES: Record<DueDateTone, string> = {
 };
 
 type ColumnState = Record<BoardStatus, any[]>;
+type ColumnOrderMap = Partial<Record<BoardStatus, string[]>>;
 
 interface DerivedBoardState {
   columns: ColumnState;
@@ -210,7 +213,39 @@ const getComparableDate = (task: any) => {
 const sortArchivedTasks = (tasks: any[]) =>
   tasks.slice().sort((a, b) => getComparableDate(b) - getComparableDate(a));
 
-const deriveBoardState = (tasks: any[]): DerivedBoardState => {
+const orderTasksWithHint = (tasks: any[], hint?: string[]): any[] => {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  if (!hint || hint.length === 0) {
+    return sortTasksForColumn(tasks);
+  }
+
+  const remaining = new Map<string, any>();
+  tasks.forEach(task => {
+    remaining.set(String(task.id), task);
+  });
+
+  const ordered: any[] = [];
+
+  hint.forEach(id => {
+    const task = remaining.get(id);
+    if (task) {
+      ordered.push(task);
+      remaining.delete(id);
+    }
+  });
+
+  if (remaining.size > 0) {
+    const leftovers = sortTasksForColumn(Array.from(remaining.values()));
+    ordered.push(...leftovers);
+  }
+
+  return ordered;
+};
+
+const deriveBoardState = (tasks: any[], orderHint?: ColumnOrderMap): DerivedBoardState => {
   const initial: ColumnState = {
     pending: [],
     in_progress: [],
@@ -240,7 +275,7 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
   });
 
   STATUS_CONFIG.forEach(({ id }) => {
-    initial[id] = sortTasksForColumn(initial[id]);
+    initial[id] = orderTasksWithHint(initial[id], orderHint?.[id]);
   });
 
   return {
@@ -251,9 +286,20 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
 
 export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardProps) {
   const sanitizedTasks = useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
-  const derived = useMemo(() => deriveBoardState(sanitizedTasks), [sanitizedTasks]);
+  const boardOrderRef = useRef<Record<BoardStatus, string[]>>({
+    pending: [],
+    in_progress: [],
+    review: [],
+    completed: []
+  });
+  const derived = useMemo(
+    () => deriveBoardState(sanitizedTasks, boardOrderRef.current),
+    [sanitizedTasks]
+  );
   const [columns, setColumns] = useState<ColumnState>(derived.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
+  const columnsRef = useRef(columns);
+  const archivedTasksRef = useRef(archivedTasks);
   const skipHydrationRef = useRef(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const dragStateRef = useRef<{
@@ -278,6 +324,63 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const { toast } = useToast();
 
   useEffect(() => {
+    columnsRef.current = columns;
+    boardOrderRef.current = {
+      pending: columns.pending.map(task => String(task.id)),
+      in_progress: columns.in_progress.map(task => String(task.id)),
+      review: columns.review.map(task => String(task.id)),
+      completed: columns.completed.map(task => String(task.id))
+    };
+  }, [columns]);
+
+  useEffect(() => {
+    archivedTasksRef.current = archivedTasks;
+  }, [archivedTasks]);
+
+  const syncTaskOrder = useCallback(
+    (nextColumns: ColumnState, nextArchived?: any[]) => {
+      const archivedList = nextArchived ?? archivedTasksRef.current ?? [];
+      const boardOrderIds = BOARD_SEQUENCE.flatMap(status =>
+        (nextColumns[status] ?? []).map(task => String(task.id))
+      );
+      const archivedIds = Array.isArray(archivedList)
+        ? archivedList.map(task => String(task.id))
+        : [];
+      const seen = new Set([...boardOrderIds, ...archivedIds]);
+
+      queryClient.setQueryData<any[]>(["/api/tasks"], current => {
+        if (!Array.isArray(current)) {
+          return current;
+        }
+
+        const lookup = new Map<string, any>();
+        current.forEach(task => {
+          lookup.set(String(task.id), task);
+        });
+
+        const build = (ids: string[]) =>
+          ids
+            .map(id => lookup.get(id))
+            .filter((task): task is any => Boolean(task));
+
+        const orderedBoard = build(boardOrderIds);
+        const orderedArchived = build(archivedIds);
+        const remaining = current.filter(task => !seen.has(String(task.id)));
+
+        return [...orderedBoard, ...orderedArchived, ...remaining];
+      });
+    },
+    [queryClient]
+  );
+
+  const scheduleSync = useCallback(
+    (nextColumns: ColumnState, nextArchived?: any[]) => {
+      Promise.resolve().then(() => syncTaskOrder(nextColumns, nextArchived));
+    },
+    [syncTaskOrder]
+  );
+
+  useEffect(() => {
     if (skipHydrationRef.current) {
       skipHydrationRef.current = false;
       return;
@@ -289,19 +392,28 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
   const removeTaskFromColumns = (taskId: string | number) => {
     const idKey = String(taskId);
-    setColumns(prev => ({
-      pending: prev.pending.filter(task => String(task.id) !== idKey),
-      in_progress: prev.in_progress.filter(task => String(task.id) !== idKey),
-      review: prev.review.filter(task => String(task.id) !== idKey),
-      completed: prev.completed.filter(task => String(task.id) !== idKey)
-    }));
+    setColumns(prev => {
+      const next: ColumnState = {
+        pending: prev.pending.filter(task => String(task.id) !== idKey),
+        in_progress: prev.in_progress.filter(task => String(task.id) !== idKey),
+        review: prev.review.filter(task => String(task.id) !== idKey),
+        completed: prev.completed.filter(task => String(task.id) !== idKey)
+      };
+      scheduleSync(next);
+      return next;
+    });
   };
 
   const addTaskToColumn = (task: any, status: BoardStatus) => {
-    setColumns(prev => ({
-      ...prev,
-      [status]: sortTasksForColumn([...prev[status], task])
-    }));
+    setColumns(prev => {
+      const normalizedTask = { ...task, status };
+      const next: ColumnState = {
+        ...prev,
+        [status]: [...prev[status], normalizedTask]
+      };
+      scheduleSync(next);
+      return next;
+    });
   };
 
   const activeTask = useMemo(() => {
@@ -377,88 +489,98 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
     }
   });
-  const archiveTaskMutation = useMutation({
-    mutationFn: async (taskId: number) => {
-      return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "archived" });
-    },
-    onSuccess: (updatedTask: any) => {
-      removeTaskFromColumns(updatedTask.id);
-      const updatedIdKey = String(updatedTask.id);
-      setArchivedTasks(prev =>
-        sortArchivedTasks([
-          ...prev.filter(task => String(task.id) !== updatedIdKey),
-          updatedTask
-        ])
-      );
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
-      toast({
-        title: "Task archived",
-        description: "The task is now hidden from the main board."
-      });
-      setPendingAction(null);
-    },
-    onError: () => {
-      toast({
-        title: "Archive failed",
-        description: "We couldn't archive that task right now. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
+    const archiveTaskMutation = useMutation({
+      mutationFn: async (taskId: number) => {
+        return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "archived" });
+      },
+      onSuccess: (updatedTask: any) => {
+        removeTaskFromColumns(updatedTask.id);
+        const updatedIdKey = String(updatedTask.id);
+        setArchivedTasks(prev => {
+          const next = sortArchivedTasks([
+            ...prev.filter(task => String(task.id) !== updatedIdKey),
+            updatedTask
+          ]);
+          scheduleSync(columnsRef.current, next);
+          return next;
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+        toast({
+          title: "Task archived",
+          description: "The task is now hidden from the main board."
+        });
+        setPendingAction(null);
+      },
+      onError: () => {
+        toast({
+          title: "Archive failed",
+          description: "We couldn't archive that task right now. Please try again.",
+          variant: "destructive"
+        });
+      }
+    });
 
-  const deleteTaskMutation = useMutation({
-    mutationFn: async (taskId: number) => {
-      return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "deleted" });
-    },
-    onSuccess: (updatedTask: any) => {
-      removeTaskFromColumns(updatedTask.id);
-      const updatedIdKey = String(updatedTask.id);
-      setArchivedTasks(prev => prev.filter(task => String(task.id) !== updatedIdKey));
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
-      toast({
-        title: "Task deleted",
-        description: "The task has been removed from your workspace."
-      });
-      setPendingAction(null);
-    },
-    onError: () => {
-      toast({
-        title: "Delete failed",
-        description: "We couldn't delete that task right now. Please try again.",
-        variant: "destructive"
-      });
-    }
-  });
+    const deleteTaskMutation = useMutation({
+      mutationFn: async (taskId: number) => {
+        return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "deleted" });
+      },
+      onSuccess: (updatedTask: any) => {
+        removeTaskFromColumns(updatedTask.id);
+        const updatedIdKey = String(updatedTask.id);
+        setArchivedTasks(prev => {
+          const next = prev.filter(task => String(task.id) !== updatedIdKey);
+          scheduleSync(columnsRef.current, next);
+          return next;
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+        toast({
+          title: "Task deleted",
+          description: "The task has been removed from your workspace."
+        });
+        setPendingAction(null);
+      },
+      onError: () => {
+        toast({
+          title: "Delete failed",
+          description: "We couldn't delete that task right now. Please try again.",
+          variant: "destructive"
+        });
+      }
+    });
 
-  const restoreTaskMutation = useMutation({
-    mutationFn: async ({ taskId, status }: { taskId: number; status: BoardStatus }) => {
-      return apiRequest("PUT", `/api/tasks/${taskId}`, { status });
-    },
-    onSuccess: (updatedTask: any, variables) => {
-      removeTaskFromColumns(updatedTask.id);
-      const updatedIdKey = String(updatedTask.id);
-      setArchivedTasks(prev => prev.filter(task => String(task.id) !== updatedIdKey));
-      addTaskToColumn(updatedTask, variables.status);
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
-      toast({
-        title: "Task restored",
-        description: `Returned to ${STATUS_CONFIG.find(status => status.id === variables.status)?.title ?? "the board"}.`
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Restore failed",
-        description: "We couldn't restore that task right now. Please try again.",
-        variant: "destructive"
-      });
-    },
-    onSettled: () => {
-      setRestoreTargetId(null);
-    }
-  });
+    const restoreTaskMutation = useMutation({
+      mutationFn: async ({ taskId, status }: { taskId: number; status: BoardStatus }) => {
+        return apiRequest("PUT", `/api/tasks/${taskId}`, { status });
+      },
+      onSuccess: (updatedTask: any, variables) => {
+        removeTaskFromColumns(updatedTask.id);
+        const updatedIdKey = String(updatedTask.id);
+        setArchivedTasks(prev => {
+          const next = prev.filter(task => String(task.id) !== updatedIdKey);
+          scheduleSync(columnsRef.current, next);
+          return next;
+        });
+        addTaskToColumn(updatedTask, variables.status);
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+        toast({
+          title: "Task restored",
+          description: `Returned to ${STATUS_CONFIG.find(status => status.id === variables.status)?.title ?? "the board"}.`
+        });
+      },
+      onError: () => {
+        toast({
+          title: "Restore failed",
+          description: "We couldn't restore that task right now. Please try again.",
+          variant: "destructive"
+        });
+      },
+      onSettled: () => {
+        setRestoreTargetId(null);
+      }
+    });
 
   const parseBoardStatus = (value: unknown): BoardStatus | undefined => {
     if (typeof value !== "string") {
@@ -640,114 +762,129 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
       console.log("🎯 activeColumnId:", originColumnId, "→ overColumnId:", destinationColumnId);
 
-      if (originColumnId === destinationColumnId) {
+        if (originColumnId === destinationColumnId) {
+          let didReorder = false;
+          setColumns(prev => {
+            const columnTasks = prev[destinationColumnId] ?? [];
+            const activeIndex = columnTasks.findIndex(task => String(task.id) === activeId);
+            if (activeIndex === -1) {
+              return prev;
+            }
+
+            let targetIndex = -1;
+            if (over?.data?.current?.type === "task") {
+              const overId = String(over.id);
+              targetIndex = columnTasks.findIndex(task => String(task.id) === overId);
+            } else {
+              targetIndex = columnTasks.length - 1;
+            }
+
+            if (targetIndex < 0) {
+              targetIndex = columnTasks.length - 1;
+            }
+
+            if (targetIndex === activeIndex) {
+              return prev;
+            }
+
+            didReorder = true;
+            const reordered = arrayMove(columnTasks, activeIndex, targetIndex);
+            const next = {
+              ...prev,
+              [destinationColumnId]: reordered
+            };
+            scheduleSync(next);
+            return next;
+          });
+
+          if (didReorder) {
+            skipHydrationRef.current = true;
+          }
+
+          setActiveTaskId(null);
+          dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+          return;
+        }
+
+        const numericTaskId = Number(activeId);
+        if (Number.isNaN(numericTaskId)) {
+          toast({
+            title: "Unable to update task",
+            description: "Invalid task identifier.",
+            variant: "destructive"
+          });
+          setActiveTaskId(null);
+          dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+          return;
+        }
+
+        console.log("🚚 Moving task", numericTaskId, "from", originColumnId, "to", destinationColumnId);
+
+        let mutationPayload: UpdateTaskStatusVariables | null = null;
+        let didUpdate = false;
+
         setColumns(prev => {
-          const columnTasks = prev[destinationColumnId] ?? [];
-          const activeIndex = columnTasks.findIndex(task => String(task.id) === activeId);
-          if (activeIndex === -1) {
-            return prev;
-          }
+          const sourceTasks = prev[originColumnId] ?? [];
+          const destinationTasks = prev[destinationColumnId] ?? [];
 
-          let targetIndex = -1;
-          if (over?.data?.current?.type === "task") {
-            const overId = String(over.id);
-            targetIndex = columnTasks.findIndex(task => String(task.id) === overId);
+          const updatedSource = [...sourceTasks];
+          const updatedDestination = [...destinationTasks];
+
+          let movedTask: any | undefined;
+          const sourceIndex = updatedSource.findIndex(task => String(task.id) === activeId);
+
+          if (sourceIndex !== -1) {
+            movedTask = updatedSource.splice(sourceIndex, 1)[0];
           } else {
-            targetIndex = columnTasks.length - 1;
+            const existingIndex = updatedDestination.findIndex(task => String(task.id) === activeId);
+            if (existingIndex !== -1) {
+              movedTask = updatedDestination.splice(existingIndex, 1)[0];
+            }
           }
 
-          if (targetIndex < 0) {
-            targetIndex = columnTasks.length - 1;
-          }
-
-          if (targetIndex === activeIndex) {
+          if (!movedTask) {
             return prev;
           }
 
-          return {
-            ...prev,
-            [destinationColumnId]: arrayMove(columnTasks, activeIndex, targetIndex)
-          };
-        });
+          const overId = over.id != null ? String(over.id) : null;
+          let insertIndex =
+            over?.data?.current?.type === "task" && overId
+              ? updatedDestination.findIndex(task => String(task.id) === overId)
+              : -1;
 
-        setActiveTaskId(null);
-        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
-        return;
-      }
-
-      const numericTaskId = Number(activeId);
-      if (Number.isNaN(numericTaskId)) {
-        toast({
-          title: "Unable to update task",
-          description: "Invalid task identifier.",
-          variant: "destructive"
-        });
-        setActiveTaskId(null);
-        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
-        return;
-      }
-
-      console.log("🚚 Moving task", numericTaskId, "from", originColumnId, "to", destinationColumnId);
-
-      let mutationPayload: UpdateTaskStatusVariables | null = null;
-
-      setColumns(prev => {
-        const sourceTasks = prev[originColumnId] ?? [];
-        const destinationTasks = prev[destinationColumnId] ?? [];
-
-        const updatedSource = [...sourceTasks];
-        const updatedDestination = [...destinationTasks];
-
-        let movedTask: any | undefined;
-        const sourceIndex = updatedSource.findIndex(task => String(task.id) === activeId);
-
-        if (sourceIndex !== -1) {
-          movedTask = updatedSource.splice(sourceIndex, 1)[0];
-        } else {
-          const existingIndex = updatedDestination.findIndex(task => String(task.id) === activeId);
-          if (existingIndex !== -1) {
-            movedTask = updatedDestination.splice(existingIndex, 1)[0];
+          if (insertIndex < 0) {
+            insertIndex = updatedDestination.length;
           }
+
+          updatedDestination.splice(insertIndex, 0, { ...movedTask, status: destinationColumnId });
+
+          mutationPayload = {
+            taskId: numericTaskId,
+            newStatus: destinationColumnId,
+            previousStatus: originColumnId
+          };
+          didUpdate = true;
+          const next = {
+            ...prev,
+            [originColumnId]: updatedSource,
+            [destinationColumnId]: updatedDestination
+          };
+          scheduleSync(next);
+          return next;
+        });
+
+        if (didUpdate) {
+          skipHydrationRef.current = true;
         }
 
-        if (!movedTask) {
-          return prev;
+        if (mutationPayload) {
+          console.log("📡 Updating server:", mutationPayload);
+          updateTaskStatusMutation.mutate(mutationPayload);
         }
 
-        const overId = over.id != null ? String(over.id) : null;
-        let insertIndex =
-          over?.data?.current?.type === "task" && overId
-            ? updatedDestination.findIndex(task => String(task.id) === overId)
-            : -1;
-
-        if (insertIndex < 0) {
-          insertIndex = updatedDestination.length;
-        }
-
-        updatedDestination.splice(insertIndex, 0, { ...movedTask, status: destinationColumnId });
-
-        mutationPayload = {
-          taskId: numericTaskId,
-          newStatus: destinationColumnId,
-          previousStatus: originColumnId
-        };
-
-        return {
-          ...prev,
-          [originColumnId]: updatedSource,
-          [destinationColumnId]: updatedDestination
-        };
-      });
-
-      if (mutationPayload) {
-        console.log("📡 Updating server:", mutationPayload);
-        skipHydrationRef.current = true;
-        updateTaskStatusMutation.mutate(mutationPayload);
-      }
-
-      setActiveTaskId(null);
-      dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
-    };
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+      };
 
   const filteredForMetrics = useMemo(
     () => sanitizedTasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
@@ -1160,7 +1297,8 @@ function TaskBoardColumn({
 
       {/* Task List (Sortable Context) */}
       <SortableContext
-        items={tasks.map((task) => String(task.id))}
+        id={status.id}
+        items={tasks.map(task => String(task.id))}
         strategy={verticalListSortingStrategy}
       >
         <div className="flex flex-1 flex-col gap-3 p-5">
@@ -1235,8 +1373,7 @@ function TaskBoardCard({
   } = useSortable({
     id: String(task.id),
     data: {
-      // ✅ always reflect real current status
-      columnId: task.status,
+      columnId,
       type: "task",
     },
   });  
