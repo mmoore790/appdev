@@ -50,59 +50,55 @@ export default function Tasks() {
     return { overdue, dueSoon, completed };
   }, [allTasks]);
 
-    const filteredTasks = useMemo(() => {
+  const filteredTasks = useMemo(() => {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
-    return tasksArray
-      .filter((task: any) => {
-          if (task.status === "deleted") {
-          return false;
+    return tasksArray.filter((task: any) => {
+      if (task.status === "deleted") {
+        return false;
+      }
+
+      const matchesSearch =
+        search.trim() === "" || task.title.toLowerCase().includes(search.toLowerCase());
+
+      let matchesAssignedToFilter = true;
+      if (assignedToFilter !== "all") {
+        if (assignedToFilter === "unassigned") {
+          matchesAssignedToFilter = !task.assignedTo;
+        } else {
+          const numericAssignee =
+            typeof task.assignedTo === "string" ? parseInt(task.assignedTo, 10) : task.assignedTo;
+          matchesAssignedToFilter = numericAssignee === parseInt(assignedToFilter, 10);
         }
+      }
 
-        const matchesSearch =
-          search.trim() === "" || task.title.toLowerCase().includes(search.toLowerCase());
+      if (!matchesSearch || !matchesAssignedToFilter) {
+        return false;
+      }
 
-        let matchesAssignedToFilter = true;
-        if (assignedToFilter !== "all") {
-          if (assignedToFilter === "unassigned") {
-            matchesAssignedToFilter = !task.assignedTo;
-          } else {
-            const numericAssignee =
-              typeof task.assignedTo === "string"
-                ? parseInt(task.assignedTo, 10)
-                : task.assignedTo;
-            matchesAssignedToFilter =
-              numericAssignee === parseInt(assignedToFilter, 10);
-          }
-        }
+      if (quickFilter === "overdue") {
+        return getDueDateMeta(task.dueDate).tone === "danger";
+      }
 
-        if (!matchesSearch || !matchesAssignedToFilter) {
-          return false;
-        }
+      if (quickFilter === "dueSoon") {
+        const meta = getDueDateMeta(task.dueDate);
+        return meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2;
+      }
 
-        if (quickFilter === "overdue") {
-          return getDueDateMeta(task.dueDate).tone === "danger";
-        }
+      if (quickFilter === "completed") {
+        return task.status === "completed";
+      }
 
-        if (quickFilter === "dueSoon") {
-          const meta = getDueDateMeta(task.dueDate);
-          return meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2;
-        }
-
-        if (quickFilter === "completed") {
-          return task.status === "completed";
-        }
-
-        return true;
-      });
+      return true;
+    });
   }, [allTasks, assignedToFilter, quickFilter, search]);
 
-    const listViewTasks = useMemo(
-      () =>
-        filteredTasks.filter(
-          (task: any) => task.status !== "archived" && task.status !== "deleted"
-        ),
-      [filteredTasks]
-    );
+  const listViewTasks = useMemo(
+    () =>
+      filteredTasks.filter(
+        (task: any) => task.status !== "archived" && task.status !== "deleted"
+      ),
+    [filteredTasks]
+  );
 
   const handleQuickFilterChange = (value: string) => {
     if (!value) {
@@ -218,10 +214,10 @@ export default function Tasks() {
               </TabsList>
 
                 <TabsContent value="list" className="mt-4">
-                  <TaskList 
-                    isLoading={isLoading} 
-                      tasks={listViewTasks}
-                    users={users} 
+                  <TaskList
+                    isLoading={isLoading}
+                    tasks={listViewTasks}
+                    users={users}
                     showAllDetails
                   />
                 </TabsContent>

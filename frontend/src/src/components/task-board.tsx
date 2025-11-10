@@ -489,55 +489,55 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="relative overflow-hidden border border-red-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-red-200">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-600">
+        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
             <AlertCircle size={18} />
           </div>
-          <CardHeader className="pb-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-600/80">Overdue</p>
-            <CardTitle className="text-3xl font-semibold text-neutral-900">{totalCounts.overdue}</CardTitle>
+          <CardHeader className="pb-3 text-white/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Overdue</p>
+            <CardTitle className="text-3xl font-semibold text-white">{totalCounts.overdue}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-neutral-500">Tasks past their due date</p>
+          <CardContent className="pt-0 text-white/80">
+            <p className="text-sm">Tasks past their due date</p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border border-amber-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-amber-200">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-amber-200 via-amber-300 to-orange-400 text-amber-950 shadow-lg">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/40 text-amber-900">
             <Clock size={18} />
           </div>
-          <CardHeader className="pb-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600/80">Due Soon</p>
-            <CardTitle className="text-3xl font-semibold text-neutral-900">{totalCounts.dueSoon}</CardTitle>
+          <CardHeader className="pb-3 text-amber-950/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900/80">Due Soon</p>
+            <CardTitle className="text-3xl font-semibold text-amber-950">{totalCounts.dueSoon}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-neutral-500">Due within the next 48 hours</p>
+          <CardContent className="pt-0 text-amber-900/80">
+            <p className="text-sm">Due within the next 48 hours</p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border border-blue-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-blue-200">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
             <Loader2 size={18} />
           </div>
-          <CardHeader className="pb-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600/80">In Progress</p>
-            <CardTitle className="text-3xl font-semibold text-neutral-900">{columns.in_progress.length}</CardTitle>
+          <CardHeader className="pb-3 text-white/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">In Progress</p>
+            <CardTitle className="text-3xl font-semibold text-white">{columns.in_progress.length}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-neutral-500">Active tasks currently underway</p>
+          <CardContent className="pt-0 text-white/80">
+            <p className="text-sm">Active tasks currently underway</p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border border-green-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-green-200">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-green-600">
+        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
             <CheckCircle size={18} />
           </div>
-          <CardHeader className="pb-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-green-600/80">Completed (30d)</p>
-            <CardTitle className="text-3xl font-semibold text-neutral-900">{columns.completed.length}</CardTitle>
+          <CardHeader className="pb-3 text-white/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Completed (30d)</p>
+            <CardTitle className="text-3xl font-semibold text-white">{columns.completed.length}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-neutral-500">Delivered in the last month</p>
+          <CardContent className="pt-0 text-white/80">
+            <p className="text-sm">Delivered in the last month</p>
           </CardContent>
         </Card>
       </div>
