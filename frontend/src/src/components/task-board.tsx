@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-  import {
-    CollisionDetection,
-    DndContext,
-    DragEndEvent,
-    DragOverEvent,
-    DragStartEvent,
-    PointerSensor,
-    closestCorners,
-    pointerWithin,
-    rectIntersection,
-    useSensor,
-    useSensors,
-    DragOverlay,
-    KeyboardSensor,
-    useDroppable
-  } from "@dnd-kit/core";
+import {
+  Collision,
+  CollisionDetection,
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  PointerSensor,
+  UniqueIdentifier,
+  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  KeyboardSensor,
+  useDroppable
+} from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
@@ -186,15 +188,11 @@ const collisionDetectionStrategy: CollisionDetection = args => {
     args.droppableContainers.find(container => container.id === id)?.data?.current;
 
   const getColumnCollisions = (collisions: Collision[]) =>
-    collisions.filter(({ id }) => {
-      const data = getDroppableData(id);
-      return data?.type === "column";
-    });
+    collisions.filter(({ id }) => getDroppableData(id)?.type === "column");
 
   const pointerCollisions = pointerWithin(args);
   if (pointerCollisions.length > 0) {
-    const columnCollisions = getColumnCollisions(pointerCollisions);
-    return columnCollisions.length > 0 ? columnCollisions : pointerCollisions;
+    return pointerCollisions;
   }
 
   const rectangleCollisions = rectIntersection(args);
@@ -203,7 +201,13 @@ const collisionDetectionStrategy: CollisionDetection = args => {
     return columnCollisions.length > 0 ? columnCollisions : rectangleCollisions;
   }
 
-  return closestCorners(args);
+  const cornerCollisions = closestCorners(args);
+  if (cornerCollisions.length > 0) {
+    const columnCollisions = getColumnCollisions(cornerCollisions);
+    return columnCollisions.length > 0 ? columnCollisions : cornerCollisions;
+  }
+
+  return [];
 };
 
 interface UpdateTaskStatusVariables {
