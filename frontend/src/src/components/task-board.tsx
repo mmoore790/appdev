@@ -138,6 +138,13 @@ interface DerivedBoardState {
   archived: any[];
 }
 
+interface PendingMoveState {
+  taskId: number;
+  fromStatus: BoardStatus;
+  toStatus: BoardStatus;
+  taskTitle?: string;
+}
+
 const PRIORITY_SORT = { high: 1, medium: 2, low: 3 } as const;
 
 const BOARD_STATUS_VALUES: TaskStatus[] = ["pending", "in_progress", "review", "completed", "archived", "deleted"];
@@ -318,6 +325,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const [isArchiveDrawerOpen, setIsArchiveDrawerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: "archive" | "delete"; task: any } | null>(null);
   const [restoreTargetId, setRestoreTargetId] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMoveState | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -583,6 +591,33 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     restoreTaskMutation.mutate({ taskId: numericId, status: "pending" });
   };
 
+  const handleCancelPendingMove = () => {
+    if (!pendingMove) {
+      return;
+    }
+    const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+      applyStatusOverrides(sanitizedTasks, statusOverrides)
+    );
+    setColumns(resetColumns);
+    setArchivedTasks(resetArchived);
+    setPendingMove(null);
+    skipHydrationRef.current = false;
+  };
+
+  const handleConfirmPendingMove = () => {
+    if (!pendingMove || updateTaskStatusMutation.isPending) {
+      return;
+    }
+    const move = pendingMove;
+    setPendingMove(null);
+    skipHydrationRef.current = true;
+    updateTaskStatusMutation.mutate({
+      taskId: move.taskId,
+      newStatus: move.toStatus,
+      previousStatus: move.fromStatus
+    });
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     if (event.active?.id == null) {
       setActiveTaskId(null);
@@ -631,6 +666,11 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active?.id == null) {
+      setActiveTaskId(null);
+      return;
+    }
+
+    if (pendingMove) {
       setActiveTaskId(null);
       return;
     }
@@ -696,87 +736,75 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       return;
     }
 
-    let mutationPayload: UpdateTaskStatusVariables | null = null;
+    const sourceTasks = columns[activeColumnId] ?? [];
+    const targetTasks = columns[overColumnId] ?? [];
 
-    setColumns(prev => {
-      const sourceTasks = prev[activeColumnId] ?? [];
-      const targetTasks = prev[overColumnId] ?? [];
+    let updatedSource = [...sourceTasks];
+    let updatedTarget = [...targetTasks];
+    let movingTask: any | null = null;
 
-      let updatedSource = sourceTasks;
-      let updatedTarget = targetTasks;
-      let movingTask: any | null = null;
-
-      const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
-      if (sourceIndex !== -1) {
-        updatedSource = [...sourceTasks];
-        [movingTask] = updatedSource.splice(sourceIndex, 1);
-      }
-
-      if (!movingTask) {
-        const targetExistingIndex = targetTasks.findIndex(task => String(task.id) === activeId);
-        if (targetExistingIndex !== -1) {
-          const targetCopy = [...targetTasks];
-          [movingTask] = targetCopy.splice(targetExistingIndex, 1);
-          updatedTarget = targetCopy;
-        } else {
-          updatedTarget = [...targetTasks];
-        }
-      } else {
-        updatedTarget = [...targetTasks];
-      }
-
-      if (!movingTask) {
-        const fallbackTask =
-          tasksWithOverrides.find(task => String(task.id) === activeId) ??
-          sanitizedTasks.find(task => String(task.id) === activeId);
-
-        if (!fallbackTask) {
-          return prev;
-        }
-
-        movingTask = fallbackTask;
-      }
-
-      const updatedTask = { ...movingTask, status: overColumnId };
-
-      let insertIndex: number;
-      if (over.data.current?.type === "column") {
-        insertIndex = updatedTarget.length;
-      } else {
-        insertIndex = updatedTarget.findIndex(task => String(task.id) === overId);
-        if (insertIndex === -1) {
-          insertIndex = updatedTarget.length;
-        }
-      }
-
-      const finalTarget = [...updatedTarget];
-      finalTarget.splice(insertIndex, 0, updatedTask);
-
-      mutationPayload = {
-        taskId: numericTaskId,
-        newStatus: overColumnId,
-        previousStatus: activeColumnId
-      };
-
-      return {
-        ...prev,
-        [activeColumnId]: updatedSource,
-        [overColumnId]: finalTarget
-      };
-    });
-
-    if (!mutationPayload) {
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-        applyStatusOverrides(sanitizedTasks, statusOverrides)
-      );
-      setColumns(resetColumns);
-      setArchivedTasks(resetArchived);
-      setActiveTaskId(null);
-      return;
+    const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
+    if (sourceIndex !== -1) {
+      [movingTask] = updatedSource.splice(sourceIndex, 1);
     }
 
+    if (!movingTask) {
+      const targetExistingIndex = targetTasks.findIndex(task => String(task.id) === activeId);
+      if (targetExistingIndex !== -1) {
+        const targetCopy = [...targetTasks];
+        [movingTask] = targetCopy.splice(targetExistingIndex, 1);
+        updatedTarget = targetCopy;
+      }
+    }
+
+    if (!movingTask) {
+      const fallbackTask =
+        tasksWithOverrides.find(task => String(task.id) === activeId) ??
+        sanitizedTasks.find(task => String(task.id) === activeId);
+
+      if (!fallbackTask) {
+        const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+          applyStatusOverrides(sanitizedTasks, statusOverrides)
+        );
+        setColumns(resetColumns);
+        setArchivedTasks(resetArchived);
+        setActiveTaskId(null);
+        return;
+      }
+
+      movingTask = fallbackTask;
+      updatedSource = sourceTasks.filter(task => String(task.id) !== activeId);
+    }
+
+    const updatedTask = { ...movingTask, status: overColumnId };
+
+    let insertIndex: number;
+    if (over.data.current?.type === "column") {
+      insertIndex = updatedTarget.length;
+    } else {
+      insertIndex = updatedTarget.findIndex(task => String(task.id) === overId);
+      if (insertIndex === -1) {
+        insertIndex = updatedTarget.length;
+      }
+    }
+
+    const finalTarget = [...updatedTarget];
+    finalTarget.splice(insertIndex, 0, updatedTask);
+
+    const nextColumns: ColumnState = {
+      ...columns,
+      [activeColumnId]: updatedSource,
+      [overColumnId]: finalTarget
+    };
+
+    setColumns(nextColumns);
+    setPendingMove({
+      taskId: numericTaskId,
+      fromStatus: activeColumnId,
+      toStatus: overColumnId,
+      taskTitle: typeof updatedTask?.title === "string" ? updatedTask.title : undefined
+    });
     skipHydrationRef.current = true;
-    updateTaskStatusMutation.mutate(mutationPayload);
     setActiveTaskId(null);
   };
 
@@ -799,6 +827,12 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
   const isArchivePending = pendingAction?.type === "archive" && archiveTaskMutation.isPending;
   const isDeletePending = pendingAction?.type === "delete" && deleteTaskMutation.isPending;
+  const pendingMoveTargetConfig = pendingMove
+    ? STATUS_CONFIG.find(status => status.id === pendingMove.toStatus)
+    : undefined;
+  const pendingMoveSourceConfig = pendingMove
+    ? STATUS_CONFIG.find(status => status.id === pendingMove.fromStatus)
+    : undefined;
 
   return (
     <>
@@ -1045,6 +1079,60 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
           </div>
         </SheetContent>
       </Sheet>
+
+        <AlertDialog
+          open={Boolean(pendingMove)}
+          onOpenChange={open => {
+            if (!open) {
+              handleCancelPendingMove();
+            }
+          }}
+        >
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {pendingMoveTargetConfig
+                  ? `Move task to ${pendingMoveTargetConfig.title}?`
+                  : "Move task to new column?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {`Would you like to move ${
+                  pendingMove?.taskTitle ? `“${pendingMove.taskTitle}”` : "this task"
+                } to ${
+                  pendingMoveTargetConfig
+                    ? pendingMoveTargetConfig.title
+                    : pendingMove?.toStatus.replace(/_/g, " ")
+                }?`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={event => {
+                  event.preventDefault();
+                  handleCancelPendingMove();
+                }}
+                disabled={updateTaskStatusMutation.isPending}
+              >
+                {pendingMoveSourceConfig ? `Keep in ${pendingMoveSourceConfig.title}` : "Keep current column"}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={event => {
+                  event.preventDefault();
+                  handleConfirmPendingMove();
+                }}
+                disabled={updateTaskStatusMutation.isPending}
+              >
+                {updateTaskStatusMutation.isPending
+                  ? "Moving..."
+                  : `Move to ${
+                      pendingMoveTargetConfig
+                        ? pendingMoveTargetConfig.title
+                        : pendingMove?.toStatus.replace(/_/g, " ")
+                    }`}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       <AlertDialog
         open={Boolean(pendingAction)}
