@@ -23,7 +23,6 @@ import Callbacks from "@/pages/callbacks";
 import JobTracker from "@/pages/job-tracker";
 import PartsOnOrder from "@/pages/parts-on-order";
 import { useAuth } from "./hooks/useAuth";
-import { Chatbot } from "@/components/chatbot";
 
 // Protected route component
 function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>, [key: string]: any }) {
@@ -140,8 +139,6 @@ function AuthAwareLayout() {
           Designed and developed in house by Matthew Moore
         </footer>
       </div>
-      {/* Chatbot - only show on authenticated pages */}
-      <Chatbot />
     </div>
   );
 }

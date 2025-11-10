@@ -2,7 +2,15 @@ import { InsertTask, Task } from "@shared/schema";
 import { taskRepository, userRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 
-const TASK_STATUS_VALUES = ["pending", "in_progress", "review", "completed", "archived", "deleted"] as const;
+const TASK_STATUS_VALUES = [
+  "pending",
+  "in_progress",
+  "review",
+  "completed",
+  "archived",
+  "deleted"
+] as const;
+
 type BoardTaskStatus = (typeof TASK_STATUS_VALUES)[number];
 
 const TASK_STATUS_SET = new Set<string>(TASK_STATUS_VALUES);
@@ -46,16 +54,14 @@ const normalizeTaskStatus = (status: unknown): BoardTaskStatus => {
   throw new InvalidTaskStatusError(status);
 };
 
-class TaskService {
+export class TaskService {
   async listTasks(filter?: { assignedTo?: number; pendingOnly?: boolean }) {
     if (filter?.assignedTo != null) {
       return taskRepository.findByAssignee(filter.assignedTo);
     }
-
     if (filter?.pendingOnly) {
       return taskRepository.findPending();
     }
-
     return taskRepository.findAll();
   }
 
@@ -86,7 +92,7 @@ class TaskService {
         taskTitle: task.title,
         assignedTo: task.assignedTo,
         assignedToName,
-        priority: task.priority,
+        priority: task.priority
       }),
       entityType: "task",
       entityId: task.id,
@@ -95,8 +101,8 @@ class TaskService {
         assignedTo: task.assignedTo,
         assignedToName,
         priority: task.priority,
-        dueDate: task.dueDate,
-      },
+        dueDate: task.dueDate
+      }
     });
 
     return task;
@@ -110,6 +116,7 @@ class TaskService {
 
     const preparedUpdate = this.prepareTaskUpdate(data, currentTask);
     if (Object.keys(preparedUpdate).length === 0) {
+      // Nothing meaningful to update
       return currentTask;
     }
 
@@ -118,19 +125,20 @@ class TaskService {
       return undefined;
     }
 
+    // Log key changes
     if (currentTask.status !== "completed" && updatedTask.status === "completed") {
       await logActivity({
         userId: actorUserId ?? null,
         activityType: "task_completed",
         description: getActivityDescription("task_completed", "task", updatedTask.id, {
-          taskTitle: updatedTask.title,
+          taskTitle: updatedTask.title
         }),
         entityType: "task",
         entityId: updatedTask.id,
         metadata: {
           taskTitle: updatedTask.title,
-          completionTime: new Date().toISOString(),
-        },
+          completionTime: new Date().toISOString()
+        }
       });
     } else if (
       currentTask.status !== updatedTask.status ||
@@ -141,61 +149,61 @@ class TaskService {
         activityType: "task_updated",
         description: getActivityDescription("task_updated", "task", updatedTask.id, {
           taskTitle: updatedTask.title,
-          changes: Object.keys(data).join(", "),
+          changes: Object.keys(preparedUpdate).join(", ")
         }),
         entityType: "task",
         entityId: updatedTask.id,
         metadata: {
           taskTitle: updatedTask.title,
-          changedFields: Object.keys(data),
+          changedFields: Object.keys(preparedUpdate),
           oldStatus: currentTask.status,
-          newStatus: updatedTask.status,
-        },
+          newStatus: updatedTask.status
+        }
       });
     }
 
     return updatedTask;
   }
 
+  /**
+   * Ensures we always persist an explicit status update, even if
+   * it normalizes to the same string as the existing one.
+   */
   private prepareTaskUpdate(data: Partial<Task>, currentTask: Task): Partial<Task> {
-    if (!data || Object.keys(data).length === 0) {
-      return {};
-    }
+    if (!data || Object.keys(data).length === 0) return {};
 
     const draft: Partial<Task> = { ...data };
-    let statusChanged = false;
 
-    if (Object.prototype.hasOwnProperty.call(draft, "status")) {
+    if ("status" in draft) {
       const rawStatus = draft.status;
       if (rawStatus == null) {
         throw new InvalidTaskStatusError(rawStatus);
       }
 
       const normalizedStatus = normalizeTaskStatus(rawStatus);
-      statusChanged = normalizedStatus !== currentTask.status;
       draft.status = normalizedStatus;
 
-      if (statusChanged) {
-        if (normalizedStatus === "completed" && draft.completedAt === undefined) {
-          draft.completedAt = new Date().toISOString();
-        } else if (normalizedStatus !== "completed" && draft.completedAt === undefined && currentTask.completedAt) {
-          draft.completedAt = null;
-        }
+      // Handle completion timestamps
+      if (normalizedStatus === "completed" && !draft.completedAt) {
+        draft.completedAt = new Date().toISOString();
+      } else if (normalizedStatus !== "completed") {
+        draft.completedAt = null;
       }
     }
 
-    const cleanedEntries = Object.entries(draft).filter(([, value]) => value !== undefined);
-    if (cleanedEntries.length === 0) {
-      return {};
+    // Remove undefined values
+    const cleaned = Object.fromEntries(
+      Object.entries(draft).filter(([, v]) => v !== undefined)
+    );
+
+    // ✅ Always persist status when provided, even if unchanged
+    if ("status" in draft) {
+      cleaned.status = draft.status ?? null; // Default to null if undefined
     }
 
-    const meaningfulEntries = cleanedEntries.filter(([key, value]) => currentTask[key as keyof Task] !== value);
-    if (meaningfulEntries.length === 0) {
-      return {};
-    }
-
-    return Object.fromEntries(meaningfulEntries) as Partial<Task>;
+    return cleaned;
   }
 }
 
 export const taskService = new TaskService();
+

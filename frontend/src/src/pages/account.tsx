@@ -366,19 +366,6 @@ export default function AccountPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col md:flex-row gap-8">
-                  <div className="flex flex-col items-center gap-4">
-                    <Avatar className="h-32 w-32 border-4 border-primary/10">
-                      <AvatarImage src={user?.avatarUrl || ''} alt={user?.fullName || 'User'} />
-                      <AvatarFallback className="text-3xl bg-primary/10 text-primary">
-                        {user?.fullName?.split(' ').map(name => name[0]).join('') || user?.username?.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <Button variant="outline" size="sm" className="mt-2" onClick={() => setEditProfileOpen(true)}>
-                      <Camera className="h-4 w-4 mr-2" />
-                      Change Photo
-                    </Button>
-                  </div>
 
                   <div className="flex-1 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -428,7 +415,6 @@ export default function AccountPage() {
                       </div>
                     </div>
                   </div>
-                </div>
               </CardContent>
               <CardFooter className="flex justify-end">
                 <Button onClick={() => setEditProfileOpen(true)}>

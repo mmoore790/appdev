@@ -1,3 +1,7 @@
+//
+// This is the updated code for:
+// frontend/src/src/pages/tasks.tsx
+//
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -6,9 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TaskList } from "@/components/task-list";
-import { TaskBoard } from "@/components/task-board";
+import { TaskBoard } from "@/components/task-board"; // This component now handles ALL DnD logic
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getDueDateMeta } from "@/lib/utils";
+//
+// All dnd-kit imports have been REMOVED from this file.
+// All mutation logic has been REMOVED from this file.
+// All handler logic (handleDragEnd) has been REMOVED from this file.
+//
 
 type QuickFilter = "all" | "overdue" | "dueSoon" | "completed";
 
@@ -25,6 +34,7 @@ export default function Tasks() {
     queryKey: ["/api/users"],
   });
 
+  // No changes to your existing filtering logic
   const quickMetrics = useMemo(() => {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
     let overdue = 0;
@@ -107,6 +117,7 @@ export default function Tasks() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
       <Card>
         <CardHeader className="space-y-6 pb-4">
+          {/* ... (no changes to your header JSX) ... */}
           <div className="space-y-1">
             <CardTitle className="text-2xl font-semibold text-neutral-800">Tasks</CardTitle>
             <p className="text-sm text-neutral-500">
@@ -200,10 +211,16 @@ export default function Tasks() {
                 showAllDetails
               />
             </TabsContent>
-
+            
+            {/*
+              This is the only change in the JSX.
+              We are NO LONGER wrapping TaskBoard in a DndContext.
+              The TaskBoard component handles its own context.
+            */}
             <TabsContent value="board" className="mt-6">
               <TaskBoard tasks={filteredTasks} users={users} isLoading={isLoading} />
             </TabsContent>
+
           </Tabs>
         </CardContent>
       </Card>
