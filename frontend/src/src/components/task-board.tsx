@@ -121,6 +121,9 @@ const STATUS_CONFIG: StatusConfig[] = [
   }
 ];
 
+const isBoardStatus = (value: string): value is BoardStatus =>
+  STATUS_CONFIG.some(status => status.id === value);
+
 const DUE_TONE_CLASSES: Record<DueDateTone, string> = {
   muted: "text-neutral-500",
   warning: "text-amber-600",
@@ -599,7 +602,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
+      (typeof over.id === "string" && isBoardStatus(over.id) ? (over.id as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
 
@@ -615,7 +618,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       const [movedTask] = updatedActive.splice(activeIndex, 1);
       const updatedOver = [...overTasks];
       const insertIndex = overIndex >= 0 ? overIndex : updatedOver.length;
-      updatedOver.splice(insertIndex, 0, movedTask);
+      updatedOver.splice(insertIndex, 0, { ...movedTask, status: overColumnId });
 
       return {
         ...prev,
@@ -631,6 +634,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       setActiveTaskId(null);
       return;
     }
+
     if (!over) {
       setActiveTaskId(null);
       const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
@@ -647,7 +651,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
+      (typeof over.id === "string" && isBoardStatus(over.id) ? (over.id as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId) {
       setActiveTaskId(null);
@@ -655,73 +659,124 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     }
 
     if (activeColumnId === overColumnId) {
-      const activeIndex = columns[activeColumnId].findIndex(task => String(task.id) === activeId);
-      const overIndex = columns[overColumnId].findIndex(task => String(task.id) === overId);
-      if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
-        setColumns(prev => ({
-          ...prev,
-          [activeColumnId]: arrayMove(prev[activeColumnId], activeIndex, overIndex)
-        }));
-      }
-    } else {
-      let didMove = false;
       setColumns(prev => {
-        const sourceTasks = prev[activeColumnId];
-        const targetTasks = prev[overColumnId];
-        const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
-        if (sourceIndex === -1) {
+        const columnTasks = prev[activeColumnId] ?? [];
+        const currentActiveIndex = columnTasks.findIndex(task => String(task.id) === activeId);
+        const currentOverIndex = columnTasks.findIndex(task => String(task.id) === overId);
+        if (
+          currentActiveIndex === -1 ||
+          currentOverIndex === -1 ||
+          currentActiveIndex === currentOverIndex
+        ) {
           return prev;
-        }
-
-        didMove = true;
-        const updatedSource = [...sourceTasks];
-        const [movedTask] = updatedSource.splice(sourceIndex, 1);
-        const updatedTask = { ...movedTask, status: overColumnId };
-        const updatedTarget = [...targetTasks];
-
-        const targetIndex =
-          over.data.current?.type === "column"
-            ? updatedTarget.length
-            : updatedTarget.findIndex(task => String(task.id) === overId);
-
-        if (targetIndex >= 0) {
-          updatedTarget.splice(targetIndex, 0, updatedTask);
-        } else {
-          updatedTarget.push(updatedTask);
         }
 
         return {
           ...prev,
-          [activeColumnId]: updatedSource,
-          [overColumnId]: updatedTarget
+          [activeColumnId]: arrayMove(columnTasks, currentActiveIndex, currentOverIndex)
         };
       });
-
-      if (didMove) {
-        const numericTaskId = Number(active.id);
-        if (Number.isNaN(numericTaskId)) {
-          toast({
-            title: "Unable to update task",
-            description: "Task identifier is invalid.",
-            variant: "destructive"
-          });
-          setActiveTaskId(null);
-          const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-            applyStatusOverrides(sanitizedTasks, statusOverrides)
-          );
-          setColumns(resetColumns);
-          setArchivedTasks(resetArchived);
-          return;
-        }
-        skipHydrationRef.current = true;
-        updateTaskStatusMutation.mutate({
-          taskId: numericTaskId,
-          newStatus: overColumnId,
-          previousStatus: activeColumnId
-        });
-      }
+      setActiveTaskId(null);
+      return;
     }
 
+    const numericTaskId = Number(active.id);
+    if (Number.isNaN(numericTaskId)) {
+      toast({
+        title: "Unable to update task",
+        description: "Task identifier is invalid.",
+        variant: "destructive"
+      });
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+        applyStatusOverrides(sanitizedTasks, statusOverrides)
+      );
+      setColumns(resetColumns);
+      setArchivedTasks(resetArchived);
+      setActiveTaskId(null);
+      return;
+    }
+
+    let mutationPayload: UpdateTaskStatusVariables | null = null;
+
+    setColumns(prev => {
+      const sourceTasks = prev[activeColumnId] ?? [];
+      const targetTasks = prev[overColumnId] ?? [];
+
+      let updatedSource = sourceTasks;
+      let updatedTarget = targetTasks;
+      let movingTask: any | null = null;
+
+      const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
+      if (sourceIndex !== -1) {
+        updatedSource = [...sourceTasks];
+        [movingTask] = updatedSource.splice(sourceIndex, 1);
+      }
+
+      if (!movingTask) {
+        const targetExistingIndex = targetTasks.findIndex(task => String(task.id) === activeId);
+        if (targetExistingIndex !== -1) {
+          const targetCopy = [...targetTasks];
+          [movingTask] = targetCopy.splice(targetExistingIndex, 1);
+          updatedTarget = targetCopy;
+        } else {
+          updatedTarget = [...targetTasks];
+        }
+      } else {
+        updatedTarget = [...targetTasks];
+      }
+
+      if (!movingTask) {
+        const fallbackTask =
+          tasksWithOverrides.find(task => String(task.id) === activeId) ??
+          sanitizedTasks.find(task => String(task.id) === activeId);
+
+        if (!fallbackTask) {
+          return prev;
+        }
+
+        movingTask = fallbackTask;
+      }
+
+      const updatedTask = { ...movingTask, status: overColumnId };
+
+      let insertIndex: number;
+      if (over.data.current?.type === "column") {
+        insertIndex = updatedTarget.length;
+      } else {
+        insertIndex = updatedTarget.findIndex(task => String(task.id) === overId);
+        if (insertIndex === -1) {
+          insertIndex = updatedTarget.length;
+        }
+      }
+
+      const finalTarget = [...updatedTarget];
+      finalTarget.splice(insertIndex, 0, updatedTask);
+
+      mutationPayload = {
+        taskId: numericTaskId,
+        newStatus: overColumnId,
+        previousStatus: activeColumnId
+      };
+
+      return {
+        ...prev,
+        [activeColumnId]: updatedSource,
+        [overColumnId]: finalTarget
+      };
+    });
+
+    if (!mutationPayload) {
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+        applyStatusOverrides(sanitizedTasks, statusOverrides)
+      );
+      setColumns(resetColumns);
+      setArchivedTasks(resetArchived);
+      setActiveTaskId(null);
+      return;
+    }
+
+    skipHydrationRef.current = true;
+    updateTaskStatusMutation.mutate(mutationPayload);
     setActiveTaskId(null);
   };
 
