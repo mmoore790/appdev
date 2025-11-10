@@ -2,6 +2,50 @@ import { InsertTask, Task } from "@shared/schema";
 import { taskRepository, userRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 
+const TASK_STATUS_VALUES = ["pending", "in_progress", "review", "completed", "archived", "deleted"] as const;
+type BoardTaskStatus = (typeof TASK_STATUS_VALUES)[number];
+
+const TASK_STATUS_SET = new Set<string>(TASK_STATUS_VALUES);
+
+const STATUS_ALIASES: Record<string, BoardTaskStatus> = {
+  todo: "pending",
+  to_do: "pending",
+  backlog: "pending",
+  "in-progress": "in_progress",
+  inprogress: "in_progress",
+  reviewing: "review",
+  review_pending: "review",
+  done: "completed",
+  complete: "completed",
+  finished: "completed"
+};
+
+export class InvalidTaskStatusError extends Error {
+  constructor(status: unknown) {
+    super(`Unsupported task status: ${String(status)}`);
+    this.name = "InvalidTaskStatusError";
+  }
+}
+
+const normalizeTaskStatus = (status: unknown): BoardTaskStatus => {
+  if (typeof status !== "string") {
+    throw new InvalidTaskStatusError(status);
+  }
+
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  if (TASK_STATUS_SET.has(normalized)) {
+    return normalized as BoardTaskStatus;
+  }
+
+  const alias = STATUS_ALIASES[normalized];
+  if (alias) {
+    return alias;
+  }
+
+  throw new InvalidTaskStatusError(status);
+};
+
 class TaskService {
   async listTasks(filter?: { assignedTo?: number; pendingOnly?: boolean }) {
     if (filter?.assignedTo != null) {
@@ -20,7 +64,8 @@ class TaskService {
   }
 
   async createTask(data: InsertTask, actorUserId?: number) {
-    const task = await taskRepository.create(data);
+    const status = data.status ? normalizeTaskStatus(data.status) : "pending";
+    const task = await taskRepository.create({ ...data, status });
 
     let assignedToName = "";
     if (task.assignedTo) {
@@ -63,7 +108,12 @@ class TaskService {
       return undefined;
     }
 
-    const updatedTask = await taskRepository.update(id, data);
+    const preparedUpdate = this.prepareTaskUpdate(data, currentTask);
+    if (Object.keys(preparedUpdate).length === 0) {
+      return currentTask;
+    }
+
+    const updatedTask = await taskRepository.update(id, preparedUpdate);
     if (!updatedTask) {
       return undefined;
     }
@@ -105,6 +155,46 @@ class TaskService {
     }
 
     return updatedTask;
+  }
+
+  private prepareTaskUpdate(data: Partial<Task>, currentTask: Task): Partial<Task> {
+    if (!data || Object.keys(data).length === 0) {
+      return {};
+    }
+
+    const draft: Partial<Task> = { ...data };
+    let statusChanged = false;
+
+    if (Object.prototype.hasOwnProperty.call(draft, "status")) {
+      const rawStatus = draft.status;
+      if (rawStatus == null) {
+        throw new InvalidTaskStatusError(rawStatus);
+      }
+
+      const normalizedStatus = normalizeTaskStatus(rawStatus);
+      statusChanged = normalizedStatus !== currentTask.status;
+      draft.status = normalizedStatus;
+
+      if (statusChanged) {
+        if (normalizedStatus === "completed" && draft.completedAt === undefined) {
+          draft.completedAt = new Date().toISOString();
+        } else if (normalizedStatus !== "completed" && draft.completedAt === undefined && currentTask.completedAt) {
+          draft.completedAt = null;
+        }
+      }
+    }
+
+    const cleanedEntries = Object.entries(draft).filter(([, value]) => value !== undefined);
+    if (cleanedEntries.length === 0) {
+      return {};
+    }
+
+    const meaningfulEntries = cleanedEntries.filter(([key, value]) => currentTask[key as keyof Task] !== value);
+    if (meaningfulEntries.length === 0) {
+      return {};
+    }
+
+    return Object.fromEntries(meaningfulEntries) as Partial<Task>;
   }
 }
 
