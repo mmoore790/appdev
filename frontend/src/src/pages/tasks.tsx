@@ -37,6 +37,10 @@ export default function Tasks() {
     let completed = 0;
 
     tasksArray.forEach((task: any) => {
+      if (task.status === "archived" || task.status === "deleted") {
+        return;
+      }
+
       const meta = getDueDateMeta(task.dueDate);
       if (meta.tone === "danger") overdue += 1;
       if (meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2) dueSoon += 1;
@@ -50,6 +54,10 @@ export default function Tasks() {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
     return tasksArray
       .filter((task: any) => {
+        if (task.status === "archived" || task.status === "deleted") {
+          return false;
+        }
+
         const matchesSearch =
           search.trim() === "" || task.title.toLowerCase().includes(search.toLowerCase());
 

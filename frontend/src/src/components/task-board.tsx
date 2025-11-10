@@ -22,7 +22,19 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle, Clock, GripVertical, Plus, ClipboardList, Loader2, MoreVertical, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Archive,
+  ArchiveRestore,
+  CheckCircle,
+  Clock,
+  GripVertical,
+  Plus,
+  ClipboardList,
+  Loader2,
+  MoreVertical,
+  Trash2
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -48,9 +60,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "./ui/alert-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "./ui/sheet";
 import { useToast } from "../hooks/use-toast";
 
-type TaskStatus = "pending" | "in_progress" | "review" | "completed";
+type BoardStatus = "pending" | "in_progress" | "review" | "completed";
+type TaskStatus = BoardStatus | "archived" | "deleted";
 
 interface TaskBoardProps {
   tasks: any[];
@@ -59,7 +73,7 @@ interface TaskBoardProps {
 }
 
 interface StatusConfig {
-  id: TaskStatus;
+  id: BoardStatus;
   title: string;
   description: string;
   accent: string;
@@ -114,55 +128,116 @@ const DUE_TONE_CLASSES: Record<DueDateTone, string> = {
   success: "text-green-600"
 };
 
-type ColumnState = Record<TaskStatus, any[]>;
+type ColumnState = Record<BoardStatus, any[]>;
 
-const deriveColumnsFromTasks = (tasks: any[]): ColumnState => {
+interface DerivedBoardState {
+  columns: ColumnState;
+  archived: any[];
+}
+
+const PRIORITY_SORT = { high: 1, medium: 2, low: 3 } as const;
+
+const sortTasksForColumn = (tasks: any[]) =>
+  tasks.slice().sort((a, b) => {
+    const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    if (dueA !== dueB) return dueA - dueB;
+    const scoreA = PRIORITY_SORT[a.priority as keyof typeof PRIORITY_SORT] ?? 99;
+    const scoreB = PRIORITY_SORT[b.priority as keyof typeof PRIORITY_SORT] ?? 99;
+    return scoreA - scoreB;
+  });
+
+const getComparableDate = (task: any) => {
+  const sources = [task.updatedAt, task.completedAt, task.dueDate, task.createdAt];
+  for (const value of sources) {
+    if (value) {
+      const timestamp = new Date(value).getTime();
+      if (!Number.isNaN(timestamp)) {
+        return timestamp;
+      }
+    }
+  }
+  return 0;
+};
+
+const sortArchivedTasks = (tasks: any[]) =>
+  tasks.slice().sort((a, b) => getComparableDate(b) - getComparableDate(a));
+
+const deriveBoardState = (tasks: any[]): DerivedBoardState => {
   const initial: ColumnState = {
     pending: [],
     in_progress: [],
     review: [],
     completed: []
   };
+  const archived: any[] = [];
 
   tasks.forEach(task => {
     const status = (task.status as TaskStatus) || "pending";
-    if (initial[status]) {
-      initial[status].push(task);
+    if (status === "archived") {
+      archived.push(task);
+      return;
+    }
+
+    if (status === "deleted") {
+      return;
+    }
+
+    if (initial[status as BoardStatus]) {
+      initial[status as BoardStatus].push(task);
     } else {
       initial.pending.push(task);
     }
   });
 
-  // Sort each column by due date (earliest first), then priority
   STATUS_CONFIG.forEach(({ id }) => {
-    initial[id] = initial[id].sort((a, b) => {
-      const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-      const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-      if (dueA !== dueB) return dueA - dueB;
-      const priorityScore = { high: 1, medium: 2, low: 3 };
-      return (priorityScore[a.priority] || 99) - (priorityScore[b.priority] || 99);
-    });
+    initial[id] = sortTasksForColumn(initial[id]);
   });
 
-  return initial;
+  return {
+    columns: initial,
+    archived: sortArchivedTasks(archived)
+  };
 };
 
 export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardProps) {
-  const [columns, setColumns] = useState<ColumnState>(() => deriveColumnsFromTasks(tasks));
+  const derived = useMemo(() => deriveBoardState(tasks), [tasks]);
+  const [columns, setColumns] = useState<ColumnState>(derived.columns);
+  const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     mode: "create" | "edit";
-    status?: TaskStatus;
+    status?: BoardStatus;
     taskId?: number;
   }>({ isOpen: false, mode: "create", status: "pending" });
-    const [taskToDelete, setTaskToDelete] = useState<{ id: number; title?: string } | null>(null);
+  const [isArchiveDrawerOpen, setIsArchiveDrawerOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: "archive" | "delete"; task: any } | null>(null);
+  const [restoreTargetId, setRestoreTargetId] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   useEffect(() => {
-    setColumns(deriveColumnsFromTasks(tasks));
+    const { columns: nextColumns, archived: nextArchived } = deriveBoardState(tasks);
+    setColumns(nextColumns);
+    setArchivedTasks(nextArchived);
   }, [tasks]);
+
+  const removeTaskFromColumns = (taskId: number) => {
+    setColumns(prev => ({
+      pending: prev.pending.filter(task => task.id !== taskId),
+      in_progress: prev.in_progress.filter(task => task.id !== taskId),
+      review: prev.review.filter(task => task.id !== taskId),
+      completed: prev.completed.filter(task => task.id !== taskId)
+    }));
+  };
+
+  const addTaskToColumn = (task: any, status: BoardStatus) => {
+    setColumns(prev => ({
+      ...prev,
+      [status]: sortTasksForColumn([...prev[status], task])
+    }));
+  };
 
   const activeTask = useMemo(
     () => tasks.find(task => task.id === activeTaskId) ?? null,
@@ -175,7 +250,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   );
 
   const updateTaskStatusMutation = useMutation({
-    mutationFn: async ({ taskId, newStatus }: { taskId: number; newStatus: TaskStatus }) => {
+    mutationFn: async ({ taskId, newStatus }: { taskId: number; newStatus: BoardStatus }) => {
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
     },
     onSuccess: (_, variables) => {
@@ -192,16 +267,100 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         description: "We couldn't update that task. Please try again.",
         variant: "destructive"
       });
-      setColumns(deriveColumnsFromTasks(tasks)); // revert UI
+      const { columns: resetColumns } = deriveBoardState(tasks);
+      setColumns(resetColumns);
     }
   });
 
-  const openCreateDialog = (status: TaskStatus) => {
+  const archiveTaskMutation = useMutation({
+    mutationFn: async (taskId: number) => {
+      return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "archived" });
+    },
+    onSuccess: (updatedTask: any) => {
+      removeTaskFromColumns(updatedTask.id);
+      setArchivedTasks(prev => sortArchivedTasks([...prev.filter(task => task.id !== updatedTask.id), updatedTask]));
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+      toast({
+        title: "Task archived",
+        description: "The task is now hidden from the main board."
+      });
+      setPendingAction(null);
+    },
+    onError: () => {
+      toast({
+        title: "Archive failed",
+        description: "We couldn't archive that task right now. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: number) => {
+      return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "deleted" });
+    },
+    onSuccess: (updatedTask: any) => {
+      removeTaskFromColumns(updatedTask.id);
+      setArchivedTasks(prev => prev.filter(task => task.id !== updatedTask.id));
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+      toast({
+        title: "Task deleted",
+        description: "The task has been removed from your workspace."
+      });
+      setPendingAction(null);
+    },
+    onError: () => {
+      toast({
+        title: "Delete failed",
+        description: "We couldn't delete that task right now. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const restoreTaskMutation = useMutation({
+    mutationFn: async ({ taskId, status }: { taskId: number; status: BoardStatus }) => {
+      return apiRequest("PUT", `/api/tasks/${taskId}`, { status });
+    },
+    onSuccess: (updatedTask: any, variables) => {
+      removeTaskFromColumns(updatedTask.id);
+      setArchivedTasks(prev => prev.filter(task => task.id !== updatedTask.id));
+      addTaskToColumn(updatedTask, variables.status);
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
+      toast({
+        title: "Task restored",
+        description: `Returned to ${STATUS_CONFIG.find(status => status.id === variables.status)?.title ?? "the board"}.`
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Restore failed",
+        description: "We couldn't restore that task right now. Please try again.",
+        variant: "destructive"
+      });
+    },
+    onSettled: () => {
+      setRestoreTargetId(null);
+    }
+  });
+
+  const openCreateDialog = (status: BoardStatus) => {
     setDialogState({ isOpen: true, mode: "create", status });
   };
 
   const openEditDialog = (taskId: number) => {
     setDialogState({ isOpen: true, mode: "edit", taskId });
+  };
+
+  const requestArchiveTask = (task: any) => setPendingAction({ type: "archive", task });
+  const requestDeleteTask = (task: any) => setPendingAction({ type: "delete", task });
+
+  const handleRestoreTask = (task: any) => {
+    setRestoreTargetId(task.id);
+    restoreTaskMutation.mutate({ taskId: task.id, status: "pending" });
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -218,8 +377,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const overId = over.id;
     if (activeId === overId) return;
 
-    const activeColumnId = active.data.current?.columnId as TaskStatus | undefined;
-    const overColumnId = (over.data.current?.columnId as TaskStatus | undefined) ?? (typeof overId === "string" ? (overId as TaskStatus) : undefined);
+    const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
+    const overColumnId =
+      (over.data.current?.columnId as BoardStatus | undefined) ??
+      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
 
@@ -249,15 +410,18 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const { active, over } = event;
     if (!over) {
       setActiveTaskId(null);
-      setColumns(deriveColumnsFromTasks(tasks));
+      const { columns: resetColumns } = deriveBoardState(tasks);
+      setColumns(resetColumns);
       return;
     }
 
     const activeId = active.id;
     const overId = over.id;
 
-    const activeColumnId = active.data.current?.columnId as TaskStatus | undefined;
-    const overColumnId = (over.data.current?.columnId as TaskStatus | undefined) ?? (typeof overId === "string" ? (overId as TaskStatus) : undefined);
+    const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
+    const overColumnId =
+      (over.data.current?.columnId as BoardStatus | undefined) ??
+      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId) {
       setActiveTaskId(null);
@@ -281,9 +445,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         const [movedTask] = updated[activeColumnId].splice(sourceIndex, 1);
         movedTask.status = overColumnId;
 
-        const targetIndex = over.data.current?.type === "column"
-          ? updated[overColumnId].length
-          : updated[overColumnId].findIndex(task => task.id === overId);
+        const targetIndex =
+          over.data.current?.type === "column"
+            ? updated[overColumnId].length
+            : updated[overColumnId].findIndex(task => task.id === overId);
 
         if (targetIndex >= 0) {
           updated[overColumnId].splice(targetIndex, 0, movedTask);
@@ -301,9 +466,14 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     setActiveTaskId(null);
   };
 
+  const filteredForMetrics = useMemo(
+    () => tasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
+    [tasks]
+  );
+
   const totalCounts = useMemo(() => {
-    const overdueTasks = tasks.filter(task => getDueDateMeta(task.dueDate).tone === "danger");
-    const dueSoonTasks = tasks.filter(task => {
+    const overdueTasks = filteredForMetrics.filter(task => getDueDateMeta(task.dueDate).tone === "danger");
+    const dueSoonTasks = filteredForMetrics.filter(task => {
       const meta = getDueDateMeta(task.dueDate);
       return meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2;
     });
@@ -311,7 +481,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       overdue: overdueTasks.length,
       dueSoon: dueSoonTasks.length
     };
-  }, [tasks]);
+  }, [filteredForMetrics]);
+
+  const isArchivePending = pendingAction?.type === "archive" && archiveTaskMutation.isPending;
+  const isDeletePending = pendingAction?.type === "delete" && deleteTaskMutation.isPending;
 
   return (
     <>
@@ -369,30 +542,51 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         </Card>
       </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToWindowEdges]}
-        >
-          <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 p-4 shadow-sm">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {STATUS_CONFIG.map(status => (
-                <TaskBoardColumn
-                  key={status.id}
-                  status={status}
-                  tasks={columns[status.id]}
-                  users={users}
-                  onAddTask={() => openCreateDialog(status.id)}
-                  onTaskClick={openEditDialog}
-                  isLoading={isLoading}
-                  activeTaskId={activeTaskId}
-                />
-              ))}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToWindowEdges]}
+      >
+        <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/60 px-4 py-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Board overview</p>
+              <p className="text-sm text-neutral-600">Drag tasks between stages to keep work on track.</p>
             </div>
+            <Button
+              variant="outline"
+              className="rounded-full border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
+              onClick={() => setIsArchiveDrawerOpen(true)}
+            >
+              <Archive size={16} className="mr-2" />
+              Archived tasks
+              {archivedTasks.length > 0 && (
+                <span className="ml-2 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+                  {archivedTasks.length}
+                </span>
+              )}
+            </Button>
           </div>
+          <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+            {STATUS_CONFIG.map(status => (
+              <TaskBoardColumn
+                key={status.id}
+                status={status}
+                tasks={columns[status.id]}
+                users={users}
+                onAddTask={() => openCreateDialog(status.id)}
+                onTaskClick={openEditDialog}
+                isLoading={isLoading}
+                activeTaskId={activeTaskId}
+                onArchiveTask={requestArchiveTask}
+                onDeleteTask={requestDeleteTask}
+              />
+            ))}
+          </div>
+        </div>
 
         <DragOverlay>
           {activeTask ? (
@@ -411,9 +605,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {dialogState.mode === "create" ? "Create Task" : "Task Details"}
-            </DialogTitle>
+            <DialogTitle>{dialogState.mode === "create" ? "Create Task" : "Task Details"}</DialogTitle>
           </DialogHeader>
           {dialogState.mode === "create" && dialogState.status ? (
             <TaskForm
@@ -435,6 +627,166 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Sheet open={isArchiveDrawerOpen} onOpenChange={setIsArchiveDrawerOpen}>
+        <SheetContent side="right" className="w-full max-w-xl overflow-y-auto border-l border-neutral-200/70 bg-neutral-50/60 backdrop-blur">
+          <SheetHeader>
+            <SheetTitle>Archived tasks</SheetTitle>
+            <SheetDescription>
+              Archived tasks stay off the board but remain accessible. Restore them to continue work or delete them
+              permanently.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4 pb-8">
+            {archivedTasks.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+                No archived tasks yet. Archive a task from the board to keep your workspace focused.
+              </div>
+            ) : (
+              archivedTasks.map(task => {
+                const dueMeta = getDueDateMeta(task.dueDate);
+                const dueToneClass = DUE_TONE_CLASSES[dueMeta.tone] ?? DUE_TONE_CLASSES.muted;
+                const priorityColors = getTaskPriorityColor(task.priority);
+                const assigneeId =
+                  task.assignedTo === "unassigned" || task.assignedTo === null || task.assignedTo === undefined
+                    ? null
+                    : typeof task.assignedTo === "string"
+                      ? parseInt(task.assignedTo, 10)
+                      : task.assignedTo;
+                const user =
+                  typeof assigneeId === "number" && !Number.isNaN(assigneeId)
+                    ? users.find(u => u.id === assigneeId)
+                    : undefined;
+
+                return (
+                  <Card key={task.id} className="border border-neutral-200/80 bg-white shadow-sm">
+                    <CardContent className="space-y-4 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-2">
+                          <p className="text-sm font-semibold text-neutral-800">{task.title}</p>
+                          {task.description && (
+                            <p className="line-clamp-2 text-xs leading-relaxed text-neutral-500">{task.description}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+                            <span className={cn("flex items-center gap-1 font-medium", dueToneClass)}>
+                              <Clock size={12} />
+                              {dueMeta.label}
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-[11px]">
+                                  {user?.fullName?.slice(0, 2)?.toUpperCase() ?? "UN"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-neutral-600">
+                                {user?.fullName || user?.username || "Unassigned"}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <Badge className={cn("rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide", priorityColors.bgColor, priorityColors.textColor)}>
+                          {task.priority === "high" ? "High" : task.priority === "low" ? "Low" : "Medium"}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
+                          disabled={(restoreTaskMutation.isPending && restoreTargetId === task.id) || archiveTaskMutation.isPending || deleteTaskMutation.isPending}
+                          onClick={() => handleRestoreTask(task)}
+                        >
+                          <ArchiveRestore size={14} className="mr-2" />
+                          {restoreTaskMutation.isPending && restoreTargetId === task.id ? "Restoring..." : "Restore"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          disabled={archiveTaskMutation.isPending || deleteTaskMutation.isPending}
+                          onClick={() => requestDeleteTask(task)}
+                        >
+                          <Trash2 size={14} className="mr-2" />
+                          Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog
+        open={Boolean(pendingAction)}
+        onOpenChange={(open) => {
+          if (!open && !archiveTaskMutation.isPending && !deleteTaskMutation.isPending) {
+            setPendingAction(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingAction?.type === "delete" ? "Delete task" : "Archive task"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAction?.type === "delete"
+                ? (
+                  <>
+                    This will mark{" "}
+                    <span className="font-medium text-neutral-700">
+                      {pendingAction?.task?.title ? `“${pendingAction.task.title}”` : "this task"}
+                    </span>{" "}
+                    as deleted and remove it from all views. This action cannot be undone.
+                  </>
+                )
+                : (
+                  <>
+                    <span className="font-medium text-neutral-700">
+                      {pendingAction?.task?.title ? `“${pendingAction.task.title}”` : "This task"}
+                    </span>{" "}
+                    will be hidden from the board but kept in the archive drawer. You can restore it anytime.
+                  </>
+                )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={archiveTaskMutation.isPending || deleteTaskMutation.isPending}
+              onClick={() => setPendingAction(null)}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                pendingAction?.type === "delete"
+                  ? "bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                  : "bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
+              }
+              disabled={archiveTaskMutation.isPending || deleteTaskMutation.isPending}
+              onClick={() => {
+                if (!pendingAction) return;
+                if (pendingAction.type === "archive") {
+                  archiveTaskMutation.mutate(pendingAction.task.id);
+                } else {
+                  deleteTaskMutation.mutate(pendingAction.task.id);
+                }
+              }}
+            >
+              {pendingAction?.type === "delete"
+                ? isDeletePending
+                  ? "Deleting..."
+                  : "Delete task"
+                : isArchivePending
+                  ? "Archiving..."
+                  : "Archive task"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -447,6 +799,8 @@ interface TaskBoardColumnProps {
   onTaskClick: (taskId: number) => void;
   isLoading: boolean;
   activeTaskId: number | null;
+  onArchiveTask: (task: any) => void;
+  onDeleteTask: (task: any) => void;
 }
 
 function TaskBoardColumn({
@@ -456,7 +810,9 @@ function TaskBoardColumn({
   onAddTask,
   onTaskClick,
   isLoading,
-  activeTaskId
+  activeTaskId,
+  onArchiveTask,
+  onDeleteTask
 }: TaskBoardColumnProps) {
   const { setNodeRef, isOver } = useDroppableColumn(status.id);
 
@@ -518,6 +874,8 @@ function TaskBoardColumn({
                 columnId={status.id}
                 onClick={() => onTaskClick(task.id)}
                 isActiveDrag={activeTaskId === task.id}
+                onArchiveRequest={() => onArchiveTask(task)}
+                onDeleteRequest={() => onDeleteTask(task)}
               />
             ))
           )}
@@ -534,9 +892,20 @@ interface TaskBoardCardProps {
   onClick?: () => void;
   isActiveDrag?: boolean;
   isOverlay?: boolean;
+  onArchiveRequest?: () => void;
+  onDeleteRequest?: () => void;
 }
 
-function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, isOverlay = false }: TaskBoardCardProps) {
+function TaskBoardCard({
+  task,
+  users,
+  columnId,
+  onClick,
+  isActiveDrag = false,
+  isOverlay = false,
+  onArchiveRequest,
+  onDeleteRequest
+}: TaskBoardCardProps) {
   const {
     attributes,
     listeners,
@@ -579,6 +948,8 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
       ? users.find(u => u.id === assigneeId)
       : undefined;
 
+  const showActions = !isOverlay && (onArchiveRequest || onDeleteRequest);
+
   const content = (
     <Card
       className={cn(
@@ -606,9 +977,48 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
               )}
             </div>
           </div>
-          <Badge className={cn("rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide", priorityColors.bgColor, priorityColors.textColor)}>
-            {task.priority === "high" ? "High" : task.priority === "low" ? "Low" : "Medium"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge className={cn("rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide", priorityColors.bgColor, priorityColors.textColor)}>
+              {task.priority === "high" ? "High" : task.priority === "low" ? "Low" : "Medium"}
+            </Badge>
+            {showActions && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full text-neutral-400 transition hover:text-neutral-700"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreVertical size={16} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44" onClick={(event) => event.stopPropagation()}>
+                  {onArchiveRequest && (
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        onArchiveRequest();
+                      }}
+                    >
+                      <Archive size={14} className="mr-2" />
+                      Archive task
+                    </DropdownMenuItem>
+                  )}
+                  {onDeleteRequest && (
+                    <DropdownMenuItem
+                      className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                      onSelect={() => {
+                        onDeleteRequest();
+                      }}
+                    >
+                      <Trash2 size={14} className="mr-2" />
+                      Delete task
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
