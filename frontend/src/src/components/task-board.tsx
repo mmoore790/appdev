@@ -319,6 +319,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
  
   const updateTaskStatusMutation = useMutation({
     mutationFn: async ({ taskId, newStatus }: UpdateTaskStatusVariables) => {
+      console.log("📡 mutationFn calling apiRequest", { taskId, newStatus });
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
     },
     onMutate: async ({ taskId, newStatus, previousStatus }: UpdateTaskStatusVariables) => {
@@ -477,42 +478,54 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    console.log("⤴️ handleDragStart", { id: event?.active?.id, activeData: event?.active?.data?.current });
     if (event.active?.id == null) {
       setActiveTaskId(null);
       return;
     }
     setActiveTaskId(String(event.active.id));
   };
-
+  
   const handleDragOver = (event: DragOverEvent) => {
+    console.log("↔️ handleDragOver", {
+      activeId: event.active?.id,
+      overId: event.over?.id,
+      overData: event.over?.data?.current
+    });
+  
     const { active, over } = event;
     if (!over) return;
-
+  
     const activeId = String(active.id);
     const overId = String(over.id);
     if (activeId === overId) return;
-
+  
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
+  
+    // Robust normalization for overColumnId
+    const rawOverId = typeof over.id === "string" ? over.id : "";
+    const maybeStatus = rawOverId.replace(/^column[-_]?/, "").trim().toLowerCase().replace(/\s+/g, "_");
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" && isBoardStatus(over.id) ? (over.id as BoardStatus) : undefined);
-
+      (isBoardStatus(maybeStatus) ? (maybeStatus as BoardStatus) : undefined);
+  
     if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
-
+  
+    // your existing optimistic reordering logic...
     setColumns(prev => {
       const activeTasks = prev[activeColumnId];
       const overTasks = prev[overColumnId];
       const activeIndex = activeTasks.findIndex(task => String(task.id) === activeId);
       if (activeIndex === -1) return prev;
-
+  
       const overIndex = overTasks.findIndex(task => String(task.id) === overId);
-
+  
       const updatedActive = [...activeTasks];
       const [movedTask] = updatedActive.splice(activeIndex, 1);
       const updatedOver = [...overTasks];
       const insertIndex = overIndex >= 0 ? overIndex : updatedOver.length;
       updatedOver.splice(insertIndex, 0, { ...movedTask, status: overColumnId });
-
+  
       return {
         ...prev,
         [activeColumnId]: updatedActive,
@@ -520,14 +533,22 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       };
     });
   };
-
+  
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (active?.id == null) {
-      setActiveTaskId(null);
-      return;
-    }
+  
+    if (!active?.id) return;
+    console.log("🧩 active data", active.data.current);
+    console.log("🧩 over data", over.data.current);
 
+  
+    console.log("⬇️ handleDragEnd", {
+      activeId: active.id,
+      overId: over?.id,
+      activeData: active.data.current,
+      overData: over?.data?.current,
+    });
+  
     if (!over) {
       setActiveTaskId(null);
       const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
@@ -535,138 +556,96 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       setArchivedTasks(resetArchived);
       return;
     }
-
+  
     const activeId = String(active.id);
     const overId = String(over.id);
-
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
-    const overColumnId =
-      (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" && isBoardStatus(over.id) ? (over.id as BoardStatus) : undefined);
+    let overColumnId = over.data.current?.columnId as BoardStatus | undefined;
 
+    // 🩹 if we dropped on another task, use that task's column
+    if (!overColumnId && over.data.current?.type === "task") {
+      overColumnId = (over.data.current as any).columnId;
+    }
+
+    // fallback to parsing the ID if needed
+    if (!overColumnId && typeof over.id === "string") {
+      const maybe = over.id.replace(/^column[-_]?/, "").trim().toLowerCase();
+      if (isBoardStatus(maybe)) overColumnId = maybe as BoardStatus;
+    }
+  
+    // If we’re missing data, do nothing
     if (!activeColumnId || !overColumnId) {
       setActiveTaskId(null);
       return;
     }
-
+    console.log("🎯 activeColumnId:", activeColumnId, "→ overColumnId:", overColumnId);
+  
+    // If it’s the same column, reorder only
     if (activeColumnId === overColumnId) {
       setColumns(prev => {
         const columnTasks = prev[activeColumnId] ?? [];
-        const currentActiveIndex = columnTasks.findIndex(task => String(task.id) === activeId);
-        const currentOverIndex = columnTasks.findIndex(task => String(task.id) === overId);
-        if (
-          currentActiveIndex === -1 ||
-          currentOverIndex === -1 ||
-          currentActiveIndex === currentOverIndex
-        ) {
-          return prev;
-        }
-
+        const activeIndex = columnTasks.findIndex(task => String(task.id) === activeId);
+        const overIndex = columnTasks.findIndex(task => String(task.id) === overId);
+        if (activeIndex === -1 || overIndex === -1) return prev;
         return {
           ...prev,
-          [activeColumnId]: arrayMove(columnTasks, currentActiveIndex, currentOverIndex)
+          [activeColumnId]: arrayMove(columnTasks, activeIndex, overIndex),
         };
       });
       setActiveTaskId(null);
       return;
     }
-
+  
+    // ✅ Cross-column move
     const numericTaskId = Number(active.id);
     if (Number.isNaN(numericTaskId)) {
       toast({
         title: "Unable to update task",
-        description: "Task identifier is invalid.",
-        variant: "destructive"
+        description: "Invalid task identifier.",
+        variant: "destructive",
       });
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
-      setColumns(resetColumns);
-      setArchivedTasks(resetArchived);
-      setActiveTaskId(null);
       return;
     }
-
+  
+    console.log("🚚 Moving task", numericTaskId, "from", activeColumnId, "to", overColumnId);
+  
     let mutationPayload: UpdateTaskStatusVariables | null = null;
-
+  
     setColumns(prev => {
       const sourceTasks = prev[activeColumnId] ?? [];
       const targetTasks = prev[overColumnId] ?? [];
-
-      let updatedSource = sourceTasks;
-      let updatedTarget = targetTasks;
-      let movingTask: any | null = null;
-
+  
       const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
-      if (sourceIndex !== -1) {
-        updatedSource = [...sourceTasks];
-        [movingTask] = updatedSource.splice(sourceIndex, 1);
-      }
-
-      if (!movingTask) {
-        const targetExistingIndex = targetTasks.findIndex(task => String(task.id) === activeId);
-        if (targetExistingIndex !== -1) {
-          const targetCopy = [...targetTasks];
-          [movingTask] = targetCopy.splice(targetExistingIndex, 1);
-          updatedTarget = targetCopy;
-        } else {
-          updatedTarget = [...targetTasks];
-        }
-      } else {
-        updatedTarget = [...targetTasks];
-      }
-
-      if (!movingTask) {
-        const fallbackTask =
-          sanitizedTasks.find(task => String(task.id) === activeId) ??
-          prev[activeColumnId]?.find(task => String(task.id) === activeId) ??
-          prev[overColumnId]?.find(task => String(task.id) === activeId);
-
-        if (!fallbackTask) {
-          return prev;
-        }
-
-        movingTask = fallbackTask;
-      }
-
-      const updatedTask = { ...movingTask, status: overColumnId };
-
-      let insertIndex: number;
-      if (over.data.current?.type === "column") {
-        insertIndex = updatedTarget.length;
-      } else {
-        insertIndex = updatedTarget.findIndex(task => String(task.id) === overId);
-        if (insertIndex === -1) {
-          insertIndex = updatedTarget.length;
-        }
-      }
-
-      const finalTarget = [...updatedTarget];
-      finalTarget.splice(insertIndex, 0, updatedTask);
-
+      if (sourceIndex === -1) return prev;
+  
+      const [movedTask] = sourceTasks.splice(sourceIndex, 1);
+      const updatedTask = { ...movedTask, status: overColumnId };
+  
+      const insertIndex = targetTasks.findIndex(task => String(task.id) === overId);
+      const newTargetTasks = [...targetTasks];
+      newTargetTasks.splice(insertIndex === -1 ? newTargetTasks.length : insertIndex, 0, updatedTask);
+  
       mutationPayload = {
         taskId: numericTaskId,
         newStatus: overColumnId,
-        previousStatus: activeColumnId
+        previousStatus: activeColumnId,
       };
-
+  
       return {
         ...prev,
-        [activeColumnId]: updatedSource,
-        [overColumnId]: finalTarget
+        [activeColumnId]: sourceTasks,
+        [overColumnId]: newTargetTasks,
       };
     });
-
-    if (!mutationPayload) {
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
-      setColumns(resetColumns);
-      setArchivedTasks(resetArchived);
-      setActiveTaskId(null);
-      return;
+  
+    if (mutationPayload) {
+      console.log("📡 Updating server:", mutationPayload);
+      skipHydrationRef.current = true;
+      updateTaskStatusMutation.mutate(mutationPayload);
     }
-
-    skipHydrationRef.current = true;
-    updateTaskStatusMutation.mutate(mutationPayload);
+  
     setActiveTaskId(null);
-  };
+  };  
 
   const filteredForMetrics = useMemo(
     () => sanitizedTasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
@@ -1027,19 +1006,20 @@ function TaskBoardColumn({
   isLoading,
   activeTaskId,
   onArchiveTask,
-  onDeleteTask
+  onDeleteTask,
 }: TaskBoardColumnProps) {
   const { setNodeRef, isOver } = useDroppableColumn(status.id);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setNodeRef} // ✅ Only one ref — droppable for the entire column
       className={cn(
         "group/column flex h-full flex-col rounded-2xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
         isOver && "border-green-200 ring-2 ring-green-500/40"
       )}
       data-column={status.id}
     >
+      {/* Column Header */}
       <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white/95 px-5 py-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
@@ -1048,13 +1028,21 @@ function TaskBoardColumn({
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-neutral-800">{status.title}</h3>
-              <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", status.badge)}>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  status.badge
+                )}
+              >
                 {tasks.length}
               </span>
             </div>
-            <p className="max-w-xs text-xs leading-relaxed text-neutral-500">{status.description}</p>
+            <p className="max-w-xs text-xs leading-relaxed text-neutral-500">
+              {status.description}
+            </p>
           </div>
         </div>
+
         {status.id !== "completed" && (
           <Button
             size="sm"
@@ -1068,37 +1056,46 @@ function TaskBoardColumn({
         )}
       </div>
 
-      <SortableContext items={tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
+      {/* Task List (Sortable Context) */}
+      <SortableContext
+        items={tasks.map((task) => String(task.id))}
+        strategy={verticalListSortingStrategy}
+      >
         <div className="flex flex-1 flex-col gap-3 p-5">
           {isLoading && tasks.length === 0 ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-24 rounded-xl bg-neutral-100/80" />
+                <Skeleton
+                  key={index}
+                  className="h-24 rounded-xl bg-neutral-100/80"
+                />
               ))}
             </div>
           ) : tasks.length === 0 ? (
             <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
               {status.emptyMessage}
             </div>
-            ) : (
-              tasks.map(task => (
-                <TaskBoardCard
-                  key={task.id}
-                  task={task}
-                  users={users}
-                  columnId={status.id}
-                  onClick={() => {
-                    const numericId = Number(task.id);
-                    if (!Number.isNaN(numericId)) {
-                      onTaskClick(numericId);
-                    }
-                  }}
-                  isActiveDrag={activeTaskId != null && String(task.id) === activeTaskId}
-                  onArchiveRequest={() => onArchiveTask(task)}
-                  onDeleteRequest={() => onDeleteTask(task)}
-                />
-              ))
-            )}
+          ) : (
+            tasks.map((task) => (
+              <TaskBoardCard
+                key={task.id}
+                task={task}
+                users={users}
+                columnId={status.id}
+                onClick={() => {
+                  const numericId = Number(task.id);
+                  if (!Number.isNaN(numericId)) {
+                    onTaskClick(numericId);
+                  }
+                }}
+                isActiveDrag={
+                  activeTaskId != null && String(task.id) === activeTaskId
+                }
+                onArchiveRequest={() => onArchiveTask(task)}
+                onDeleteRequest={() => onDeleteTask(task)}
+              />
+            ))
+          )}
         </div>
       </SortableContext>
     </div>
@@ -1132,14 +1129,16 @@ function TaskBoardCard({
     setNodeRef,
     transform,
     transition,
-    isDragging
+    isDragging,
   } = useSortable({
-    id: task.id,
+    id: String(task.id),
     data: {
-      columnId,
-      type: "task"
-    }
-  });
+      // ✅ always reflect real current status
+      columnId: task.status,
+      type: "task",
+    },
+  });  
+  
 
   const style = transform
     ? {
