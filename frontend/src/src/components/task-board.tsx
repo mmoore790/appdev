@@ -256,6 +256,15 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const skipHydrationRef = useRef(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const dragStateRef = useRef<{
+    taskId: string | null;
+    originColumnId: BoardStatus | null;
+    currentColumnId: BoardStatus | null;
+  }>({
+    taskId: null,
+    originColumnId: null,
+    currentColumnId: null
+  });
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     mode: "create" | "edit";
@@ -451,6 +460,35 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     }
   });
 
+  const parseBoardStatus = (value: unknown): BoardStatus | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const normalized = value.trim().toLowerCase().replace(/^column[-_]?/, "").replace(/[\s-]+/g, "_");
+    if (isBoardStatus(normalized)) {
+      return normalized as BoardStatus;
+    }
+    const alias = STATUS_ALIASES[normalized];
+    if (alias && isBoardStatus(alias)) {
+      return alias as BoardStatus;
+    }
+    return undefined;
+  };
+
+  const resolveColumnId = (entry: DragOverEvent["over"] | DragEndEvent["over"]): BoardStatus | undefined => {
+    if (!entry) {
+      return undefined;
+    }
+    const dataColumn = parseBoardStatus(entry.data?.current?.columnId);
+    if (dataColumn) {
+      return dataColumn;
+    }
+    if (typeof entry.id === "string") {
+      return parseBoardStatus(entry.id);
+    }
+    return undefined;
+  };
+
   const openCreateDialog = (status: BoardStatus) => {
     setDialogState({ isOpen: true, mode: "create", status });
   };
@@ -477,175 +515,239 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     restoreTaskMutation.mutate({ taskId: numericId, status: "pending" });
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    console.log("⤴️ handleDragStart", { id: event?.active?.id, activeData: event?.active?.data?.current });
-    if (event.active?.id == null) {
-      setActiveTaskId(null);
-      return;
-    }
-    setActiveTaskId(String(event.active.id));
-  };
-  
-  const handleDragOver = (event: DragOverEvent) => {
-    console.log("↔️ handleDragOver", {
-      activeId: event.active?.id,
-      overId: event.over?.id,
-      overData: event.over?.data?.current
-    });
-  
-    const { active, over } = event;
-    if (!over) return;
-  
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    if (activeId === overId) return;
-  
-    const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
-  
-    // Robust normalization for overColumnId
-    const rawOverId = typeof over.id === "string" ? over.id : "";
-    const maybeStatus = rawOverId.replace(/^column[-_]?/, "").trim().toLowerCase().replace(/\s+/g, "_");
-    const overColumnId =
-      (over.data.current?.columnId as BoardStatus | undefined) ??
-      (isBoardStatus(maybeStatus) ? (maybeStatus as BoardStatus) : undefined);
-  
-    if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
-  
-    // your existing optimistic reordering logic...
-    setColumns(prev => {
-      const activeTasks = prev[activeColumnId];
-      const overTasks = prev[overColumnId];
-      const activeIndex = activeTasks.findIndex(task => String(task.id) === activeId);
-      if (activeIndex === -1) return prev;
-  
-      const overIndex = overTasks.findIndex(task => String(task.id) === overId);
-  
-      const updatedActive = [...activeTasks];
-      const [movedTask] = updatedActive.splice(activeIndex, 1);
-      const updatedOver = [...overTasks];
-      const insertIndex = overIndex >= 0 ? overIndex : updatedOver.length;
-      updatedOver.splice(insertIndex, 0, { ...movedTask, status: overColumnId });
-  
-      return {
-        ...prev,
-        [activeColumnId]: updatedActive,
-        [overColumnId]: updatedOver
+    const handleDragStart = (event: DragStartEvent) => {
+      console.log("⤴️ handleDragStart", { id: event?.active?.id, activeData: event?.active?.data?.current });
+      if (event.active?.id == null) {
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        return;
+      }
+
+      const columnId = parseBoardStatus(event.active?.data?.current?.columnId) ?? null;
+      const activeId = String(event.active.id);
+
+      dragStateRef.current = {
+        taskId: activeId,
+        originColumnId: columnId,
+        currentColumnId: columnId
       };
-    });
-  };
-  
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-  
-    if (!active?.id) return;
-    console.log("🧩 active data", active.data.current);
-    console.log("🧩 over data", over.data.current);
 
+      setActiveTaskId(activeId);
+    };
   
-    console.log("⬇️ handleDragEnd", {
-      activeId: active.id,
-      overId: over?.id,
-      activeData: active.data.current,
-      overData: over?.data?.current,
-    });
-  
-    if (!over) {
-      setActiveTaskId(null);
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
-      setColumns(resetColumns);
-      setArchivedTasks(resetArchived);
-      return;
-    }
-  
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
-    let overColumnId = over.data.current?.columnId as BoardStatus | undefined;
+    const handleDragOver = (event: DragOverEvent) => {
+      console.log("↔️ handleDragOver", {
+        activeId: event.active?.id,
+        overId: event.over?.id,
+        overData: event.over?.data?.current
+      });
 
-    // 🩹 if we dropped on another task, use that task's column
-    if (!overColumnId && over.data.current?.type === "task") {
-      overColumnId = (over.data.current as any).columnId;
-    }
+      const { active, over } = event;
+      if (!over) {
+        return;
+      }
 
-    // fallback to parsing the ID if needed
-    if (!overColumnId && typeof over.id === "string") {
-      const maybe = over.id.replace(/^column[-_]?/, "").trim().toLowerCase();
-      if (isBoardStatus(maybe)) overColumnId = maybe as BoardStatus;
-    }
-  
-    // If we’re missing data, do nothing
-    if (!activeColumnId || !overColumnId) {
-      setActiveTaskId(null);
-      return;
-    }
-    console.log("🎯 activeColumnId:", activeColumnId, "→ overColumnId:", overColumnId);
-  
-    // If it’s the same column, reorder only
-    if (activeColumnId === overColumnId) {
+      const activeId = String(active.id);
+      const dragState = dragStateRef.current;
+
+      if (dragState.taskId && dragState.taskId !== activeId) {
+        dragStateRef.current.taskId = activeId;
+      }
+
+      const activeColumnId =
+        dragState.currentColumnId ?? parseBoardStatus(active.data?.current?.columnId) ?? undefined;
+      const overColumnId = resolveColumnId(over);
+
+      if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) {
+        return;
+      }
+
       setColumns(prev => {
-        const columnTasks = prev[activeColumnId] ?? [];
-        const activeIndex = columnTasks.findIndex(task => String(task.id) === activeId);
-        const overIndex = columnTasks.findIndex(task => String(task.id) === overId);
-        if (activeIndex === -1 || overIndex === -1) return prev;
+        const sourceTasks = prev[activeColumnId] ?? [];
+        const targetTasks = prev[overColumnId] ?? [];
+        const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
+
+        if (sourceIndex === -1) {
+          return prev;
+        }
+
+        const updatedSource = [...sourceTasks];
+        const [movedTask] = updatedSource.splice(sourceIndex, 1);
+
+        const updatedTarget = [...targetTasks];
+        const existingIndex = updatedTarget.findIndex(task => String(task.id) === activeId);
+        if (existingIndex !== -1) {
+          updatedTarget.splice(existingIndex, 1);
+        }
+
+        const overId = over.id != null ? String(over.id) : null;
+        const targetIndex =
+          overId != null ? updatedTarget.findIndex(task => String(task.id) === overId) : -1;
+        const insertIndex = targetIndex >= 0 ? targetIndex : updatedTarget.length;
+
+        updatedTarget.splice(insertIndex, 0, { ...movedTask, status: overColumnId });
+
         return {
           ...prev,
-          [activeColumnId]: arrayMove(columnTasks, activeIndex, overIndex),
+          [activeColumnId]: updatedSource,
+          [overColumnId]: updatedTarget
         };
       });
-      setActiveTaskId(null);
-      return;
-    }
+
+      dragStateRef.current = {
+        ...dragStateRef.current,
+        currentColumnId: overColumnId
+      };
+    };
   
-    // ✅ Cross-column move
-    const numericTaskId = Number(active.id);
-    if (Number.isNaN(numericTaskId)) {
-      toast({
-        title: "Unable to update task",
-        description: "Invalid task identifier.",
-        variant: "destructive",
+    const handleDragEnd = (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (!active?.id) {
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        return;
+      }
+
+      console.log("🧩 active data", active.data.current);
+      console.log("🧩 over data", over?.data?.current ?? null);
+
+      console.log("⬇️ handleDragEnd", {
+        activeId: active.id,
+        overId: over?.id,
+        activeData: active.data.current,
+        overData: over?.data?.current
       });
-      return;
-    }
-  
-    console.log("🚚 Moving task", numericTaskId, "from", activeColumnId, "to", overColumnId);
-  
-    let mutationPayload: UpdateTaskStatusVariables | null = null;
-  
-    setColumns(prev => {
-      const sourceTasks = prev[activeColumnId] ?? [];
-      const targetTasks = prev[overColumnId] ?? [];
-  
-      const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
-      if (sourceIndex === -1) return prev;
-  
-      const [movedTask] = sourceTasks.splice(sourceIndex, 1);
-      const updatedTask = { ...movedTask, status: overColumnId };
-  
-      const insertIndex = targetTasks.findIndex(task => String(task.id) === overId);
-      const newTargetTasks = [...targetTasks];
-      newTargetTasks.splice(insertIndex === -1 ? newTargetTasks.length : insertIndex, 0, updatedTask);
-  
-      mutationPayload = {
-        taskId: numericTaskId,
-        newStatus: overColumnId,
-        previousStatus: activeColumnId,
-      };
-  
-      return {
-        ...prev,
-        [activeColumnId]: sourceTasks,
-        [overColumnId]: newTargetTasks,
-      };
-    });
-  
-    if (mutationPayload) {
-      console.log("📡 Updating server:", mutationPayload);
-      skipHydrationRef.current = true;
-      updateTaskStatusMutation.mutate(mutationPayload);
-    }
-  
-    setActiveTaskId(null);
-  };  
+
+      if (!over) {
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
+        setColumns(resetColumns);
+        setArchivedTasks(resetArchived);
+        return;
+      }
+
+      const activeId = String(active.id);
+      const originColumnId =
+        dragStateRef.current.originColumnId ?? parseBoardStatus(active.data?.current?.columnId);
+      const destinationColumnId = resolveColumnId(over);
+
+      if (!originColumnId || !destinationColumnId) {
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        return;
+      }
+
+      console.log("🎯 activeColumnId:", originColumnId, "→ overColumnId:", destinationColumnId);
+
+      if (originColumnId === destinationColumnId) {
+        setColumns(prev => {
+          const columnTasks = prev[destinationColumnId] ?? [];
+          const activeIndex = columnTasks.findIndex(task => String(task.id) === activeId);
+          if (activeIndex === -1) {
+            return prev;
+          }
+
+          let targetIndex = -1;
+          if (over?.data?.current?.type === "task") {
+            const overId = String(over.id);
+            targetIndex = columnTasks.findIndex(task => String(task.id) === overId);
+          } else {
+            targetIndex = columnTasks.length - 1;
+          }
+
+          if (targetIndex < 0) {
+            targetIndex = columnTasks.length - 1;
+          }
+
+          if (targetIndex === activeIndex) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            [destinationColumnId]: arrayMove(columnTasks, activeIndex, targetIndex)
+          };
+        });
+
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        return;
+      }
+
+      const numericTaskId = Number(activeId);
+      if (Number.isNaN(numericTaskId)) {
+        toast({
+          title: "Unable to update task",
+          description: "Invalid task identifier.",
+          variant: "destructive"
+        });
+        setActiveTaskId(null);
+        dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+        return;
+      }
+
+      console.log("🚚 Moving task", numericTaskId, "from", originColumnId, "to", destinationColumnId);
+
+      let mutationPayload: UpdateTaskStatusVariables | null = null;
+
+      setColumns(prev => {
+        const sourceTasks = prev[originColumnId] ?? [];
+        const destinationTasks = prev[destinationColumnId] ?? [];
+
+        const updatedSource = [...sourceTasks];
+        const updatedDestination = [...destinationTasks];
+
+        let movedTask: any | undefined;
+        const sourceIndex = updatedSource.findIndex(task => String(task.id) === activeId);
+
+        if (sourceIndex !== -1) {
+          movedTask = updatedSource.splice(sourceIndex, 1)[0];
+        } else {
+          const existingIndex = updatedDestination.findIndex(task => String(task.id) === activeId);
+          if (existingIndex !== -1) {
+            movedTask = updatedDestination.splice(existingIndex, 1)[0];
+          }
+        }
+
+        if (!movedTask) {
+          return prev;
+        }
+
+        const overId = over.id != null ? String(over.id) : null;
+        let insertIndex =
+          over?.data?.current?.type === "task" && overId
+            ? updatedDestination.findIndex(task => String(task.id) === overId)
+            : -1;
+
+        if (insertIndex < 0) {
+          insertIndex = updatedDestination.length;
+        }
+
+        updatedDestination.splice(insertIndex, 0, { ...movedTask, status: destinationColumnId });
+
+        mutationPayload = {
+          taskId: numericTaskId,
+          newStatus: destinationColumnId,
+          previousStatus: originColumnId
+        };
+
+        return {
+          ...prev,
+          [originColumnId]: updatedSource,
+          [destinationColumnId]: updatedDestination
+        };
+      });
+
+      if (mutationPayload) {
+        console.log("📡 Updating server:", mutationPayload);
+        skipHydrationRef.current = true;
+        updateTaskStatusMutation.mutate(mutationPayload);
+      }
+
+      setActiveTaskId(null);
+      dragStateRef.current = { taskId: null, originColumnId: null, currentColumnId: null };
+    };
 
   const filteredForMetrics = useMemo(
     () => sanitizedTasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
