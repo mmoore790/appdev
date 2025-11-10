@@ -50,11 +50,11 @@ export default function Tasks() {
     return { overdue, dueSoon, completed };
   }, [allTasks]);
 
-  const filteredTasks = useMemo(() => {
+    const filteredTasks = useMemo(() => {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
     return tasksArray
       .filter((task: any) => {
-        if (task.status === "archived" || task.status === "deleted") {
+          if (task.status === "deleted") {
           return false;
         }
 
@@ -95,6 +95,14 @@ export default function Tasks() {
         return true;
       });
   }, [allTasks, assignedToFilter, quickFilter, search]);
+
+    const listViewTasks = useMemo(
+      () =>
+        filteredTasks.filter(
+          (task: any) => task.status !== "archived" && task.status !== "deleted"
+        ),
+      [filteredTasks]
+    );
 
   const handleQuickFilterChange = (value: string) => {
     if (!value) {
@@ -212,7 +220,7 @@ export default function Tasks() {
                 <TabsContent value="list" className="mt-4">
                   <TaskList 
                     isLoading={isLoading} 
-                    tasks={filteredTasks}
+                      tasks={listViewTasks}
                     users={users} 
                     showAllDetails
                   />
