@@ -178,54 +178,6 @@ const normalizeBoardStatus = (status: unknown): TaskStatus => {
   return "pending";
 };
 
-type StatusOverridesMap = Record<string, BoardStatus>;
-
-const getTaskIdKey = (task: any): string | null => {
-  if (!task) {
-    return null;
-  }
-  const { id } = task;
-  if (id === null || id === undefined) {
-    return null;
-  }
-  const key = String(id);
-  return key.length > 0 ? key : null;
-};
-
-const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[] => {
-  if (!Array.isArray(tasks) || tasks.length === 0) {
-    return Array.isArray(tasks) ? tasks : [];
-  }
-
-  if (!overrides || Object.keys(overrides).length === 0) {
-    return tasks;
-  }
-
-  let didOverride = false;
-
-  const updatedTasks = tasks.map(task => {
-    const key = getTaskIdKey(task);
-    if (!key) {
-      return task;
-    }
-
-    const override = overrides[key];
-    if (!override) {
-      return task;
-    }
-
-    const normalized = normalizeBoardStatus(task.status);
-    if (normalized === override) {
-      return task;
-    }
-
-    didOverride = true;
-    return { ...task, status: override };
-  });
-
-  return didOverride ? updatedTasks : tasks;
-};
-
 interface UpdateTaskStatusVariables {
   taskId: number;
   newStatus: BoardStatus;
@@ -299,12 +251,7 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
 
 export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardProps) {
   const sanitizedTasks = useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
-  const [statusOverrides, setStatusOverrides] = useState<StatusOverridesMap>({});
-  const tasksWithOverrides = useMemo(
-    () => applyStatusOverrides(sanitizedTasks, statusOverrides),
-    [sanitizedTasks, statusOverrides]
-  );
-  const derived = useMemo(() => deriveBoardState(tasksWithOverrides), [tasksWithOverrides]);
+  const derived = useMemo(() => deriveBoardState(sanitizedTasks), [sanitizedTasks]);
   const [columns, setColumns] = useState<ColumnState>(derived.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const skipHydrationRef = useRef(false);
@@ -331,45 +278,6 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     setArchivedTasks(derived.archived);
   }, [derived]);
 
-  useEffect(() => {
-    setStatusOverrides(prev => {
-      if (Object.keys(prev).length === 0) {
-        return prev;
-      }
-
-      const next: StatusOverridesMap = { ...prev };
-      let changed = false;
-      const validTaskIds = new Set<string>();
-
-      sanitizedTasks.forEach(task => {
-        const key = getTaskIdKey(task);
-        if (!key) {
-          return;
-        }
-
-        validTaskIds.add(key);
-        const normalized = normalizeBoardStatus(task.status);
-        if (next[key] && next[key] === normalized) {
-          delete next[key];
-          changed = true;
-        }
-      });
-
-      Object.keys(prev).forEach(key => {
-        if (!validTaskIds.has(key) && next[key] !== undefined) {
-          delete next[key];
-          changed = true;
-        }
-      });
-
-      if (!changed) {
-        return prev;
-      }
-
-      return Object.keys(next).length === 0 ? {} : next;
-    });
-  }, [sanitizedTasks]);
-
   const removeTaskFromColumns = (taskId: string | number) => {
     const idKey = String(taskId);
     setColumns(prev => ({
@@ -391,8 +299,18 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     if (!activeTaskId) {
       return null;
     }
-    return tasksWithOverrides.find(task => String(task.id) === activeTaskId) ?? null;
-  }, [activeTaskId, tasksWithOverrides]);
+    const fromTasks = sanitizedTasks.find(task => String(task.id) === activeTaskId);
+    if (fromTasks) {
+      return fromTasks;
+    }
+    for (const columnTasks of Object.values(columns)) {
+      const match = columnTasks.find(task => String(task.id) === activeTaskId);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }, [activeTaskId, sanitizedTasks, columns]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -404,18 +322,9 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
     },
     onMutate: async ({ taskId, newStatus, previousStatus }: UpdateTaskStatusVariables) => {
-      if (previousStatus) {
+      if (previousStatus && previousStatus !== newStatus) {
         skipHydrationRef.current = true;
       }
-
-      setStatusOverrides(prev => {
-        const idKey = String(taskId);
-        if (prev[idKey] === newStatus) {
-          return prev;
-        }
-        const next = { ...prev, [idKey]: newStatus };
-        return next;
-      });
 
       await queryClient.cancelQueries({ queryKey: ["/api/tasks"] });
       const previousTasks = queryClient.getQueryData<any[]>(["/api/tasks"]);
@@ -428,7 +337,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         return current.map(task => (String(task.id) === idKey ? { ...task, status: newStatus } : task));
       });
 
-      return { previousTasks, previousStatus };
+      return { previousTasks };
     },
     onSuccess: (_, variables) => {
       toast({
@@ -436,30 +345,14 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         description: `Moved to ${STATUS_CONFIG.find(status => status.id === variables.newStatus)?.title ?? "new column"}.`
       });
     },
-    onError: (_error, variables, context) => {
+    onError: (_error, _variables, context) => {
       if (context?.previousTasks) {
         queryClient.setQueryData(["/api/tasks"], context.previousTasks);
       }
 
-      let overridesSnapshot: StatusOverridesMap | null = null;
-      setStatusOverrides(prev => {
-        const next: StatusOverridesMap = { ...prev };
-        const idKey = String(variables.taskId);
-        if (context?.previousStatus) {
-          next[idKey] = context.previousStatus;
-        } else {
-          delete next[idKey];
-        }
-        const normalizedNext = Object.keys(next).length === 0 ? {} : next;
-        overridesSnapshot = normalizedNext;
-        return normalizedNext;
-      });
-
       skipHydrationRef.current = true;
-      const appliedOverrides = overridesSnapshot ?? {};
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-        applyStatusOverrides(sanitizedTasks, appliedOverrides)
-      );
+      const fallbackTasks = Array.isArray(context?.previousTasks) ? context.previousTasks : sanitizedTasks;
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(fallbackTasks);
       setColumns(resetColumns);
       setArchivedTasks(resetArchived);
 
@@ -637,9 +530,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
     if (!over) {
       setActiveTaskId(null);
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-        applyStatusOverrides(sanitizedTasks, statusOverrides)
-      );
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
       setColumns(resetColumns);
       setArchivedTasks(resetArchived);
       return;
@@ -687,9 +578,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         description: "Task identifier is invalid.",
         variant: "destructive"
       });
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-        applyStatusOverrides(sanitizedTasks, statusOverrides)
-      );
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
       setColumns(resetColumns);
       setArchivedTasks(resetArchived);
       setActiveTaskId(null);
@@ -727,8 +616,9 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
       if (!movingTask) {
         const fallbackTask =
-          tasksWithOverrides.find(task => String(task.id) === activeId) ??
-          sanitizedTasks.find(task => String(task.id) === activeId);
+          sanitizedTasks.find(task => String(task.id) === activeId) ??
+          prev[activeColumnId]?.find(task => String(task.id) === activeId) ??
+          prev[overColumnId]?.find(task => String(task.id) === activeId);
 
         if (!fallbackTask) {
           return prev;
@@ -766,9 +656,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     });
 
     if (!mutationPayload) {
-      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
-        applyStatusOverrides(sanitizedTasks, statusOverrides)
-      );
+      const { columns: resetColumns, archived: resetArchived } = deriveBoardState(sanitizedTasks);
       setColumns(resetColumns);
       setArchivedTasks(resetArchived);
       setActiveTaskId(null);
@@ -781,8 +669,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   };
 
   const filteredForMetrics = useMemo(
-    () => tasksWithOverrides.filter(task => task.status !== "archived" && task.status !== "deleted"),
-    [tasksWithOverrides]
+    () => sanitizedTasks.filter(task => task.status !== "archived" && task.status !== "deleted"),
+    [sanitizedTasks]
   );
 
   const totalCounts = useMemo(() => {

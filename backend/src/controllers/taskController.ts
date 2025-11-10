@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { insertTaskSchema } from "@shared/schema";
-import { taskService } from "../services/domains/taskService";
+import { taskService, InvalidTaskStatusError } from "../services/domains/taskService";
 import { isAuthenticated } from "../auth";
 import { z } from "zod";
 
@@ -53,6 +53,9 @@ export class TaskController {
           errors: error.errors,
         });
       }
+      if (error instanceof InvalidTaskStatusError) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   }
@@ -60,6 +63,9 @@ export class TaskController {
   private async updateTask(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Number(req.params.id);
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ message: "Invalid task identifier" });
+      }
       const actorId = (req.session as any)?.userId ?? undefined;
       const updated = await taskService.updateTask(id, req.body, actorId);
 
@@ -69,6 +75,9 @@ export class TaskController {
 
       res.json(updated);
     } catch (error) {
+      if (error instanceof InvalidTaskStatusError) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   }
