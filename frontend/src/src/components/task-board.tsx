@@ -22,7 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle, Clock, GripVertical, Plus, ClipboardList } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, GripVertical, Plus, ClipboardList, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -31,7 +31,6 @@ import { TaskForm } from "./task-form";
 import { apiRequest } from "../lib/queryClient";
 import { cn, getDueDateMeta, getTaskPriorityColor, DueDateTone } from "../lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { ScrollArea } from "./ui/scroll-area";
 import { Skeleton } from "./ui/skeleton";
 import { useToast } from "../hooks/use-toast";
 
@@ -299,69 +298,84 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border border-red-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-600">Overdue</CardTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="relative overflow-hidden border border-red-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-red-200">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-red-600">
+            <AlertCircle size={18} />
+          </div>
+          <CardHeader className="pb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-600/80">Overdue</p>
+            <CardTitle className="text-3xl font-semibold text-neutral-900">{totalCounts.overdue}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-red-600">{totalCounts.overdue}</div>
-            <p className="text-xs text-neutral-500 mt-1">Tasks past their due date</p>
+            <p className="text-sm text-neutral-500">Tasks past their due date</p>
           </CardContent>
         </Card>
-        <Card className="border border-amber-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-amber-600">Due Soon</CardTitle>
+
+        <Card className="relative overflow-hidden border border-amber-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-amber-200">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <Clock size={18} />
+          </div>
+          <CardHeader className="pb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600/80">Due Soon</p>
+            <CardTitle className="text-3xl font-semibold text-neutral-900">{totalCounts.dueSoon}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-amber-600">{totalCounts.dueSoon}</div>
-            <p className="text-xs text-neutral-500 mt-1">Due within the next 48 hours</p>
+            <p className="text-sm text-neutral-500">Due within the next 48 hours</p>
           </CardContent>
         </Card>
-        <Card className="border border-blue-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-600">In Progress</CardTitle>
+
+        <Card className="relative overflow-hidden border border-blue-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-blue-200">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+            <Loader2 size={18} />
+          </div>
+          <CardHeader className="pb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600/80">In Progress</p>
+            <CardTitle className="text-3xl font-semibold text-neutral-900">{columns.in_progress.length}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-blue-600">{columns.in_progress.length}</div>
-            <p className="text-xs text-neutral-500 mt-1">Active tasks currently being worked on</p>
+            <p className="text-sm text-neutral-500">Active tasks currently underway</p>
           </CardContent>
         </Card>
-        <Card className="border border-green-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-600">Completed (30d)</CardTitle>
+
+        <Card className="relative overflow-hidden border border-green-100/70 bg-white shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:ring-green-200">
+          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-green-600">
+            <CheckCircle size={18} />
+          </div>
+          <CardHeader className="pb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-green-600/80">Completed (30d)</p>
+            <CardTitle className="text-3xl font-semibold text-neutral-900">{columns.completed.length}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-green-600">{columns.completed.length}</div>
-            <p className="text-xs text-neutral-500 mt-1">Delivered in the last month</p>
+            <p className="text-sm text-neutral-500">Delivered in the last month</p>
           </CardContent>
         </Card>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        modifiers={[restrictToWindowEdges]}
-      >
-        <ScrollArea className="mt-6">
-          <div className="flex gap-4 pb-4 min-w-[1200px]">
-            {STATUS_CONFIG.map(status => (
-              <TaskBoardColumn
-                key={status.id}
-                status={status}
-                tasks={columns[status.id]}
-                users={users}
-                onAddTask={() => openCreateDialog(status.id)}
-                onTaskClick={openEditDialog}
-                isLoading={isLoading}
-                activeTaskId={activeTaskId}
-              />
-            ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToWindowEdges]}
+        >
+          <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 p-4 shadow-sm">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {STATUS_CONFIG.map(status => (
+                <TaskBoardColumn
+                  key={status.id}
+                  status={status}
+                  tasks={columns[status.id]}
+                  users={users}
+                  onAddTask={() => openCreateDialog(status.id)}
+                  onTaskClick={openEditDialog}
+                  isLoading={isLoading}
+                  activeTaskId={activeTaskId}
+                />
+              ))}
+            </div>
           </div>
-        </ScrollArea>
 
         <DragOverlay>
           {activeTask ? (
@@ -433,39 +447,49 @@ function TaskBoardColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-full min-w-[260px] flex-col rounded-xl border border-neutral-200/70 bg-white shadow-sm transition",
-        isOver && "ring-2 ring-green-500/60"
+        "group/column flex h-full flex-col rounded-2xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+        isOver && "border-green-200 ring-2 ring-green-500/40"
       )}
       data-column={status.id}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <status.icon size={16} className={status.accent} />
-            <h3 className="text-sm font-semibold text-neutral-700">{status.title}</h3>
-            <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", status.badge)}>
-              {tasks.length}
-            </span>
+      <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white/95 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
+            <status.icon size={18} className={status.accent} />
           </div>
-          <p className="mt-2 text-xs text-neutral-500">{status.description}</p>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-neutral-800">{status.title}</h3>
+              <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", status.badge)}>
+                {tasks.length}
+              </span>
+            </div>
+            <p className="max-w-xs text-xs leading-relaxed text-neutral-500">{status.description}</p>
+          </div>
         </div>
         {status.id !== "completed" && (
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onAddTask}>
-            <Plus size={16} />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 rounded-full border-neutral-200 bg-white text-xs font-medium text-neutral-600 hover:border-neutral-300 hover:bg-neutral-100"
+            onClick={onAddTask}
+          >
+            <Plus size={14} className="mr-1" />
+            Add
           </Button>
         )}
       </div>
 
       <SortableContext items={tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 space-y-3 p-4">
+        <div className="flex flex-1 flex-col gap-3 p-5">
           {isLoading && tasks.length === 0 ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-28 rounded-md bg-neutral-100" />
+                <Skeleton key={index} className="h-24 rounded-xl bg-neutral-100/80" />
               ))}
             </div>
           ) : tasks.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 p-4 text-center text-xs text-neutral-500">
+            <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
               {status.emptyMessage}
             </div>
           ) : (
@@ -521,6 +545,12 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
   const dueMeta = getDueDateMeta(task.dueDate);
   const dueToneClass = DUE_TONE_CLASSES[dueMeta.tone] ?? DUE_TONE_CLASSES.muted;
   const priorityColors = getTaskPriorityColor(task.priority);
+  const priorityAccent = {
+    high: "before:bg-red-500/90",
+    medium: "before:bg-amber-400/90",
+    low: "before:bg-blue-500/80"
+  } as const;
+  const priorityAccentClass = priorityAccent[task.priority as keyof typeof priorityAccent] ?? "before:bg-neutral-200";
   const assigneeId =
     task.assignedTo === "unassigned" || task.assignedTo === null || task.assignedTo === undefined
       ? null
@@ -535,9 +565,10 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
   const content = (
     <Card
       className={cn(
-        "group cursor-grab border border-neutral-200/80 shadow-sm transition hover:border-neutral-300 hover:shadow-md",
-        (isDragging || isActiveDrag || isOverlay) && "border-green-400 bg-green-50/40 shadow-lg",
-        columnId === "completed" && "bg-green-50/40"
+        "group relative cursor-grab overflow-hidden rounded-xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md before:absolute before:left-0 before:top-0 before:h-1 before:w-full before:bg-neutral-200 before:transition-colors",
+        priorityAccentClass,
+        (isDragging || isActiveDrag || isOverlay) && "border-green-300 bg-green-50/40 shadow-lg before:bg-green-500/70",
+        columnId === "completed" && "border-green-200 bg-green-50/40 before:bg-green-500/70"
       )}
       style={style}
       ref={setNodeRef}
@@ -545,20 +576,20 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
       {...listeners}
       onClick={onClick}
     >
-      <CardContent className="space-y-3 p-3">
-        <div className="flex items-start justify-between gap-2">
+      <CardContent className="flex flex-col gap-4 p-4">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <GripVertical size={14} className="mt-1 text-neutral-300 opacity-0 transition group-hover:opacity-100" />
-            <div>
-              <p className={cn("text-sm font-medium text-neutral-700", task.status === "completed" && "line-through text-neutral-400")}>
+            <div className="min-w-0 space-y-1">
+              <p className={cn("truncate text-sm font-semibold text-neutral-800", task.status === "completed" && "line-through text-neutral-400")}>
                 {task.title}
               </p>
               {task.description && (
-                <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{task.description}</p>
+                <p className="line-clamp-2 text-xs text-neutral-500">{task.description}</p>
               )}
             </div>
           </div>
-          <Badge className={cn("text-xs", priorityColors.bgColor, priorityColors.textColor)}>
+          <Badge className={cn("rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide", priorityColors.bgColor, priorityColors.textColor)}>
             {task.priority === "high" ? "High" : task.priority === "low" ? "Low" : "Medium"}
           </Badge>
         </div>
@@ -568,13 +599,13 @@ function TaskBoardCard({ task, users, columnId, onClick, isActiveDrag = false, i
             <Clock size={12} />
             {dueMeta.label}
           </span>
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 rounded-full border border-neutral-200 bg-white px-2 py-1">
             <Avatar className="h-6 w-6">
               <AvatarFallback className="text-[11px]">
                 {user?.fullName?.slice(0, 2)?.toUpperCase() ?? "UN"}
               </AvatarFallback>
             </Avatar>
-            <span className="text-neutral-600">
+            <span className="truncate text-neutral-600">
               {user?.fullName || user?.username || "Unassigned"}
             </span>
           </span>
