@@ -1,12 +1,10 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer, Plus, Calendar } from "lucide-react";
-import { PageHeader, PageHeaderAction } from "@/components/ui/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { WorkshopJobsTable } from "@/components/workshop-jobs-table";
@@ -14,18 +12,31 @@ import { JobWizard } from "@/components/job-wizard";
 import { PrintWorkOrders } from "@/components/print-work-orders";
 import { format, subDays, isWithinInterval } from "date-fns";
 import { StatCard } from "@/components/ui/stat-card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+
+const STATUS_TABS = [
+  { value: "all", label: "All Jobs", shortLabel: "All Jobs", statuses: "all" as const },
+  { value: "waiting", label: "Waiting Assessment", shortLabel: "Waiting", statuses: ["waiting_assessment"] as const },
+  { value: "in-progress", label: "In Progress", shortLabel: "In Progress", statuses: ["in_progress"] as const },
+  { value: "parts", label: "Parts Ordered", shortLabel: "Parts", statuses: ["parts_ordered"] as const },
+  { value: "ready", label: "Ready for Pickup", shortLabel: "Ready", statuses: ["ready_for_pickup"] as const },
+  { value: "completed", label: "Completed", shortLabel: "Completed", statuses: ["completed"] as const },
+] as const;
+
+type StatusTabValue = (typeof STATUS_TABS)[number]["value"];
 
 export default function Workshop() {
-  const [triggerJobCreation, setTriggerJobCreation] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  
-  // Date filter state - default to last 31 days
+  const [activeTab, setActiveTab] = useState<StatusTabValue>("all");
+  const [selectedMechanic, setSelectedMechanic] = useState<string>("all");
+
   const [dateRange, setDateRange] = useState(() => {
     const today = new Date();
     const thirtyOneDaysAgo = subDays(today, 31);
     return {
       from: thirtyOneDaysAgo,
-      to: today
+      to: today,
     };
   });
 
@@ -37,57 +48,137 @@ export default function Workshop() {
     queryKey: ["/api/users"],
   });
 
-  const mechanics = Array.isArray(users) ? users.filter((user: any) => user.role === "mechanic") : [];
+  const mechanics = Array.isArray(users)
+    ? users.filter((user: any) => user.role === "mechanic")
+    : [];
 
-  // Filter jobs by date range
-  const filteredJobs = useMemo(() => {
-    if (!jobs || !dateRange.from || !dateRange.to) return jobs || [];
-    
-    return Array.isArray(jobs) ? jobs.filter((job: any) => {
+  const dateFilteredJobs = useMemo(() => {
+    if (!jobs || !dateRange.from || !dateRange.to) return Array.isArray(jobs) ? jobs : [];
+    if (!Array.isArray(jobs)) return [];
+
+    return jobs.filter((job: any) => {
       const jobDate = new Date(job.createdAt);
       return isWithinInterval(jobDate, {
         start: dateRange.from,
-        end: dateRange.to
+        end: dateRange.to,
       });
-    }) : [];
+    });
   }, [jobs, dateRange]);
 
-  const getJobsByStatus = (status: string) => {
-    return Array.isArray(filteredJobs) ? filteredJobs.filter((job: any) => job.status === status) : [];
-  };
+  const mechanicFilteredJobs = useMemo(() => {
+    if (!Array.isArray(dateFilteredJobs)) return [];
+    if (selectedMechanic === "all") {
+      return dateFilteredJobs;
+    }
+    if (selectedMechanic === "unassigned") {
+      return dateFilteredJobs.filter((job: any) => !job.assignedTo);
+    }
+    const mechanicId = Number(selectedMechanic);
+    if (Number.isNaN(mechanicId)) {
+      return dateFilteredJobs;
+    }
+    return dateFilteredJobs.filter((job: any) => job.assignedTo === mechanicId);
+  }, [dateFilteredJobs, selectedMechanic]);
 
-  const getJobsByMechanic = (mechanicId: number) => {
-    return Array.isArray(filteredJobs) ? filteredJobs.filter((job: any) => job.assignedTo === mechanicId) : [];
-  };
+  const tabbedJobs = useMemo<Record<StatusTabValue, any[]>>(() => {
+    const base: Record<StatusTabValue, any[]> = {
+      all: mechanicFilteredJobs,
+      waiting: [],
+      "in-progress": [],
+      parts: [],
+      ready: [],
+      completed: [],
+    };
 
-  const getCompletedJobs = () => {
-    return Array.isArray(filteredJobs) ? filteredJobs.filter((job: any) => job.status === "completed") : [];
-  };
+    mechanicFilteredJobs.forEach((job: any) => {
+      switch (job.status) {
+        case "waiting_assessment":
+          base.waiting.push(job);
+          break;
+        case "in_progress":
+          base["in-progress"].push(job);
+          break;
+        case "parts_ordered":
+          base.parts.push(job);
+          break;
+        case "ready_for_pickup":
+          base.ready.push(job);
+          break;
+        case "completed":
+          base.completed.push(job);
+          break;
+        default:
+          break;
+      }
+    });
 
-  // Workshop capacity metrics
+    return base;
+  }, [mechanicFilteredJobs]);
+
+  const statusCounts = useMemo<Record<StatusTabValue, number>>(
+    () => ({
+      all: tabbedJobs.all.length,
+      waiting: tabbedJobs.waiting.length,
+      "in-progress": tabbedJobs["in-progress"].length,
+      parts: tabbedJobs.parts.length,
+      ready: tabbedJobs.ready.length,
+      completed: tabbedJobs.completed.length,
+    }),
+    [tabbedJobs]
+  );
+
+  const currentTab = STATUS_TABS.find((tab) => tab.value === activeTab);
+  const currentTabCount = statusCounts[activeTab] ?? 0;
+
+  const mechanicLabel = useMemo(() => {
+    if (selectedMechanic === "all") {
+      return "All mechanics";
+    }
+    if (selectedMechanic === "unassigned") {
+      return "Unassigned";
+    }
+    const match = mechanics.find((mechanic: any) => String(mechanic.id) === selectedMechanic);
+    return match?.fullName || match?.username || "Mechanic";
+  }, [mechanics, selectedMechanic]);
+
+  const tabSummaryText = useMemo(() => {
+    const plural = currentTabCount === 1 ? "job" : "jobs";
+    const parts: string[] = [`Showing ${currentTabCount} ${plural}`];
+
+    if (currentTab?.value === "all") {
+      parts.push("across all statuses");
+    } else if (currentTab) {
+      parts.push(`in ${currentTab.label.toLowerCase()}`);
+    }
+
+    if (selectedMechanic === "unassigned") {
+      parts.push("unassigned");
+    } else if (selectedMechanic !== "all") {
+      parts.push(mechanicLabel);
+    }
+
+    return parts.join(" • ");
+  }, [currentTab, currentTabCount, mechanicLabel, selectedMechanic]);
+
   const workshopMetrics = useMemo(() => {
-    if (!jobs || !Array.isArray(jobs)) {
+    if (!Array.isArray(mechanicFilteredJobs) || mechanicFilteredJobs.length === 0) {
       return {
         jobsInProgress: 0,
         activeJobs: 0,
-        jobsLast7Days: 0
+        jobsLast7Days: 0,
       };
     }
 
-    // Jobs currently in progress (including parts ordered)
-    const jobsInProgress = jobs.filter((job: any) => 
-      job.status === "in_progress" || job.status === "parts_ordered"
+    const jobsInProgress = mechanicFilteredJobs.filter(
+      (job: any) => job.status === "in_progress" || job.status === "parts_ordered"
     ).length;
 
-    // Active jobs (excluding ready for pickup and completed)
-    const activeJobs = jobs.filter((job: any) => 
-      job.status !== "ready_for_pickup" && 
-      job.status !== "completed"
+    const activeJobs = mechanicFilteredJobs.filter(
+      (job: any) => job.status !== "ready_for_pickup" && job.status !== "completed"
     ).length;
 
-    // Jobs created in the last 7 days
     const sevenDaysAgo = subDays(new Date(), 7);
-    const jobsLast7Days = jobs.filter((job: any) => {
+    const jobsLast7Days = mechanicFilteredJobs.filter((job: any) => {
       const jobDate = new Date(job.createdAt);
       return jobDate >= sevenDaysAgo;
     }).length;
@@ -95,40 +186,37 @@ export default function Workshop() {
     return {
       jobsInProgress,
       activeJobs,
-      jobsLast7Days
+      jobsLast7Days,
     };
-  }, [jobs]);
+  }, [mechanicFilteredJobs]);
 
   return (
     <>
-      <PageHeader 
-        title="Workshop Management" 
+      <PageHeader
+        title="Workshop Management"
+        description="Monitor throughput, triage incoming repairs, and keep every technician aligned."
         actions={
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            {/* Date Filter - Mobile Responsive */}
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium hidden sm:inline">Date Range:</Label>
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Date Range
+              </span>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-[280px] justify-start text-left font-normal">
-                    <Calendar className="mr-2 h-4 w-4" />
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full justify-start gap-2 text-left font-medium sm:min-w-[240px]"
+                  >
+                    <Calendar className="h-4 w-4 text-green-700" />
                     <span className="truncate">
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd, y")}
-                          </>
-                        ) : (
-                          format(dateRange.from, "LLL dd, y")
-                        )
-                      ) : (
-                        "Pick dates"
-                      )}
+                      {dateRange?.from && dateRange?.to
+                        ? `${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`
+                        : "Select dates"}
                     </span>
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <div className="p-3 border-b">
+                <PopoverContent className="w-auto p-0" align="end">
+                  <div className="p-4">
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         variant="outline"
@@ -136,8 +224,21 @@ export default function Workshop() {
                         onClick={() => {
                           const today = new Date();
                           setDateRange({
+                            from: today,
+                            to: today,
+                          });
+                        }}
+                      >
+                        Today
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const today = new Date();
+                          setDateRange({
                             from: subDays(today, 7),
-                            to: today
+                            to: today,
                           });
                         }}
                       >
@@ -150,7 +251,7 @@ export default function Workshop() {
                           const today = new Date();
                           setDateRange({
                             from: subDays(today, 31),
-                            to: today
+                            to: today,
                           });
                         }}
                       >
@@ -163,25 +264,11 @@ export default function Workshop() {
                           const today = new Date();
                           setDateRange({
                             from: subDays(today, 90),
-                            to: today
+                            to: today,
                           });
                         }}
                       >
                         Last 90 days
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const today = new Date();
-                          const startOfYear = new Date(today.getFullYear(), 0, 1);
-                          setDateRange({
-                            from: startOfYear,
-                            to: today
-                          });
-                        }}
-                      >
-                        This year
                       </Button>
                     </div>
                   </div>
@@ -191,8 +278,12 @@ export default function Workshop() {
                     defaultMonth={dateRange?.from}
                     selected={dateRange}
                     onSelect={(range) => {
-                      if (range && range.from && range.to) {
-                        setDateRange({ from: range.from, to: range.to });
+                      if (!range) return;
+                      const { from, to } = range;
+                      if (from && to) {
+                        setDateRange({ from, to });
+                      } else if (from) {
+                        setDateRange({ from, to: from });
                       }
                     }}
                     numberOfMonths={1}
@@ -201,148 +292,129 @@ export default function Workshop() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="flex gap-2">
-              <PrintWorkOrders 
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <PrintWorkOrders
                 trigger={
-                  <PageHeaderAction variant="outline" icon={<Printer size={18} />}>
-                    <span className="hidden sm:inline">Print Work Orders</span>
-                    <span className="sm:hidden">Print</span>
-                  </PageHeaderAction>
+                  <Button variant="outline" className="h-11 w-full sm:w-auto">
+                    <Printer size={18} className="mr-2" />
+                    Print Work Orders
+                  </Button>
                 }
               />
-              <Button 
-                className="bg-green-700 hover:bg-green-800"
+              <Button
+                className="h-11 w-full bg-green-700 hover:bg-green-800 sm:w-auto"
                 onClick={() => setWizardOpen(true)}
               >
                 <Plus size={18} className="mr-2" />
-                <span className="hidden sm:inline">New Job</span>
-                <span className="sm:hidden">New</span>
+                New Job
               </Button>
             </div>
           </div>
         }
       />
 
-      {/* Workshop Capacity Metrics */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <StatCard
-            title="Jobs In Progress"
-            value={workshopMetrics.jobsInProgress}
-            icon="⚙️"
-            iconColor="bg-blue-500"
-          />
-          <StatCard
-            title="Active Jobs"
-            value={workshopMetrics.activeJobs}
-            icon="📋"
-            iconColor="bg-amber-500"
-          />
-          <StatCard
-            title="Jobs Last 7 Days"
-            value={workshopMetrics.jobsLast7Days}
-            icon="📈"
-            iconColor="bg-green-500"
-          />
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <StatCard
+              title="Jobs In Progress"
+              value={workshopMetrics.jobsInProgress}
+              icon="⚙️"
+              iconColor="bg-blue-500"
+            />
+            <StatCard
+              title="Active Jobs"
+              value={workshopMetrics.activeJobs}
+              icon="📋"
+              iconColor="bg-amber-500"
+            />
+            <StatCard
+              title="Jobs Last 7 Days"
+              value={workshopMetrics.jobsLast7Days}
+              icon="📈"
+              iconColor="bg-green-500"
+            />
+          </div>
+
+          <Card className="border border-neutral-200 shadow-sm">
+            <CardHeader className="space-y-6 border-b border-neutral-100 pb-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-semibold text-neutral-800">
+                    Job Pipeline
+                  </CardTitle>
+                  <p className="text-sm text-neutral-500">
+                    Filter by technician, focus on bottlenecks, and keep every repair moving.
+                  </p>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <div className="w-full sm:w-64">
+                    <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
+                      <SelectTrigger className="h-11 w-full border-neutral-200">
+                        <SelectValue placeholder="All mechanics" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All mechanics</SelectItem>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {mechanics.map((mechanic: any) => (
+                          <SelectItem key={mechanic.id} value={String(mechanic.id)}>
+                            {mechanic.fullName || mechanic.username || `Mechanic ${mechanic.id}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className="bg-neutral-100 text-neutral-600">
+                  {mechanicFilteredJobs.length} {mechanicFilteredJobs.length === 1 ? "job" : "jobs"} in view
+                </Badge>
+                {dateRange?.from && dateRange?.to && (
+                  <Badge variant="outline" className="border-neutral-200 text-neutral-500">
+                    {`${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as StatusTabValue)}>
+                <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 sm:flex-nowrap sm:overflow-x-auto">
+                  {STATUS_TABS.map((tab) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="group flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-lg border border-transparent bg-white px-3 py-2 text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:min-w-[170px] sm:text-sm"
+                    >
+                      <span className="truncate">{tab.shortLabel}</span>
+                      <span className="flex h-6 min-w-[2.5rem] items-center justify-center rounded-full bg-neutral-100 px-2 text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
+                        {statusCounts[tab.value]}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                <div className="mt-4 text-sm font-medium text-neutral-700">
+                  {tabSummaryText}
+                </div>
+
+                {STATUS_TABS.map((tab) => (
+                  <TabsContent key={tab.value} value={tab.value} className="mt-6">
+                    <WorkshopJobsTable
+                      isLoading={jobsLoading}
+                      jobs={tabbedJobs[tab.value]}
+                      showSearch
+                      showPagination
+                    />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Workshop Jobs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="waiting">
-              <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-4 h-auto">
-                <TabsTrigger value="waiting" className="text-xs sm:text-sm px-2 py-2">
-                  <span className="sm:hidden">Waiting</span>
-                  <span className="hidden sm:inline">Waiting Assessment</span>
-                </TabsTrigger>
-                <TabsTrigger value="in-progress" className="text-xs sm:text-sm px-2 py-2">
-                  <span className="sm:hidden">Progress</span>
-                  <span className="hidden sm:inline">In Progress</span>
-                </TabsTrigger>
-                <TabsTrigger value="parts" className="text-xs sm:text-sm px-2 py-2">
-                  <span className="sm:hidden">Parts</span>
-                  <span className="hidden sm:inline">Parts Ordered</span>
-                </TabsTrigger>
-                <TabsTrigger value="ready" className="text-xs sm:text-sm px-2 py-2">
-                  <span className="sm:hidden">Ready</span>
-                  <span className="hidden sm:inline">Ready for Pickup</span>
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="text-xs sm:text-sm px-2 py-2">
-                  <span className="sm:hidden">Done</span>
-                  <span className="hidden sm:inline">Completed</span>
-                </TabsTrigger>
-                <TabsTrigger value="all" className="text-xs sm:text-sm px-2 py-2">All Jobs</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="all" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={jobs as any[] || []} 
-                  showSearch 
-                  showPagination
-                  triggerJobCreation={triggerJobCreation}
-                />
-              </TabsContent>
-              
-              <TabsContent value="waiting" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={getJobsByStatus("waiting_assessment")} 
-                  showSearch 
-                  showPagination
-                />
-              </TabsContent>
-              
-              <TabsContent value="in-progress" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={getJobsByStatus("in_progress")} 
-                  showSearch 
-                  showPagination
-                />
-              </TabsContent>
-              
-              <TabsContent value="parts" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={getJobsByStatus("parts_ordered")} 
-                  showSearch 
-                  showPagination
-                />
-              </TabsContent>
-              
-              <TabsContent value="ready" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={getJobsByStatus("ready_for_pickup")} 
-                  showSearch 
-                  showPagination
-                />
-              </TabsContent>
-              
-              <TabsContent value="completed" className="mt-4">
-                <WorkshopJobsTable 
-                  isLoading={jobsLoading} 
-                  jobs={getCompletedJobs()} 
-                  showSearch 
-                  showPagination
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Job Creation Wizard */}
-      <JobWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        mode="create"
-      />
+      <JobWizard open={wizardOpen} onOpenChange={setWizardOpen} mode="create" />
     </>
   );
 }
