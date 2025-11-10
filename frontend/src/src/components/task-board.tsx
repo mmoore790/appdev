@@ -175,17 +175,7 @@ const normalizeBoardStatus = (status: unknown): TaskStatus => {
   return "pending";
 };
 
-const normalizeTaskId = (value: unknown): string | null => {
-  if (typeof value === "number" && !Number.isNaN(value)) {
-    return String(value);
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    return value;
-  }
-  return null;
-};
-
-type StatusOverridesMap = Record<string, BoardStatus>;
+type StatusOverridesMap = Record<number, BoardStatus>;
 
 const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[] => {
   if (!Array.isArray(tasks) || tasks.length === 0) {
@@ -199,16 +189,11 @@ const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[
   let didOverride = false;
 
   const updatedTasks = tasks.map(task => {
-    if (!task) {
+    if (!task || typeof task.id !== "number") {
       return task;
     }
 
-    const taskKey = normalizeTaskId(task.id);
-    if (!taskKey) {
-      return task;
-    }
-
-    const override = overrides[taskKey];
+    const override = overrides[task.id];
     if (!override) {
       return task;
     }
@@ -226,15 +211,9 @@ const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[
 };
 
 interface UpdateTaskStatusVariables {
-  taskId: number | string;
+  taskId: number;
   newStatus: BoardStatus;
   previousStatus?: BoardStatus;
-}
-
-interface UpdateTaskStatusContext {
-  previousTasks?: any[];
-  previousStatus?: BoardStatus;
-  overrideKey?: string | null;
 }
 
 const sortTasksForColumn = (tasks: any[]) =>
@@ -313,7 +292,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const [columns, setColumns] = useState<ColumnState>(derived.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const skipHydrationRef = useRef(false);
-    const [activeTaskId, setActiveTaskId] = useState<number | string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     mode: "create" | "edit";
@@ -344,28 +323,24 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
       const next: StatusOverridesMap = { ...prev };
       let changed = false;
-      const validTaskIds = new Set<string>();
+      const validTaskIds = new Set<number>();
 
       sanitizedTasks.forEach(task => {
-        if (!task) {
+        if (!task || typeof task.id !== "number") {
           return;
         }
-        const taskKey = normalizeTaskId(task.id);
-        if (!taskKey) {
-          return;
-        }
-
-        validTaskIds.add(taskKey);
+        validTaskIds.add(task.id);
         const normalized = normalizeBoardStatus(task.status);
-        if (next[taskKey] && next[taskKey] === normalized) {
-          delete next[taskKey];
+        if (next[task.id] && next[task.id] === normalized) {
+          delete next[task.id];
           changed = true;
         }
       });
 
       Object.keys(prev).forEach(key => {
-        if (!validTaskIds.has(key) && next[key] !== undefined) {
-          delete next[key];
+        const numericId = Number(key);
+        if (!validTaskIds.has(numericId) && next[numericId] !== undefined) {
+          delete next[numericId];
           changed = true;
         }
       });
@@ -378,17 +353,12 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     });
   }, [sanitizedTasks]);
 
-  const removeTaskFromColumns = (taskId: number | string) => {
-    const targetKey = normalizeTaskId(taskId);
-    if (!targetKey) {
-      return;
-    }
-
+  const removeTaskFromColumns = (taskId: number) => {
     setColumns(prev => ({
-      pending: prev.pending.filter(task => normalizeTaskId(task.id) !== targetKey),
-      in_progress: prev.in_progress.filter(task => normalizeTaskId(task.id) !== targetKey),
-      review: prev.review.filter(task => normalizeTaskId(task.id) !== targetKey),
-      completed: prev.completed.filter(task => normalizeTaskId(task.id) !== targetKey)
+      pending: prev.pending.filter(task => task.id !== taskId),
+      in_progress: prev.in_progress.filter(task => task.id !== taskId),
+      review: prev.review.filter(task => task.id !== taskId),
+      completed: prev.completed.filter(task => task.id !== taskId)
     }));
   };
 
@@ -399,52 +369,44 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     }));
   };
 
-  const activeTask = useMemo(() => {
-    const key = normalizeTaskId(activeTaskId);
-    if (!key) {
-      return null;
-    }
-    return tasksWithOverrides.find(task => normalizeTaskId(task.id) === key) ?? null;
-  }, [activeTaskId, tasksWithOverrides]);
+  const activeTask = useMemo(
+    () => tasksWithOverrides.find(task => task.id === activeTaskId) ?? null,
+    [activeTaskId, tasksWithOverrides]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const updateTaskStatusMutation = useMutation<any, unknown, UpdateTaskStatusVariables, UpdateTaskStatusContext>({
+  const updateTaskStatusMutation = useMutation({
     mutationFn: async ({ taskId, newStatus }: UpdateTaskStatusVariables) => {
-      const encodedId = encodeURIComponent(String(taskId));
-      return apiRequest("PUT", `/api/tasks/${encodedId}`, { status: newStatus });
+      return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
     },
     onMutate: async ({ taskId, newStatus, previousStatus }: UpdateTaskStatusVariables) => {
       if (previousStatus) {
         skipHydrationRef.current = true;
       }
 
-      const overrideKey = normalizeTaskId(taskId);
-      if (overrideKey) {
-        setStatusOverrides(prev => {
-          if (prev[overrideKey] === newStatus) {
-            return prev;
-          }
-          return { ...prev, [overrideKey]: newStatus };
-        });
-      }
+      setStatusOverrides(prev => {
+        if (prev[taskId] === newStatus) {
+          return prev;
+        }
+        const next = { ...prev, [taskId]: newStatus };
+        return next;
+      });
 
       await queryClient.cancelQueries({ queryKey: ["/api/tasks"] });
       const previousTasks = queryClient.getQueryData<any[]>(["/api/tasks"]);
 
       queryClient.setQueryData<any[]>(["/api/tasks"], current => {
-        if (!Array.isArray(current) || !overrideKey) {
+        if (!Array.isArray(current)) {
           return current;
         }
-        return current.map(task =>
-          normalizeTaskId(task.id) === overrideKey ? { ...task, status: newStatus } : task
-        );
+        return current.map(task => (task.id === taskId ? { ...task, status: newStatus } : task));
       });
 
-      return { previousTasks, previousStatus, overrideKey };
+      return { previousTasks, previousStatus };
     },
     onSuccess: (_, variables) => {
       toast({
@@ -460,13 +422,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       let overridesSnapshot: StatusOverridesMap | null = null;
       setStatusOverrides(prev => {
         const next: StatusOverridesMap = { ...prev };
-        const key = context?.overrideKey ?? normalizeTaskId(variables.taskId);
-        if (key) {
-          if (context?.previousStatus) {
-            next[key] = context.previousStatus;
-          } else {
-            delete next[key];
-          }
+        if (context?.previousStatus) {
+          next[variables.taskId] = context.previousStatus;
+        } else {
+          delete next[variables.taskId];
         }
         const normalizedNext = Object.keys(next).length === 0 ? {} : next;
         overridesSnapshot = normalizedNext;
@@ -585,9 +544,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const { id } = event.active;
-    if (typeof id === "number" || typeof id === "string") {
-      setActiveTaskId(id);
+    if (typeof event.active.id === "number") {
+      setActiveTaskId(event.active.id);
     }
   };
 
@@ -595,26 +553,24 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     const { active, over } = event;
     if (!over) return;
 
+    const activeId = active.id;
+    const overId = over.id;
+    if (activeId === overId) return;
+
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
+      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
 
-    const activeKey = normalizeTaskId(active.id);
-    const overType = over.data.current?.type;
-    const overKey = overType === "task" ? normalizeTaskId(over.id) : null;
-
-    if (!activeColumnId || !overColumnId || activeColumnId === overColumnId || !activeKey) return;
+    if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
 
     setColumns(prev => {
       const activeTasks = prev[activeColumnId];
       const overTasks = prev[overColumnId];
-      const activeIndex = activeTasks.findIndex(task => normalizeTaskId(task.id) === activeKey);
+      const activeIndex = activeTasks.findIndex(task => task.id === activeId);
       if (activeIndex === -1) return prev;
 
-      const overIndex = overKey
-        ? overTasks.findIndex(task => normalizeTaskId(task.id) === overKey)
-        : -1;
+      const overIndex = overTasks.findIndex(task => task.id === overId);
 
       const updatedActive = [...activeTasks];
       const [movedTask] = updatedActive.splice(activeIndex, 1);
@@ -642,25 +598,22 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       return;
     }
 
+    const activeId = active.id;
+    const overId = over.id;
+
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
+      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
 
-    const activeKey = normalizeTaskId(active.id);
-    const overType = over.data.current?.type;
-    const overKey = overType === "task" ? normalizeTaskId(over.id) : null;
-
-    if (!activeColumnId || !overColumnId || !activeKey) {
+    if (!activeColumnId || !overColumnId) {
       setActiveTaskId(null);
       return;
     }
 
     if (activeColumnId === overColumnId) {
-      const activeIndex = columns[activeColumnId].findIndex(task => normalizeTaskId(task.id) === activeKey);
-      const overIndex = overKey
-        ? columns[overColumnId].findIndex(task => normalizeTaskId(task.id) === overKey)
-        : -1;
+      const activeIndex = columns[activeColumnId].findIndex(task => task.id === activeId);
+      const overIndex = columns[overColumnId].findIndex(task => task.id === overId);
       if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
         setColumns(prev => ({
           ...prev,
@@ -672,7 +625,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       setColumns(prev => {
         const sourceTasks = prev[activeColumnId];
         const targetTasks = prev[overColumnId];
-        const sourceIndex = sourceTasks.findIndex(task => normalizeTaskId(task.id) === activeKey);
+        const sourceIndex = sourceTasks.findIndex(task => task.id === activeId);
         if (sourceIndex === -1) {
           return prev;
         }
@@ -684,9 +637,9 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         const updatedTarget = [...targetTasks];
 
         const targetIndex =
-          overType === "column"
+          over.data.current?.type === "column"
             ? updatedTarget.length
-            : updatedTarget.findIndex(task => normalizeTaskId(task.id) === overKey);
+            : updatedTarget.findIndex(task => task.id === overId);
 
         if (targetIndex >= 0) {
           updatedTarget.splice(targetIndex, 0, updatedTask);
@@ -701,10 +654,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         };
       });
 
-      if (didMove) {
+      if (didMove && typeof activeId === "number") {
         skipHydrationRef.current = true;
         updateTaskStatusMutation.mutate({
-          taskId: active.id as number | string,
+          taskId: activeId,
           newStatus: overColumnId,
           previousStatus: activeColumnId
         });
@@ -1055,7 +1008,7 @@ interface TaskBoardColumnProps {
   onAddTask: () => void;
   onTaskClick: (taskId: number) => void;
   isLoading: boolean;
-  activeTaskId: number | string | null;
+  activeTaskId: number | null;
   onArchiveTask: (task: any) => void;
   onDeleteTask: (task: any) => void;
 }
@@ -1108,35 +1061,36 @@ function TaskBoardColumn({
             Add
           </Button>
         )}
+      </div>
+
+      <SortableContext items={tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-1 flex-col gap-3 p-5">
+          {isLoading && tasks.length === 0 ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} className="h-24 rounded-xl bg-neutral-100/80" />
+              ))}
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
+              {status.emptyMessage}
+            </div>
+          ) : (
+            tasks.map(task => (
+              <TaskBoardCard
+                key={task.id}
+                task={task}
+                users={users}
+                columnId={status.id}
+                onClick={() => onTaskClick(task.id)}
+                isActiveDrag={activeTaskId === task.id}
+                onArchiveRequest={() => onArchiveTask(task)}
+                onDeleteRequest={() => onDeleteTask(task)}
+              />
+            ))
+          )}
         </div>
-        <SortableContext items={tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-1 flex-col gap-3 p-5">
-            {isLoading && tasks.length === 0 ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton key={index} className="h-24 rounded-xl bg-neutral-100/80" />
-                ))}
-              </div>
-            ) : tasks.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
-                {status.emptyMessage}
-              </div>
-            ) : (
-              tasks.map(task => (
-                <TaskBoardCard
-                  key={task.id}
-                  task={task}
-                  users={users}
-                  columnId={status.id}
-                  onClick={() => onTaskClick(task.id)}
-                  isActiveDrag={normalizeTaskId(task.id) === normalizeTaskId(activeTaskId)}
-                  onArchiveRequest={() => onArchiveTask(task)}
-                  onDeleteRequest={() => onDeleteTask(task)}
-                />
-              ))
-            )}
-          </div>
-        </SortableContext>
+      </SortableContext>
     </div>
   );
 }
