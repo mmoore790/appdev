@@ -175,7 +175,19 @@ const normalizeBoardStatus = (status: unknown): TaskStatus => {
   return "pending";
 };
 
-type StatusOverridesMap = Record<number, BoardStatus>;
+type StatusOverridesMap = Record<string, BoardStatus>;
+
+const getTaskIdKey = (task: any): string | null => {
+  if (!task) {
+    return null;
+  }
+  const { id } = task;
+  if (id === null || id === undefined) {
+    return null;
+  }
+  const key = String(id);
+  return key.length > 0 ? key : null;
+};
 
 const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[] => {
   if (!Array.isArray(tasks) || tasks.length === 0) {
@@ -189,11 +201,12 @@ const applyStatusOverrides = (tasks: any[], overrides: StatusOverridesMap): any[
   let didOverride = false;
 
   const updatedTasks = tasks.map(task => {
-    if (!task || typeof task.id !== "number") {
+    const key = getTaskIdKey(task);
+    if (!key) {
       return task;
     }
 
-    const override = overrides[task.id];
+    const override = overrides[key];
     if (!override) {
       return task;
     }
@@ -292,7 +305,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const [columns, setColumns] = useState<ColumnState>(derived.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const skipHydrationRef = useRef(false);
-  const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;
     mode: "create" | "edit";
@@ -301,7 +314,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   }>({ isOpen: false, mode: "create", status: "pending" });
   const [isArchiveDrawerOpen, setIsArchiveDrawerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: "archive" | "delete"; task: any } | null>(null);
-  const [restoreTargetId, setRestoreTargetId] = useState<number | null>(null);
+  const [restoreTargetId, setRestoreTargetId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -323,24 +336,25 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
       const next: StatusOverridesMap = { ...prev };
       let changed = false;
-      const validTaskIds = new Set<number>();
+      const validTaskIds = new Set<string>();
 
       sanitizedTasks.forEach(task => {
-        if (!task || typeof task.id !== "number") {
+        const key = getTaskIdKey(task);
+        if (!key) {
           return;
         }
-        validTaskIds.add(task.id);
+
+        validTaskIds.add(key);
         const normalized = normalizeBoardStatus(task.status);
-        if (next[task.id] && next[task.id] === normalized) {
-          delete next[task.id];
+        if (next[key] && next[key] === normalized) {
+          delete next[key];
           changed = true;
         }
       });
 
       Object.keys(prev).forEach(key => {
-        const numericId = Number(key);
-        if (!validTaskIds.has(numericId) && next[numericId] !== undefined) {
-          delete next[numericId];
+        if (!validTaskIds.has(key) && next[key] !== undefined) {
+          delete next[key];
           changed = true;
         }
       });
@@ -353,12 +367,13 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     });
   }, [sanitizedTasks]);
 
-  const removeTaskFromColumns = (taskId: number) => {
+  const removeTaskFromColumns = (taskId: string | number) => {
+    const idKey = String(taskId);
     setColumns(prev => ({
-      pending: prev.pending.filter(task => task.id !== taskId),
-      in_progress: prev.in_progress.filter(task => task.id !== taskId),
-      review: prev.review.filter(task => task.id !== taskId),
-      completed: prev.completed.filter(task => task.id !== taskId)
+      pending: prev.pending.filter(task => String(task.id) !== idKey),
+      in_progress: prev.in_progress.filter(task => String(task.id) !== idKey),
+      review: prev.review.filter(task => String(task.id) !== idKey),
+      completed: prev.completed.filter(task => String(task.id) !== idKey)
     }));
   };
 
@@ -369,16 +384,18 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     }));
   };
 
-  const activeTask = useMemo(
-    () => tasksWithOverrides.find(task => task.id === activeTaskId) ?? null,
-    [activeTaskId, tasksWithOverrides]
-  );
+  const activeTask = useMemo(() => {
+    if (!activeTaskId) {
+      return null;
+    }
+    return tasksWithOverrides.find(task => String(task.id) === activeTaskId) ?? null;
+  }, [activeTaskId, tasksWithOverrides]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
-
+ 
   const updateTaskStatusMutation = useMutation({
     mutationFn: async ({ taskId, newStatus }: UpdateTaskStatusVariables) => {
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: newStatus });
@@ -389,10 +406,11 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       }
 
       setStatusOverrides(prev => {
-        if (prev[taskId] === newStatus) {
+        const idKey = String(taskId);
+        if (prev[idKey] === newStatus) {
           return prev;
         }
-        const next = { ...prev, [taskId]: newStatus };
+        const next = { ...prev, [idKey]: newStatus };
         return next;
       });
 
@@ -403,7 +421,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         if (!Array.isArray(current)) {
           return current;
         }
-        return current.map(task => (task.id === taskId ? { ...task, status: newStatus } : task));
+        const idKey = String(taskId);
+        return current.map(task => (String(task.id) === idKey ? { ...task, status: newStatus } : task));
       });
 
       return { previousTasks, previousStatus };
@@ -422,10 +441,11 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       let overridesSnapshot: StatusOverridesMap | null = null;
       setStatusOverrides(prev => {
         const next: StatusOverridesMap = { ...prev };
+        const idKey = String(variables.taskId);
         if (context?.previousStatus) {
-          next[variables.taskId] = context.previousStatus;
+          next[idKey] = context.previousStatus;
         } else {
-          delete next[variables.taskId];
+          delete next[idKey];
         }
         const normalizedNext = Object.keys(next).length === 0 ? {} : next;
         overridesSnapshot = normalizedNext;
@@ -451,14 +471,19 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
     }
   });
-
   const archiveTaskMutation = useMutation({
     mutationFn: async (taskId: number) => {
       return apiRequest("PUT", `/api/tasks/${taskId}`, { status: "archived" });
     },
     onSuccess: (updatedTask: any) => {
       removeTaskFromColumns(updatedTask.id);
-      setArchivedTasks(prev => sortArchivedTasks([...prev.filter(task => task.id !== updatedTask.id), updatedTask]));
+      const updatedIdKey = String(updatedTask.id);
+      setArchivedTasks(prev =>
+        sortArchivedTasks([
+          ...prev.filter(task => String(task.id) !== updatedIdKey),
+          updatedTask
+        ])
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
       toast({
@@ -482,7 +507,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     },
     onSuccess: (updatedTask: any) => {
       removeTaskFromColumns(updatedTask.id);
-      setArchivedTasks(prev => prev.filter(task => task.id !== updatedTask.id));
+      const updatedIdKey = String(updatedTask.id);
+      setArchivedTasks(prev => prev.filter(task => String(task.id) !== updatedIdKey));
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
       toast({
@@ -506,7 +532,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     },
     onSuccess: (updatedTask: any, variables) => {
       removeTaskFromColumns(updatedTask.id);
-      setArchivedTasks(prev => prev.filter(task => task.id !== updatedTask.id));
+      const updatedIdKey = String(updatedTask.id);
+      setArchivedTasks(prev => prev.filter(task => String(task.id) !== updatedIdKey));
       addTaskToColumn(updatedTask, variables.status);
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks?pendingOnly=true"] });
@@ -539,38 +566,50 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
   const requestDeleteTask = (task: any) => setPendingAction({ type: "delete", task });
 
   const handleRestoreTask = (task: any) => {
-    setRestoreTargetId(task.id);
-    restoreTaskMutation.mutate({ taskId: task.id, status: "pending" });
+    const idKey = String(task.id);
+    setRestoreTargetId(idKey);
+    const numericId = Number(task.id);
+    if (Number.isNaN(numericId)) {
+      toast({
+        title: "Unable to restore task",
+        description: "Task identifier is invalid.",
+        variant: "destructive"
+      });
+      return;
+    }
+    restoreTaskMutation.mutate({ taskId: numericId, status: "pending" });
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    if (typeof event.active.id === "number") {
-      setActiveTaskId(event.active.id);
+    if (event.active?.id == null) {
+      setActiveTaskId(null);
+      return;
     }
+    setActiveTaskId(String(event.active.id));
   };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
-    const activeId = active.id;
-    const overId = over.id;
+    const activeId = String(active.id);
+    const overId = String(over.id);
     if (activeId === overId) return;
 
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
+      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
 
     setColumns(prev => {
       const activeTasks = prev[activeColumnId];
       const overTasks = prev[overColumnId];
-      const activeIndex = activeTasks.findIndex(task => task.id === activeId);
+      const activeIndex = activeTasks.findIndex(task => String(task.id) === activeId);
       if (activeIndex === -1) return prev;
 
-      const overIndex = overTasks.findIndex(task => task.id === overId);
+      const overIndex = overTasks.findIndex(task => String(task.id) === overId);
 
       const updatedActive = [...activeTasks];
       const [movedTask] = updatedActive.splice(activeIndex, 1);
@@ -588,6 +627,10 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    if (active?.id == null) {
+      setActiveTaskId(null);
+      return;
+    }
     if (!over) {
       setActiveTaskId(null);
       const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
@@ -598,13 +641,13 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       return;
     }
 
-    const activeId = active.id;
-    const overId = over.id;
+    const activeId = String(active.id);
+    const overId = String(over.id);
 
     const activeColumnId = active.data.current?.columnId as BoardStatus | undefined;
     const overColumnId =
       (over.data.current?.columnId as BoardStatus | undefined) ??
-      (typeof overId === "string" ? (overId as BoardStatus) : undefined);
+      (typeof over.id === "string" ? (over.id as BoardStatus) : undefined);
 
     if (!activeColumnId || !overColumnId) {
       setActiveTaskId(null);
@@ -612,8 +655,8 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     }
 
     if (activeColumnId === overColumnId) {
-      const activeIndex = columns[activeColumnId].findIndex(task => task.id === activeId);
-      const overIndex = columns[overColumnId].findIndex(task => task.id === overId);
+      const activeIndex = columns[activeColumnId].findIndex(task => String(task.id) === activeId);
+      const overIndex = columns[overColumnId].findIndex(task => String(task.id) === overId);
       if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
         setColumns(prev => ({
           ...prev,
@@ -625,7 +668,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
       setColumns(prev => {
         const sourceTasks = prev[activeColumnId];
         const targetTasks = prev[overColumnId];
-        const sourceIndex = sourceTasks.findIndex(task => task.id === activeId);
+        const sourceIndex = sourceTasks.findIndex(task => String(task.id) === activeId);
         if (sourceIndex === -1) {
           return prev;
         }
@@ -639,7 +682,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         const targetIndex =
           over.data.current?.type === "column"
             ? updatedTarget.length
-            : updatedTarget.findIndex(task => task.id === overId);
+            : updatedTarget.findIndex(task => String(task.id) === overId);
 
         if (targetIndex >= 0) {
           updatedTarget.splice(targetIndex, 0, updatedTask);
@@ -654,10 +697,25 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         };
       });
 
-      if (didMove && typeof activeId === "number") {
+      if (didMove) {
+        const numericTaskId = Number(active.id);
+        if (Number.isNaN(numericTaskId)) {
+          toast({
+            title: "Unable to update task",
+            description: "Task identifier is invalid.",
+            variant: "destructive"
+          });
+          setActiveTaskId(null);
+          const { columns: resetColumns, archived: resetArchived } = deriveBoardState(
+            applyStatusOverrides(sanitizedTasks, statusOverrides)
+          );
+          setColumns(resetColumns);
+          setArchivedTasks(resetArchived);
+          return;
+        }
         skipHydrationRef.current = true;
         updateTaskStatusMutation.mutate({
-          taskId: activeId,
+          taskId: numericTaskId,
           newStatus: overColumnId,
           previousStatus: activeColumnId
         });
@@ -899,15 +957,19 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
                         </Badge>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
-                          disabled={(restoreTaskMutation.isPending && restoreTargetId === task.id) || archiveTaskMutation.isPending || deleteTaskMutation.isPending}
-                          onClick={() => handleRestoreTask(task)}
-                        >
-                          <ArchiveRestore size={14} className="mr-2" />
-                          {restoreTaskMutation.isPending && restoreTargetId === task.id ? "Restoring..." : "Restore"}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
+                            disabled={
+                              (restoreTaskMutation.isPending && restoreTargetId === String(task.id)) ||
+                              archiveTaskMutation.isPending ||
+                              deleteTaskMutation.isPending
+                            }
+                            onClick={() => handleRestoreTask(task)}
+                          >
+                            <ArchiveRestore size={14} className="mr-2" />
+                            {restoreTaskMutation.isPending && restoreTargetId === String(task.id) ? "Restoring..." : "Restore"}
                         </Button>
                         <Button
                           variant="ghost"
@@ -1008,7 +1070,7 @@ interface TaskBoardColumnProps {
   onAddTask: () => void;
   onTaskClick: (taskId: number) => void;
   isLoading: boolean;
-  activeTaskId: number | null;
+  activeTaskId: string | null;
   onArchiveTask: (task: any) => void;
   onDeleteTask: (task: any) => void;
 }
@@ -1075,20 +1137,25 @@ function TaskBoardColumn({
             <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
               {status.emptyMessage}
             </div>
-          ) : (
-            tasks.map(task => (
-              <TaskBoardCard
-                key={task.id}
-                task={task}
-                users={users}
-                columnId={status.id}
-                onClick={() => onTaskClick(task.id)}
-                isActiveDrag={activeTaskId === task.id}
-                onArchiveRequest={() => onArchiveTask(task)}
-                onDeleteRequest={() => onDeleteTask(task)}
-              />
-            ))
-          )}
+            ) : (
+              tasks.map(task => (
+                <TaskBoardCard
+                  key={task.id}
+                  task={task}
+                  users={users}
+                  columnId={status.id}
+                  onClick={() => {
+                    const numericId = Number(task.id);
+                    if (!Number.isNaN(numericId)) {
+                      onTaskClick(numericId);
+                    }
+                  }}
+                  isActiveDrag={activeTaskId != null && String(task.id) === activeTaskId}
+                  onArchiveRequest={() => onArchiveTask(task)}
+                  onDeleteRequest={() => onDeleteTask(task)}
+                />
+              ))
+            )}
         </div>
       </SortableContext>
     </div>
