@@ -24,6 +24,8 @@ export interface WorkshopJobsTableProps {
   showPagination?: boolean;
   className?: string;
   triggerJobCreation?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 export function WorkshopJobsTable({ 
@@ -32,7 +34,9 @@ export function WorkshopJobsTable({
   showSearch = false, 
   showPagination = true,
   className = "",
-  triggerJobCreation = false
+  triggerJobCreation = false,
+  title = "Workshop Jobs",
+  subtitle = "Track equipment currently in the workshop"
 }: WorkshopJobsTableProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
@@ -299,51 +303,60 @@ export function WorkshopJobsTable({
   
   return (
     <div className={className}>
-      <CardHeader className="px-4 sm:px-6 py-4 sm:py-5">
-        <div className="flex flex-col gap-4">
-          <div>
-            <CardTitle className="text-lg sm:text-xl font-semibold text-neutral-800">
-              Workshop Jobs
-            </CardTitle>
-            <p className="text-sm text-neutral-500 mt-1">
-              Track equipment currently in the workshop
-            </p>
+      <CardHeader className="gap-5 border-b border-neutral-200/70 bg-white/95 px-6 py-5">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle className="text-lg sm:text-xl font-semibold text-neutral-900">
+                {title}
+              </CardTitle>
+              {subtitle && (
+                <p className="text-sm text-neutral-500">
+                  {subtitle}
+                </p>
+              )}
+            </div>
+            <Badge variant="outline" className="h-fit rounded-full border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-semibold text-neutral-600">
+              {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"}
+            </Badge>
           </div>
-          
+
           {showSearch && (
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1 sm:flex-none sm:w-60">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-sm">
                 <Input
                   type="text"
                   placeholder="Search jobs, customers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 border border-green-100 rounded-md text-sm 
-                    focus:ring-green-600 focus:border-green-600 shadow-sm"
+                  className="w-full rounded-lg border-neutral-200 pl-10 text-sm shadow-sm focus-visible:border-green-600 focus-visible:ring-2 focus-visible:ring-green-600"
                 />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={15} className="text-green-500" />
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Search size={15} className="text-green-600" />
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => refreshAllPaymentsMutation.mutate()}
                   disabled={refreshAllPaymentsMutation.isPending}
-                  className="flex items-center gap-1.5 flex-1 sm:flex-none"
+                  className="flex items-center gap-2 rounded-lg border-neutral-200 px-4 text-xs font-semibold text-neutral-600 shadow-sm hover:border-green-300 hover:bg-green-50 hover:text-green-700"
                 >
-                  <RefreshCw className={`h-4 w-4 ${refreshAllPaymentsMutation.isPending ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{refreshAllPaymentsMutation.isPending ? 'Checking...' : 'Check Payments'}</span>
-                  <span className="sm:hidden">{refreshAllPaymentsMutation.isPending ? 'Checking' : 'Check'}</span>
+                  <RefreshCw className={`h-4 w-4 ${refreshAllPaymentsMutation.isPending ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">
+                    {refreshAllPaymentsMutation.isPending ? "Checking..." : "Check payments"}
+                  </span>
+                  <span className="sm:hidden">
+                    {refreshAllPaymentsMutation.isPending ? "Checking" : "Check"}
+                  </span>
                 </Button>
-                <Button 
+                <Button
                   onClick={() => setWizardDialogOpen(true)}
-                  className="flex items-center gap-1.5 font-medium rounded-md 
-                  text-white bg-green-700 hover:bg-green-800 shadow-sm flex-1 sm:flex-none justify-center"
+                  className="flex items-center gap-2 rounded-lg bg-green-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-green-700"
                 >
                   <Plus size={16} />
-                  <span className="hidden sm:inline">New Job</span>
+                  <span className="hidden sm:inline">New job</span>
                   <span className="sm:hidden">New</span>
                 </Button>
               </div>
