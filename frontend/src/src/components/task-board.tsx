@@ -137,6 +137,44 @@ interface DerivedBoardState {
 
 const PRIORITY_SORT = { high: 1, medium: 2, low: 3 } as const;
 
+const BOARD_STATUS_VALUES: TaskStatus[] = ["pending", "in_progress", "review", "completed", "archived", "deleted"];
+
+const STATUS_ALIASES: Record<string, TaskStatus> = {
+  todo: "pending",
+  to_do: "pending",
+  to_do_list: "pending",
+  backlog: "pending",
+  inprogress: "in_progress",
+  "in-progress": "in_progress",
+  "in_progress": "in_progress",
+  "in progress": "in_progress",
+  reviewing: "review",
+  under_review: "review",
+  "under-review": "review",
+  awaiting_review: "review",
+  done: "completed",
+  complete: "completed",
+  finished: "completed"
+};
+
+const normalizeBoardStatus = (status: unknown): TaskStatus => {
+  if (typeof status !== "string") {
+    return "pending";
+  }
+
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  if ((BOARD_STATUS_VALUES as string[]).includes(normalized)) {
+    return normalized as TaskStatus;
+  }
+
+  if (STATUS_ALIASES[normalized]) {
+    return STATUS_ALIASES[normalized];
+  }
+
+  return "pending";
+};
+
 const sortTasksForColumn = (tasks: any[]) =>
   tasks.slice().sort((a, b) => {
     const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
@@ -173,9 +211,11 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
   const archived: any[] = [];
 
   tasks.forEach(task => {
-    const status = (task.status as TaskStatus) || "pending";
+    const status = normalizeBoardStatus(task?.status);
+    const normalizedTask = status !== task?.status ? { ...task, status } : task;
+
     if (status === "archived") {
-      archived.push(task);
+      archived.push(normalizedTask);
       return;
     }
 
@@ -184,9 +224,9 @@ const deriveBoardState = (tasks: any[]): DerivedBoardState => {
     }
 
     if (initial[status as BoardStatus]) {
-      initial[status as BoardStatus].push(task);
+      initial[status as BoardStatus].push(normalizedTask);
     } else {
-      initial.pending.push(task);
+      initial.pending.push(normalizedTask);
     }
   });
 
@@ -542,51 +582,60 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
         </Card>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        modifiers={[restrictToWindowEdges]}
-      >
-        <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/60 px-4 py-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Board overview</p>
-              <p className="text-sm text-neutral-600">Drag tasks between stages to keep work on track.</p>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToWindowEdges]}
+        >
+          <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/60 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Board overview</p>
+                <p className="text-sm text-neutral-600">Drag tasks between stages to keep work on track.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-green-700 focus-visible:ring-green-600"
+                  onClick={() => openCreateDialog("pending")}
+                >
+                  <Plus size={16} className="mr-2" />
+                  New Task
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-full border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
+                  onClick={() => setIsArchiveDrawerOpen(true)}
+                >
+                  <Archive size={16} className="mr-2" />
+                  Archived tasks
+                  {archivedTasks.length > 0 && (
+                    <span className="ml-2 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+                      {archivedTasks.length}
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
-            <Button
-              variant="outline"
-              className="rounded-full border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
-              onClick={() => setIsArchiveDrawerOpen(true)}
-            >
-              <Archive size={16} className="mr-2" />
-              Archived tasks
-              {archivedTasks.length > 0 && (
-                <span className="ml-2 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-600">
-                  {archivedTasks.length}
-                </span>
-              )}
-            </Button>
+            <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+              {STATUS_CONFIG.map(status => (
+                <TaskBoardColumn
+                  key={status.id}
+                  status={status}
+                  tasks={columns[status.id]}
+                  users={users}
+                  onAddTask={() => openCreateDialog(status.id)}
+                  onTaskClick={openEditDialog}
+                  isLoading={isLoading}
+                  activeTaskId={activeTaskId}
+                  onArchiveTask={requestArchiveTask}
+                  onDeleteTask={requestDeleteTask}
+                />
+              ))}
+            </div>
           </div>
-          <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
-            {STATUS_CONFIG.map(status => (
-              <TaskBoardColumn
-                key={status.id}
-                status={status}
-                tasks={columns[status.id]}
-                users={users}
-                onAddTask={() => openCreateDialog(status.id)}
-                onTaskClick={openEditDialog}
-                isLoading={isLoading}
-                activeTaskId={activeTaskId}
-                onArchiveTask={requestArchiveTask}
-                onDeleteTask={requestDeleteTask}
-              />
-            ))}
-          </div>
-        </div>
 
         <DragOverlay>
           {activeTask ? (
