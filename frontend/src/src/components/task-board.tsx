@@ -22,7 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle, Clock, GripVertical, Plus, ClipboardList, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, GripVertical, Plus, ClipboardList, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -32,6 +32,22 @@ import { apiRequest } from "../lib/queryClient";
 import { cn, getDueDateMeta, getTaskPriorityColor, DueDateTone } from "../lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Skeleton } from "./ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "./ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "./ui/alert-dialog";
 import { useToast } from "../hooks/use-toast";
 
 type TaskStatus = "pending" | "in_progress" | "review" | "completed";
@@ -140,6 +156,7 @@ export function TaskBoard({ tasks, users = [], isLoading = false }: TaskBoardPro
     status?: TaskStatus;
     taskId?: number;
   }>({ isOpen: false, mode: "create", status: "pending" });
+    const [taskToDelete, setTaskToDelete] = useState<{ id: number; title?: string } | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
