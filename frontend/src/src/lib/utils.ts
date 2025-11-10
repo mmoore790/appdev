@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { formatDistanceToNow, format, parseISO } from "date-fns";
+import { formatDistanceToNow, format, parseISO, differenceInCalendarDays, startOfDay } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -49,6 +49,57 @@ export function formatTimeAgo(dateString: string | null | undefined): string {
   } catch (error) {
     return "Invalid date";
   }
+}
+
+export type DueDateTone = "muted" | "warning" | "danger" | "success";
+
+export interface DueDateMeta {
+  label: string;
+  tone: DueDateTone;
+  daysUntil: number | null;
+}
+
+export function getDueDateMeta(dueDate: string | Date | null | undefined): DueDateMeta {
+  if (!dueDate) {
+    return { label: "No due date", tone: "muted", daysUntil: null };
+  }
+
+  const today = startOfDay(new Date());
+  const due =
+    typeof dueDate === "string"
+      ? startOfDay(new Date(dueDate))
+      : dueDate instanceof Date
+        ? startOfDay(dueDate)
+        : null;
+
+  if (!due || Number.isNaN(due.getTime())) {
+    return { label: "Invalid due date", tone: "danger", daysUntil: null };
+  }
+
+  const diff = differenceInCalendarDays(due, today);
+
+  if (diff === 0) {
+    return { label: "Due today", tone: "warning", daysUntil: 0 };
+  }
+
+  if (diff < 0) {
+    const daysOverdue = Math.abs(diff);
+    return {
+      label: `Overdue by ${daysOverdue} day${daysOverdue === 1 ? "" : "s"}`,
+      tone: "danger",
+      daysUntil: diff
+    };
+  }
+
+  if (diff === 1) {
+    return { label: "Due tomorrow", tone: "warning", daysUntil: diff };
+  }
+
+  if (diff <= 7) {
+    return { label: `Due ${format(due, "EEEE")}`, tone: "warning", daysUntil: diff };
+  }
+
+  return { label: `Due in ${diff} days`, tone: "muted", daysUntil: diff };
 }
 
 export function formatCurrency(amount: number | null | undefined): string {
