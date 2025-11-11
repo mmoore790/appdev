@@ -23,29 +23,25 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <Card className={cn("overflow-hidden border border-border/50 bg-card/70 backdrop-blur-sm", className)}>
+    <Card className={cn("overflow-hidden", className)}>
       <CardContent className="p-0">
-        <div className="px-5 py-5 sm:px-6 sm:py-6">
-          <div className="flex items-center gap-4">
-            <div
-              className={cn(
-                "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner shadow-primary/10",
-                iconColor,
-              )}
-            >
-              {typeof icon === "string" ? (
-                <span className="material-icons text-lg">{icon}</span>
-              ) : (
-                <span className="flex items-center justify-center text-lg">{icon}</span>
-              )}
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex items-center">
+            <div className={cn("flex-shrink-0 rounded-md p-3", iconColor)}>
+              {typeof icon === 'string' ? 
+                <span className="material-icons text-white">{icon}</span> : 
+                <span className="text-white">{icon}</span>
+              }
             </div>
-            <div className="flex-1">
-              <dl className="space-y-1">
-                <dt className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-neutral-400 truncate">
                   {title}
                 </dt>
                 <dd>
-                  <div className="text-2xl font-semibold text-foreground">{value}</div>
+                  <div className="text-lg font-medium text-neutral-700">
+                    {value}
+                  </div>
                 </dd>
               </dl>
             </div>
@@ -53,13 +49,12 @@ export function StatCard({
         </div>
       </CardContent>
       {footerText && footerLink && (
-        <CardFooter className="border-t border-border/60 bg-card/80 px-5 py-3">
-          <Link
-            href={footerLink}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
-          >
-            {footerText}
-          </Link>
+        <CardFooter className="bg-neutral-100 px-4 py-3">
+          <div className="text-sm">
+            <Link href={footerLink} className="font-medium text-green-700 hover:text-green-800">
+              {footerText}
+            </Link>
+          </div>
         </CardFooter>
       )}
     </Card>
