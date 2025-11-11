@@ -39,6 +39,8 @@ import {
   Loader2,
   MoreVertical,
   Trash2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -61,6 +63,10 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "./ui/toggle-group";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -78,9 +84,20 @@ import {
   SheetDescription,
 } from "./ui/sheet";
 import { useToast } from "../hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 
 type BoardStatus = "pending" | "in_progress" | "review" | "completed";
 type TaskStatus = BoardStatus | "archived" | "deleted";
+type BoardDensity = "comfortable" | "cozy" | "compact";
+type FocusMode = "none" | "dueSoon" | "overdue";
+
+const BOARD_ORDER_STORAGE_KEY = "taskBoard:columnOrder";
+const BOARD_PREFS_STORAGE_KEY = "taskBoard:prefs";
 
 interface TaskBoardProps {
   tasks: any[];
@@ -96,7 +113,52 @@ interface StatusConfig {
   badge: string;
   emptyMessage: string;
   icon: typeof AlertCircle;
+  wipLimit?: number | null;
+  wipHelper?: string;
 }
+
+const DEFAULT_COLLAPSED_STATE: Record<BoardStatus, boolean> = {
+  pending: false,
+  in_progress: false,
+  review: false,
+  completed: false,
+};
+
+const COLUMN_PADDING: Record<BoardDensity, string> = {
+  comfortable: "p-5",
+  cozy: "p-4",
+  compact: "p-3.5",
+};
+
+const COLUMN_GAP: Record<BoardDensity, string> = {
+  comfortable: "gap-3",
+  cozy: "gap-2.5",
+  compact: "gap-2",
+};
+
+const CARD_DENSITY_STYLES: Record<
+  BoardDensity,
+  { padding: string; gap: string; metaText: string; descriptionText: string }
+> = {
+  comfortable: {
+    padding: "p-4",
+    gap: "gap-4",
+    metaText: "text-xs",
+    descriptionText: "text-xs",
+  },
+  cozy: {
+    padding: "p-3.5",
+    gap: "gap-3",
+    metaText: "text-[11px]",
+    descriptionText: "text-[11px]",
+  },
+  compact: {
+    padding: "p-3",
+    gap: "gap-2.5",
+    metaText: "text-[10px]",
+    descriptionText: "text-[10px]",
+  },
+};
 
 const STATUS_CONFIG: StatusConfig[] = [
   {
@@ -107,6 +169,7 @@ const STATUS_CONFIG: StatusConfig[] = [
     badge: "bg-amber-100 text-amber-700",
     emptyMessage: "Drop a task here when you're ready to schedule it.",
     icon: AlertCircle,
+    wipLimit: null,
   },
   {
     id: "in_progress",
@@ -116,6 +179,8 @@ const STATUS_CONFIG: StatusConfig[] = [
     badge: "bg-blue-100 text-blue-700",
     emptyMessage: "Drag tasks here when work is underway.",
     icon: Clock,
+    wipLimit: 6,
+    wipHelper: "Helps the team stay within focus bandwidth.",
   },
   {
     id: "review",
@@ -125,6 +190,8 @@ const STATUS_CONFIG: StatusConfig[] = [
     badge: "bg-purple-100 text-purple-700",
     emptyMessage: "Tasks that need review will appear here.",
     icon: ClipboardList,
+    wipLimit: 4,
+    wipHelper: "Keep feedback queues thin to ship faster.",
   },
   {
     id: "completed",
@@ -134,6 +201,7 @@ const STATUS_CONFIG: StatusConfig[] = [
     badge: "bg-green-100 text-green-700",
     emptyMessage: "Completed tasks will drop in here automatically.",
     icon: CheckCircle,
+    wipLimit: null,
   },
 ];
 
@@ -404,11 +472,120 @@ export function TaskBoard({
     () => deriveBoardState(sanitizedTasks),
     [sanitizedTasks],
   );
-  const [columns, setColumns] = useState<ColumnState>(derived.columns);
+
+  const initialBoard = useMemo(() => {
+    const parseStoredColumn = (value: unknown): BoardStatus | null => {
+      if (typeof value !== "string") {
+        return null;
+      }
+      const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/^column[-_]?/, "")
+        .replace(/[\s-]+/g, "_");
+      if (isBoardStatus(normalized)) {
+        return normalized;
+      }
+      const alias = STATUS_ALIASES[normalized];
+      if (alias && isBoardStatus(alias)) {
+        return alias;
+      }
+      return null;
+    };
+
+    const baseColumns = derived.columns;
+    const baseOrder = createColumnOrder(baseColumns);
+    let storedOrder = baseOrder;
+
+    if (typeof window !== "undefined") {
+      try {
+        const rawOrder = window.localStorage.getItem(BOARD_ORDER_STORAGE_KEY);
+        if (rawOrder) {
+          const parsedOrder = JSON.parse(rawOrder);
+          if (parsedOrder && typeof parsedOrder === "object") {
+            const sanitizedOrder: Record<BoardStatus, string[]> = {
+              ...baseOrder,
+            };
+            for (const status of BOARD_STATUSES) {
+              const candidate = (parsedOrder as Record<string, unknown>)[status];
+              if (Array.isArray(candidate)) {
+                sanitizedOrder[status] = candidate.map((value) =>
+                  String(value),
+                );
+              }
+            }
+            storedOrder = mergeColumnOrder(sanitizedOrder, baseColumns);
+          }
+        }
+      } catch {
+        storedOrder = baseOrder;
+      }
+    }
+
+    const orderedColumns = applyManualOrder(baseColumns, storedOrder);
+
+    const collapsedMap = { ...DEFAULT_COLLAPSED_STATE };
+    let storedDensity: BoardDensity | undefined;
+    let storedFocus: FocusMode | undefined;
+
+    if (typeof window !== "undefined") {
+      try {
+        const rawPrefs = window.localStorage.getItem(BOARD_PREFS_STORAGE_KEY);
+        if (rawPrefs) {
+          const parsedPrefs = JSON.parse(rawPrefs);
+          if (parsedPrefs && typeof parsedPrefs === "object") {
+            if (
+              typeof parsedPrefs.density === "string" &&
+              ["comfortable", "cozy", "compact"].includes(parsedPrefs.density)
+            ) {
+              storedDensity = parsedPrefs.density as BoardDensity;
+            }
+            if (
+              typeof parsedPrefs.focusMode === "string" &&
+              ["none", "dueSoon", "overdue"].includes(parsedPrefs.focusMode)
+            ) {
+              storedFocus = parsedPrefs.focusMode as FocusMode;
+            }
+            if (Array.isArray(parsedPrefs.collapsedColumns)) {
+              parsedPrefs.collapsedColumns.forEach((value: unknown) => {
+                const status = parseStoredColumn(value);
+                if (status) {
+                  collapsedMap[status] = true;
+                }
+              });
+            }
+          }
+        }
+      } catch {
+        // ignore malformed stored preferences
+      }
+    }
+
+    return {
+      columns: orderedColumns,
+      order: storedOrder,
+      prefs: {
+        density: storedDensity ?? "comfortable",
+        focusMode: storedFocus ?? "none",
+        collapsedMap,
+      },
+    };
+  }, [derived]);
+
+  const [columns, setColumns] = useState<ColumnState>(initialBoard.columns);
   const [archivedTasks, setArchivedTasks] = useState<any[]>(derived.archived);
   const [columnOrder, setColumnOrder] = useState<Record<BoardStatus, string[]>>(
-    () => createColumnOrder(derived.columns),
+    initialBoard.order,
   );
+  const [viewDensity, setViewDensity] = useState<BoardDensity>(
+    initialBoard.prefs.density,
+  );
+  const [focusMode, setFocusMode] = useState<FocusMode>(
+    initialBoard.prefs.focusMode,
+  );
+  const [collapsedColumns, setCollapsedColumns] = useState<
+    Record<BoardStatus, boolean>
+  >(initialBoard.prefs.collapsedMap);
   const skipHydrationRef = useRef(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const dragStateRef = useRef<{
@@ -441,10 +618,77 @@ export function TaskBoard({
       return;
     }
 
-    setColumns(applyManualOrder(derived.columns, columnOrder));
     setArchivedTasks(derived.archived);
-    setColumnOrder((prev) => mergeColumnOrder(prev, derived.columns));
+
+    setColumnOrder((previous) => {
+      const merged = mergeColumnOrder(previous, derived.columns);
+      setColumns(applyManualOrder(derived.columns, merged));
+      return merged;
+    });
   }, [derived]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        BOARD_ORDER_STORAGE_KEY,
+        JSON.stringify(columnOrder),
+      );
+    } catch {
+      // Ignore storage failures (e.g., Safari private mode).
+    }
+  }, [columnOrder]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const collapsedList = (
+      Object.entries(collapsedColumns) as [BoardStatus, boolean][]
+    )
+      .filter(([, value]) => value)
+      .map(([key]) => key);
+
+    try {
+      window.localStorage.setItem(
+        BOARD_PREFS_STORAGE_KEY,
+        JSON.stringify({
+          density: viewDensity,
+          focusMode,
+          collapsedColumns: collapsedList,
+        }),
+      );
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [viewDensity, focusMode, collapsedColumns]);
+
+  const toggleColumnCollapse = (status: BoardStatus) => {
+    setCollapsedColumns((prev) => ({
+      ...prev,
+      [status]: !prev[status],
+    }));
+  };
+
+  const handleDensityChange = (value: string) => {
+    if (!value || !["comfortable", "cozy", "compact"].includes(value)) {
+      setViewDensity("comfortable");
+      return;
+    }
+    setViewDensity(value as BoardDensity);
+  };
+
+  const handleFocusModeChange = (value: string) => {
+    if (!value || value === "none") {
+      setFocusMode("none");
+      return;
+    }
+    if (value === "dueSoon" || value === "overdue") {
+      setFocusMode(value as FocusMode);
+    }
+  };
 
   const removeTaskFromColumns = (taskId: string | number) => {
     const idKey = String(taskId);
@@ -1121,155 +1365,233 @@ export function TaskBoard({
     };
   }, [filteredForMetrics, sanitizedTasks]);
 
+  const focusDescriptor = useMemo(() => {
+    if (focusMode === "overdue") {
+      return "Focus mode: spotlighting overdue work";
+    }
+    if (focusMode === "dueSoon") {
+      return "Focus mode: highlighting deadlines within 48 hours";
+    }
+    return null;
+  }, [focusMode]);
+
   const isArchivePending =
     pendingAction?.type === "archive" && archiveTaskMutation.isPending;
   const isDeletePending =
     pendingAction?.type === "delete" && deleteTaskMutation.isPending;
 
   return (
-    <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
-            <AlertCircle size={18} />
-          </div>
-          <CardHeader className="pb-3 text-white/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-              Overdue
-            </p>
-            <CardTitle className="text-3xl font-semibold text-white">
-              {totalCounts.overdue}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-white/80">
-            <p className="text-sm">Tasks past their due date</p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-amber-200 via-amber-300 to-orange-400 text-amber-950 shadow-lg">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/40 text-amber-900">
-            <Clock size={18} />
-          </div>
-          <CardHeader className="pb-3 text-amber-950/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-900/80">
-              Due Soon
-            </p>
-            <CardTitle className="text-3xl font-semibold text-amber-950">
-              {totalCounts.dueSoon}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-amber-900/80">
-            <p className="text-sm">Due within the next 48 hours</p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
-            <Loader2 size={18} />
-          </div>
-          <CardHeader className="pb-3 text-white/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-              In Progress
-            </p>
-            <CardTitle className="text-3xl font-semibold text-white">
-              {columns.in_progress.length}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-white/80">
-            <p className="text-sm">Active tasks currently underway</p>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg">
-          <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
-            <CheckCircle size={18} />
-          </div>
-          <CardHeader className="pb-3 text-white/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-              Completed (30d)
-            </p>
-            <CardTitle className="text-3xl font-semibold text-white">
-              {totalCounts.completedLast30Days}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-white/80">
-            <p className="text-sm">
-              Delivered in the last month, including archived tasks
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetectionStrategy}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        modifiers={[restrictToWindowEdges]}
-      >
-        <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/60 px-4 py-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Board overview
-              </p>
-              <p className="text-sm text-neutral-600">
-                Drag tasks between stages to keep work on track.
-              </p>
+    <TooltipProvider delayDuration={120}>
+      <>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
+            <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
+              <AlertCircle size={18} />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-green-700 focus-visible:ring-green-600"
-                onClick={() => openCreateDialog("pending")}
-              >
-                <Plus size={16} className="mr-2" />
-                New Task
-              </Button>
-              <Button
-                variant="outline"
-                className="rounded-full border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-100"
-                onClick={() => setIsArchiveDrawerOpen(true)}
-              >
-                <Archive size={16} className="mr-2" />
-                Archived tasks
-                {archivedTasks.length > 0 && (
-                  <span className="ml-2 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-600">
-                    {archivedTasks.length}
-                  </span>
-                )}
-              </Button>
+            <CardHeader className="pb-3 text-white/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
+                Overdue
+              </p>
+              <CardTitle className="text-3xl font-semibold text-white">
+                {totalCounts.overdue}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-white/80">
+              <p className="text-sm">Tasks past their due date</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-amber-200 via-amber-300 to-orange-400 text-amber-950 shadow-lg">
+            <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/40 text-amber-900">
+              <Clock size={18} />
             </div>
-          </div>
-          <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
-            {STATUS_CONFIG.map((status) => (
-              <TaskBoardColumn
-                key={status.id}
-                status={status}
-                tasks={columns[status.id]}
-                users={users}
-                onAddTask={() => openCreateDialog(status.id)}
-                onTaskClick={openEditDialog}
-                isLoading={isLoading}
-                activeTaskId={activeTaskId}
-                onArchiveTask={requestArchiveTask}
-                onDeleteTask={requestDeleteTask}
-              />
-            ))}
-          </div>
+            <CardHeader className="pb-3 text-amber-950/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-900/80">
+                Due Soon
+              </p>
+              <CardTitle className="text-3xl font-semibold text-amber-950">
+                {totalCounts.dueSoon}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-amber-900/80">
+              <p className="text-sm">Due within the next 48 hours</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
+            <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
+              <Loader2 size={18} />
+            </div>
+            <CardHeader className="pb-3 text-white/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
+                In Progress
+              </p>
+              <CardTitle className="text-3xl font-semibold text-white">
+                {columns.in_progress.length}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-white/80">
+              <p className="text-sm">Active tasks currently underway</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg">
+            <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
+              <CheckCircle size={18} />
+            </div>
+            <CardHeader className="pb-3 text-white/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
+                Completed (30d)
+              </p>
+              <CardTitle className="text-3xl font-semibold text-white">
+                {totalCounts.completedLast30Days}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-white/80">
+              <p className="text-sm">
+                Delivered in the last month, including archived tasks
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
-        <DragOverlay>
-          {activeTask ? (
-            <TaskBoardCard
-              task={activeTask}
-              users={users}
-              columnId={activeTask.status}
-              isOverlay
-            />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetectionStrategy}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToWindowEdges]}
+        >
+          <div className="mt-6 rounded-2xl border border-neutral-200/70 bg-neutral-50/80 shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-neutral-200/60 px-4 py-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Board overview
+                </p>
+                <p className="text-sm text-neutral-600">
+                  Drag tasks between stages to keep work on track.
+                </p>
+                {focusDescriptor && (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                    {focusDescriptor}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ToggleGroup
+                    type="single"
+                    value={viewDensity}
+                    onValueChange={handleDensityChange}
+                    className="flex rounded-full border border-neutral-200 bg-white p-0.5 text-xs shadow-sm"
+                  >
+                    <ToggleGroupItem
+                      value="compact"
+                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
+                    >
+                      Compact
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="cozy"
+                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
+                    >
+                      Cozy
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="comfortable"
+                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
+                    >
+                      Comfort
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <ToggleGroup
+                    type="single"
+                    value={focusMode}
+                    onValueChange={handleFocusModeChange}
+                    className="flex rounded-full border border-neutral-200 bg-white p-0.5 text-xs shadow-sm"
+                  >
+                    <ToggleGroupItem
+                      value="none"
+                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
+                    >
+                      All
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="dueSoon"
+                      className="flex items-center gap-1 rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-amber-100 data-[state=on]:text-amber-700"
+                    >
+                      <Clock size={12} />
+                      48h
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="overdue"
+                      className="flex items-center gap-1 rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-red-100 data-[state=on]:text-red-700"
+                    >
+                      <AlertCircle size={12} />
+                      Overdue
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-green-700 focus-visible:ring-green-600"
+                    onClick={() => openCreateDialog("pending")}
+                  >
+                    <Plus size={16} className="mr-2" />
+                    New Task
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-full border-neutral-200 bg-white text-sm font-medium text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-100"
+                    onClick={() => setIsArchiveDrawerOpen(true)}
+                  >
+                    <Archive size={16} className="mr-2" />
+                    Archived tasks
+                    {archivedTasks.length > 0 && (
+                      <span className="ml-2 rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+                        {archivedTasks.length}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+              {STATUS_CONFIG.map((status) => (
+                <TaskBoardColumn
+                  key={status.id}
+                  status={status}
+                  tasks={columns[status.id]}
+                  users={users}
+                  onAddTask={() => openCreateDialog(status.id)}
+                  onTaskClick={openEditDialog}
+                  isLoading={isLoading}
+                  activeTaskId={activeTaskId}
+                  onArchiveTask={requestArchiveTask}
+                  onDeleteTask={requestDeleteTask}
+                  density={viewDensity}
+                  focusMode={focusMode}
+                  isCollapsed={collapsedColumns[status.id]}
+                  onToggleCollapse={() => toggleColumnCollapse(status.id)}
+                />
+              ))}
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activeTask ? (
+              <TaskBoardCard
+                task={activeTask}
+                users={users}
+                columnId={activeTask.status}
+                isOverlay
+                density={viewDensity}
+                focusMode={focusMode}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
       <Dialog
         open={dialogState.isOpen}
@@ -1533,8 +1855,9 @@ export function TaskBoard({
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-    </>
+        </AlertDialog>
+      </>
+    </TooltipProvider>
   );
 }
 
@@ -1548,6 +1871,10 @@ interface TaskBoardColumnProps {
   activeTaskId: string | null;
   onArchiveTask: (task: any) => void;
   onDeleteTask: (task: any) => void;
+  density: BoardDensity;
+  focusMode: FocusMode;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 function TaskBoardColumn({
@@ -1560,69 +1887,231 @@ function TaskBoardColumn({
   activeTaskId,
   onArchiveTask,
   onDeleteTask,
+  density,
+  focusMode,
+  isCollapsed,
+  onToggleCollapse,
 }: TaskBoardColumnProps) {
   const { setNodeRef, isOver } = useDroppableColumn(status.id);
+  const columnPadding = COLUMN_PADDING[density];
+  const columnGap = COLUMN_GAP[density];
+  const wipLimit =
+    typeof status.wipLimit === "number" && status.wipLimit > 0
+      ? status.wipLimit
+      : null;
+  const isOverLimit = wipLimit != null && tasks.length > wipLimit;
+  const wipProgress =
+    wipLimit != null ? Math.min((tasks.length / wipLimit) * 100, 100) : 0;
+
+  const priorityBreakdown = useMemo(() => {
+    const breakdown: Record<"high" | "medium" | "low", number> = {
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+    tasks.forEach((task) => {
+      const priority =
+        typeof task.priority === "string"
+          ? task.priority.toLowerCase()
+          : "medium";
+      if (priority === "high") {
+        breakdown.high += 1;
+      } else if (priority === "low") {
+        breakdown.low += 1;
+      } else {
+        breakdown.medium += 1;
+      }
+    });
+    return breakdown;
+  }, [tasks]);
+
+  const dueSummary = useMemo(() => {
+    const summary = { overdue: 0, dueSoon: 0 };
+    tasks.forEach((task) => {
+      const meta = getDueDateMeta(task.dueDate);
+      if (meta.tone === "danger") {
+        summary.overdue += 1;
+      } else if (
+        meta.tone === "warning" &&
+        meta.daysUntil !== null &&
+        meta.daysUntil <= 2
+      ) {
+        summary.dueSoon += 1;
+      }
+    });
+    return summary;
+  }, [tasks]);
 
   return (
     <div
-      ref={setNodeRef} // ✅ Only one ref — droppable for the entire column
+      ref={setNodeRef}
       className={cn(
         "group/column flex h-full flex-col rounded-2xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
         isOver && "border-green-200 ring-2 ring-green-500/40",
+        !isOver && isOverLimit && "border-red-200 bg-red-50/70",
+        isCollapsed && "bg-neutral-50",
       )}
       data-column={status.id}
     >
-      {/* Column Header */}
       <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white/95 px-5 py-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
             <status.icon size={18} className={status.accent} />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-neutral-800">
                 {status.title}
               </h3>
               <span
                 className={cn(
-                  "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  "rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
                   status.badge,
+                  wipLimit != null && "tracking-wide",
+                  isOverLimit && "bg-red-100 text-red-700 shadow-[0_0_0_1px_rgba(248,113,113,0.45)]",
                 )}
               >
-                {tasks.length}
+                {wipLimit != null ? `${tasks.length}/${wipLimit} WIP` : tasks.length}
               </span>
             </div>
             <p className="max-w-xs text-xs leading-relaxed text-neutral-500">
               {status.description}
             </p>
+            {wipLimit != null && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-medium text-neutral-400">
+                  <span>Work in progress</span>
+                  <span
+                    className={cn(
+                      "text-neutral-500",
+                      isOverLimit && "text-red-600",
+                    )}
+                  >
+                    {tasks.length} / {wipLimit}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      isOverLimit ? "bg-red-500" : "bg-neutral-400",
+                    )}
+                    style={{ width: `${wipProgress}%` }}
+                  />
+                </div>
+                {status.wipHelper && (
+                  <p className="text-[11px] text-neutral-400">
+                    {status.wipHelper}
+                  </p>
+                )}
+                {isOverLimit && (
+                  <p className="text-[11px] font-medium text-red-500">
+                    Over capacity by {tasks.length - wipLimit} task
+                    {tasks.length - wipLimit === 1 ? "" : "s"}.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
-
-        {status.id !== "completed" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 rounded-full border-neutral-200 bg-white text-xs font-medium text-neutral-600 hover:border-neutral-300 hover:bg-neutral-100"
-            onClick={onAddTask}
-          >
-            <Plus size={14} className="mr-1" />
-            Add
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {status.id !== "completed" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-full border-neutral-200 bg-white text-xs font-medium text-neutral-600 transition hover:border-neutral-300 hover:bg-neutral-100"
+              onClick={onAddTask}
+            >
+              <Plus size={14} className="mr-1" />
+              Add
+            </Button>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-neutral-400 transition hover:text-neutral-700"
+                onClick={onToggleCollapse}
+              >
+                {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {isCollapsed ? "Expand column" : "Collapse column"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
-      {/* Task List (Sortable Context) */}
       <SortableContext
         items={tasks.map((task) => String(task.id))}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex flex-1 flex-col gap-3 p-5">
-          {isLoading && tasks.length === 0 ? (
+        <div
+          className={cn(
+            "flex flex-1 flex-col",
+            columnPadding,
+            columnGap,
+            isCollapsed && "justify-center",
+          )}
+        >
+          {isCollapsed ? (
+            <div className="flex min-h-[140px] flex-col justify-between rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4 text-xs text-neutral-500">
+              {tasks.length === 0 ? (
+                <p>{status.emptyMessage}</p>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                      Snapshot
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(["high", "medium", "low"] as const).map((priority) =>
+                        priorityBreakdown[priority] > 0 ? (
+                          <span
+                            key={priority}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                              priority === "high"
+                                ? "bg-red-100 text-red-600"
+                                : priority === "medium"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-blue-100 text-blue-600",
+                            )}
+                          >
+                            {priorityBreakdown[priority]} {priority}
+                          </span>
+                        ) : null,
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-[11px]">
+                      <span className="flex items-center gap-1 text-red-600">
+                        <AlertCircle size={12} />
+                        {dueSummary.overdue} overdue
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-600">
+                        <Clock size={12} />
+                        {dueSummary.dueSoon} due soon
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-neutral-500">
+                    Expand to view {tasks.length} task
+                    {tasks.length === 1 ? "" : "s"}.
+                  </p>
+                </>
+              )}
+            </div>
+          ) : isLoading && tasks.length === 0 ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, index) => (
                 <Skeleton
                   key={index}
-                  className="h-24 rounded-xl bg-neutral-100/80"
+                  className={cn(
+                    "h-24 rounded-xl bg-neutral-100/80",
+                    density === "compact" && "h-20",
+                  )}
                 />
               ))}
             </div>
@@ -1648,6 +2137,8 @@ function TaskBoardColumn({
                 }
                 onArchiveRequest={() => onArchiveTask(task)}
                 onDeleteRequest={() => onDeleteTask(task)}
+                density={density}
+                focusMode={focusMode}
               />
             ))
           )}
@@ -1666,6 +2157,8 @@ interface TaskBoardCardProps {
   isOverlay?: boolean;
   onArchiveRequest?: () => void;
   onDeleteRequest?: () => void;
+  density: BoardDensity;
+  focusMode: FocusMode;
 }
 
 function TaskBoardCard({
@@ -1677,6 +2170,8 @@ function TaskBoardCard({
   isOverlay = false,
   onArchiveRequest,
   onDeleteRequest,
+  density,
+  focusMode,
 }: TaskBoardCardProps) {
   const {
     attributes,
@@ -1700,6 +2195,7 @@ function TaskBoardCard({
         transition,
       }
     : {};
+  const densityStyles = CARD_DENSITY_STYLES[density];
 
   const dueMeta = getDueDateMeta(task.dueDate);
   const dueToneClass = DUE_TONE_CLASSES[dueMeta.tone] ?? DUE_TONE_CLASSES.muted;
@@ -1712,6 +2208,15 @@ function TaskBoardCard({
   const priorityAccentClass =
     priorityAccent[task.priority as keyof typeof priorityAccent] ??
     "before:bg-neutral-200";
+  const isDueSoonTarget =
+    dueMeta.tone === "danger" ||
+    (dueMeta.tone === "warning" &&
+      dueMeta.daysUntil !== null &&
+      dueMeta.daysUntil <= 2);
+  const shouldDim =
+    !isOverlay &&
+    ((focusMode === "overdue" && dueMeta.tone !== "danger") ||
+      (focusMode === "dueSoon" && !isDueSoonTarget));
   const assigneeId =
     task.assignedTo === "unassigned" ||
     task.assignedTo === null ||
@@ -1736,6 +2241,7 @@ function TaskBoardCard({
           "border-green-300 bg-green-50/40 shadow-lg before:bg-green-500/70",
         columnId === "completed" &&
           "border-green-200 bg-green-50/40 before:bg-green-500/70",
+        shouldDim && "opacity-60 saturate-75",
       )}
       style={style}
       ref={setNodeRef}
@@ -1743,7 +2249,9 @@ function TaskBoardCard({
       {...listeners}
       onClick={onClick}
     >
-      <CardContent className="flex flex-col gap-4 p-4">
+      <CardContent
+        className={cn("flex flex-col", densityStyles.gap, densityStyles.padding)}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <GripVertical
@@ -1761,7 +2269,12 @@ function TaskBoardCard({
                 {task.title}
               </p>
               {task.description && (
-                <p className="line-clamp-2 text-xs text-neutral-500">
+                <p
+                  className={cn(
+                    "line-clamp-2 text-neutral-500",
+                    densityStyles.descriptionText,
+                  )}
+                >
                   {task.description}
                 </p>
               )}
@@ -1825,7 +2338,12 @@ function TaskBoardCard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-3 text-neutral-500",
+            densityStyles.metaText,
+          )}
+        >
           <span
             className={cn("flex items-center gap-1 font-medium", dueToneClass)}
           >
