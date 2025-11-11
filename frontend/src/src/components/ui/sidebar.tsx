@@ -1,23 +1,22 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  Wrench, 
-  Users, 
-  BarChart3, 
-  ClipboardList, 
-  Settings,
-  User,
-  LogOut,
-  Menu,
-  X,
-  Mail,
-  PhoneCall,
-  Bug,
-  CreditCard,
-  Package
-} from "lucide-react";
+  import { 
+    LayoutDashboard, 
+    CheckSquare, 
+    Wrench, 
+    Users, 
+    BarChart3, 
+    ClipboardList, 
+    Settings,
+    User,
+    LogOut,
+    Menu,
+    X,
+    Mail,
+    PhoneCall,
+    Bug,
+    Package
+  } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -75,7 +74,6 @@ export function Sidebar({ className }: SidebarProps) {
     { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
     { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
-    { path: "/payments", label: "Payments", icon: <CreditCard size={20} />, allowedRoles: ["admin"] },
     { path: "/settings", label: "Settings", icon: <Settings size={20} />, allowedRoles: ["admin"] },
     { path: "/account", label: "Account", icon: <User size={20} /> },
   ];

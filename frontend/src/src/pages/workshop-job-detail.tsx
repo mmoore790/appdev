@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Calendar,
@@ -11,6 +11,7 @@ import {
   Phone,
   Printer,
   User,
+  UserCheck,
   Wrench,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,6 +26,9 @@ import { WorkDetailsSummary } from "@/components/work-details-summary";
 import { WorkshopActivity } from "@/components/workshop-activity";
 import { PartOrderQuickCreate } from "@/components/part-order-quick-create";
 import { formatDate, getStatusColor, cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface JobEntity {
   id: number;
@@ -67,6 +71,8 @@ export default function WorkshopJobDetail() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "work" | "summary">("overview");
   const [partsDialogOpen, setPartsDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const {
     data: job,
@@ -85,6 +91,7 @@ export default function WorkshopJobDetail() {
   const {
     data: partOrders = [],
     isLoading: partsLoading,
+    refetch: refetchParts,
   } = useQuery<PartOrderEntity[]>({
     queryKey: Number.isFinite(numericJobId) ? [`/api/parts-on-order/job/${numericJobId}`] : ["parts-orders/disabled"],
     enabled: Number.isFinite(numericJobId),
@@ -96,6 +103,16 @@ export default function WorkshopJobDetail() {
   } = useQuery<any[]>({
     queryKey: ["/api/activities"],
   });
+  const { data: users = [] } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+  });
+
+  const resolveUserName = (userId?: number | null) => {
+    if (!userId) return null;
+    if (!Array.isArray(users)) return null;
+    const match = users.find((user: any) => user.id === userId);
+    return match?.fullName || match?.username || null;
+  };
 
   const jobActivities = useMemo(() => {
     if (!Array.isArray(activities) || !job) return [];
@@ -103,6 +120,46 @@ export default function WorkshopJobDetail() {
   }, [activities, job]);
 
   const statusToken = job ? getStatusColor(job.status) : null;
+  const assignJobMutation = useMutation({
+    mutationFn: async ({ jobId, assignedTo }: { jobId: number; assignedTo: number | null }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}`, { assignedTo });
+    },
+    onSuccess: (_, variables) => {
+      const assignedName = variables.assignedTo ? resolveUserName(variables.assignedTo) : null;
+      toast({
+        title: variables.assignedTo ? "Job assigned" : "Job unassigned",
+        description: variables.assignedTo
+          ? `Assigned to ${assignedName ?? "selected technician"}.`
+          : "Job marked as unassigned.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${variables.jobId}`] });
+      void refetchJob();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update assignment",
+        description: error?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAssigneeChange = (value: string, job: JobEntity) => {
+    if (!job?.id) return;
+    if (value === "unassigned") {
+      if (!job.assignedTo) return;
+      assignJobMutation.mutate({ jobId: job.id, assignedTo: null });
+      return;
+    }
+
+    const newAssignee = Number(value);
+    if (Number.isNaN(newAssignee) || job.assignedTo === newAssignee) {
+      return;
+    }
+
+    assignJobMutation.mutate({ jobId: job.id, assignedTo: newAssignee });
+  };
 
   const handleCreatePartsOrder = () => {
     setPartsDialogOpen(true);
@@ -110,6 +167,7 @@ export default function WorkshopJobDetail() {
 
   const handlePartOrderCreated = () => {
     setActiveTab("work");
+    void refetchParts();
   };
 
   if (!Number.isFinite(numericJobId)) {
@@ -168,24 +226,63 @@ export default function WorkshopJobDetail() {
     const statusBadgeClass = statusToken
       ? cn("inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold", statusToken.bgColor, statusToken.textColor)
       : "inline-flex items-center rounded-full bg-neutral-200 px-3 py-1 text-xs font-semibold text-neutral-700";
+    const assignedUserName = resolveUserName(job.assignedTo);
+    const staffOptions = Array.isArray(users)
+      ? users.filter((user: any) => {
+          const role = typeof user.role === "string" ? user.role.toLowerCase() : "";
+          return role === "mechanic" || role === "admin" || role === "staff";
+        })
+      : [];
+    const assignmentOptions = [...staffOptions];
+    if (job.assignedTo && Array.isArray(users) && !assignmentOptions.some((user: any) => user.id === job.assignedTo)) {
+      const fallback = users.find((user: any) => user.id === job.assignedTo);
+      if (fallback) {
+        assignmentOptions.push(fallback);
+      }
+    }
+    const assignmentValue = job.assignedTo ? String(job.assignedTo) : "unassigned";
 
     return (
       <Card className="border-green-100 shadow-sm">
         <CardHeader className="pb-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <CardTitle className="text-2xl font-semibold text-neutral-900">{job.jobId}</CardTitle>
-            <div className="flex items-center gap-3">
-              <span className={statusBadgeClass}>{job.status.replace(/_/g, " ")}</span>
-              {job.assignedTo ? (
-                <Badge variant="outline" className="border-blue-200 text-blue-600">
-                  <Wrench size={14} className="mr-1" />
-                  Assigned technician
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                  Awaiting assignment
-                </Badge>
-              )}
+            <div className="flex w-full flex-col items-start gap-3 md:w-auto md:items-end">
+              <div className="flex items-center gap-3">
+                <span className={statusBadgeClass}>{job.status.replace(/_/g, " ")}</span>
+                {assignedUserName ? (
+                  <Badge variant="outline" className="border-blue-200 text-blue-600">
+                    <UserCheck size={14} className="mr-1" />
+                    {assignedUserName}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                    Awaiting assignment
+                  </Badge>
+                )}
+              </div>
+              <div className="w-full md:w-56">
+                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Assign technician
+                </span>
+                <Select
+                  value={assignmentValue}
+                  onValueChange={(value) => handleAssigneeChange(value, job)}
+                  disabled={assignJobMutation.isPending}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={assignmentOptions.length ? "Select team member" : "No staff available"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {assignmentOptions.map((userOption: any) => (
+                      <SelectItem key={userOption.id} value={String(userOption.id)}>
+                        {userOption.fullName || userOption.username || `User ${userOption.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           {job.description && <p className="text-sm text-neutral-600">{job.description}</p>}
@@ -196,6 +293,11 @@ export default function WorkshopJobDetail() {
             label="Customer"
             value={job.customerName || "Not recorded"}
             subValue={job.customerEmail}
+          />
+          <MetaItem
+            icon={<UserCheck size={16} />}
+            label="Assigned to"
+            value={assignedUserName ?? "Unassigned"}
           />
           <MetaItem
             icon={<Phone size={16} />}
