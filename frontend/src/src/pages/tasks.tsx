@@ -124,103 +124,100 @@ export default function Tasks() {
     }
   };
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-      <Card>
-        <CardHeader className="space-y-6 pb-4">
-          <div className="space-y-1">
-            <CardTitle className="text-2xl font-semibold text-neutral-800">
-              Tasks
-            </CardTitle>
-            <p className="text-sm text-neutral-500">
-              Monitor workloads, filter assignments, and keep the board moving
-              smoothly.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <div className="relative w-full sm:w-72">
-                <Search
-                  size={16}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 transform text-neutral-400"
-                />
-                <Input
-                  placeholder="Search tasks..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8"
-                />
-              </div>
-              <Select
-                value={assignedToFilter}
-                onValueChange={setAssignedToFilter}
-              >
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Assigned To" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Members</SelectItem>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {users.map((user: any) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      {user.fullName || user.username}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    return (
+      <div className="mx-auto mt-10 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <Card className="border border-border/60 bg-card/80 backdrop-blur">
+          <CardHeader className="space-y-6 pb-4">
+            <div className="space-y-2">
+              <CardTitle className="text-2xl font-semibold text-foreground">
+                Tasks
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Monitor workloads, filter assignments, and keep the board moving smoothly.
+              </p>
             </div>
-            <ToggleGroup
-              type="single"
-              value={quickFilter}
-              onValueChange={handleQuickFilterChange}
-              className="flex flex-wrap gap-2 md:justify-end"
-            >
-              <ToggleGroupItem
-                value="all"
-                className="border border-neutral-200 px-3 py-1 text-xs"
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <div className="relative w-full sm:w-72">
+                  <Search
+                    size={16}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 transform text-muted-foreground"
+                  />
+                  <Input
+                    placeholder="Search tasks..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full rounded-xl border-border/70 bg-background/80 pl-9 focus-visible:ring-primary/40"
+                  />
+                </div>
+                <Select
+                  value={assignedToFilter}
+                  onValueChange={setAssignedToFilter}
+                >
+                  <SelectTrigger className="w-full rounded-xl border-border/70 bg-background/80 sm:w-48">
+                    <SelectValue placeholder="Assigned To" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Members</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {users.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.fullName || user.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <ToggleGroup
+                type="single"
+                value={quickFilter}
+                onValueChange={handleQuickFilterChange}
+                className="flex flex-wrap gap-2 md:justify-end"
               >
-                All
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="overdue"
-                className="border border-red-200 px-3 py-1 text-xs data-[state=on]:bg-red-50 data-[state=on]:text-red-700"
-              >
-                Overdue
-                <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-                  {quickMetrics.overdue}
-                </span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="dueSoon"
-                className="border border-amber-200 px-3 py-1 text-xs data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700"
-              >
-                Due Soon
-                <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-                  {quickMetrics.dueSoon}
-                </span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="completed"
-                className="border border-green-200 px-3 py-1 text-xs data-[state=on]:bg-green-50 data-[state=on]:text-green-700"
-              >
-                Completed
-                <span className="ml-2 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
-                  {quickMetrics.completed}
-                </span>
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="mt-6">
+                <ToggleGroupItem
+                  value="all"
+                  className="rounded-full border border-border/70 px-3 py-1 text-xs data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                >
+                  All
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="overdue"
+                  className="rounded-full border border-red-200 px-3 py-1 text-xs data-[state=on]:bg-red-50 data-[state=on]:text-red-700 dark:border-red-500/30 dark:data-[state=on]:bg-red-500/20 dark:data-[state=on]:text-red-200"
+                >
+                  Overdue
+                  <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:bg-red-500/20 dark:text-red-200">
+                    {quickMetrics.overdue}
+                  </span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="dueSoon"
+                  className="rounded-full border border-amber-200 px-3 py-1 text-xs data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700 dark:border-amber-500/30 dark:data-[state=on]:bg-amber-500/20 dark:data-[state=on]:text-amber-200"
+                >
+                  Due Soon
+                  <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-500/20 dark:text-amber-200">
+                    {quickMetrics.dueSoon}
+                  </span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="completed"
+                  className="rounded-full border border-emerald-200 px-3 py-1 text-xs data-[state=on]:bg-emerald-50 data-[state=on]:text-emerald-700 dark:border-emerald-500/30 dark:data-[state=on]:bg-emerald-500/20 dark:data-[state=on]:text-emerald-200"
+                >
+                  Completed
+                  <span className="ml-2 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">
+                    {quickMetrics.completed}
+                  </span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-6">
             <TaskBoard
               tasks={filteredTasks}
               users={users}
               isLoading={isLoading}
             />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+          </CardContent>
+        </Card>
+      </div>
+    );
 }

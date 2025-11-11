@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { useTheme } from "@/components/theme/theme-provider";
 
 export default function Settings() {
   // Company information
@@ -26,8 +27,8 @@ export default function Settings() {
     website: "www.mooresmowers.co.uk"
   });
   
-  // Other settings
-  const [theme, setTheme] = useState("light");
+  // Theme preferences
+  const { theme, setTheme: setThemePreference, resolvedTheme } = useTheme();
   
   // Job backup countdown
   const [timeUntilBackup, setTimeUntilBackup] = useState("");
@@ -273,20 +274,20 @@ export default function Settings() {
                   />
                 </div>
                 
-                <div className="mt-6 flex justify-end">
-                  <Button 
-                    onClick={saveCompanyInfo} 
-                    className="bg-green-700 hover:bg-green-800"
-                  >
-                    Save Changes
-                  </Button>
-                </div>
+                  <div className="mt-6 flex justify-end">
+                    <Button
+                      onClick={saveCompanyInfo}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      Save Changes
+                    </Button>
+                  </div>
                 
                 <Separator className="my-4" />
                 
                 <div className="space-y-2">
                   <Label htmlFor="theme-select">Theme</Label>
-                  <Select value={theme} onValueChange={setTheme}>
+                  <Select value={theme} onValueChange={(value) => setThemePreference(value as "light" | "dark" | "system")}>
                     <SelectTrigger id="theme-select">
                       <SelectValue placeholder="Select theme" />
                     </SelectTrigger>
@@ -296,6 +297,9 @@ export default function Settings() {
                       <SelectItem value="system">System</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Currently using <span className="font-semibold text-foreground">{resolvedTheme}</span> mode
+                  </p>
                 </div>
                 
                 <Separator className="my-4" />
@@ -318,10 +322,10 @@ export default function Settings() {
                     <p className="text-sm text-gray-600 mb-3">
                       Weekly job backup emails are automatically sent to matthew1111moore@gmail.com every Monday at 9 AM.
                     </p>
-                    <Button 
+                    <Button
                       onClick={() => sendBackupMutation.mutate()}
                       disabled={sendBackupMutation.isPending}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-primary/90 hover:bg-primary"
                     >
                       <Mail className="h-4 w-4 mr-2" />
                       {sendBackupMutation.isPending ? 'Sending...' : 'Send Backup Now'}
@@ -330,7 +334,7 @@ export default function Settings() {
                 </div>
                 
                 <div className="pt-4 flex justify-end">
-                  <Button className="bg-green-700 hover:bg-green-800">
+                  <Button className="bg-primary hover:bg-primary/90">
                     Save Changes
                   </Button>
                 </div>

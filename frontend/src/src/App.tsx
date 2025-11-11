@@ -43,14 +43,14 @@ function ProtectedRoute({ component: Component, ...rest }: { component: React.Co
     }
   }, [isAuthenticated, isLoading, navigate, error]);
   
-  // Show loading spinner while checking authentication
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gradient-to-r from-green-50 to-blue-50">
-        <Spinner size="lg" text="Loading your dashboard..." />
-      </div>
-    );
-  }
+    // Show loading spinner while checking authentication
+    if (isLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background via-primary/10 to-accent/10">
+          <Spinner size="lg" text="Loading your dashboard..." />
+        </div>
+      );
+    }
   
   // Only render the component if the user is authenticated
   return isAuthenticated ? <Component {...rest} /> : null;
@@ -118,29 +118,29 @@ function AuthAwareLayout() {
   const isPublicRoute = publicRoutes.includes(location);
   const isCustomerPortalRoute = customerPortalRoutes.includes(location);
   
-  // For login, registration, job tracker, and payment pages, don't show the sidebar/header
-  if (!isAuthenticated || isPublicRoute || isCustomerPortalRoute) {
+    // For login, registration, job tracker, and payment pages, don't show the sidebar/header
+    if (!isAuthenticated || isPublicRoute || isCustomerPortalRoute) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background text-foreground">
+          <Router />
+        </div>
+      );
+    }
+  
+    // For protected routes, show the full app layout with sidebar
     return (
-      <div className="bg-neutral-100 min-h-screen">
-        <Router />
+      <div className="flex h-screen flex-col bg-slate-950/0 md:flex-row">
+        <Sidebar />
+        <div className="mt-12 flex flex-1 flex-col overflow-hidden bg-background transition-colors md:mt-0">
+          <main className="relative z-0 flex-1 overflow-y-auto bg-gradient-to-br from-background via-secondary/20 to-background pb-10">
+            <Router />
+          </main>
+          <footer className="bg-card/95 border-t border-border/70 px-6 py-3 text-center text-xs text-muted-foreground backdrop-blur">
+            Designed and developed in house by Matthew Moore
+          </footer>
+        </div>
       </div>
     );
-  }
-  
-  // For protected routes, show the full app layout with sidebar
-  return (
-    <div className="flex flex-col md:flex-row h-screen bg-neutral-100">
-      <Sidebar />
-      <div className="flex-1 focus:outline-none mt-12 md:mt-0 overflow-y-auto flex flex-col">
-        <main className="flex-1 relative pb-8 z-0">
-          <Router />
-        </main>
-        <footer className="bg-white border-t border-neutral-200 py-3 px-6 text-center text-xs text-neutral-500 flex-shrink-0">
-          Designed and developed in house by Matthew Moore
-        </footer>
-      </div>
-    </div>
-  );
 }
 
 function App() {
