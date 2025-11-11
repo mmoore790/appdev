@@ -184,9 +184,15 @@ export class TaskService {
       draft.status = normalizedStatus;
 
       // Handle completion timestamps
-      if (normalizedStatus === "completed" && !draft.completedAt) {
-        draft.completedAt = new Date().toISOString();
-      } else if (normalizedStatus !== "completed") {
+      if (normalizedStatus === "completed") {
+        if (!draft.completedAt) {
+          draft.completedAt = new Date().toISOString();
+        }
+      } else if (normalizedStatus === "archived") {
+        if (draft.completedAt == null && currentTask.completedAt) {
+          draft.completedAt = currentTask.completedAt;
+        }
+      } else {
         draft.completedAt = null;
       }
     }
