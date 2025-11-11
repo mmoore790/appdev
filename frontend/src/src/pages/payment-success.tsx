@@ -38,8 +38,8 @@ export default function PaymentSuccess() {
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
     } else {
-      // No session ID found, redirect to payments page
-      navigate('/payments');
+      // No session ID found, redirect to public tracker as a safe default
+      navigate('/job-tracker');
     }
   }, [navigate]);
 

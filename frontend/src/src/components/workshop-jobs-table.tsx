@@ -1,14 +1,13 @@
 import { useState, type MouseEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Plus, Printer, DollarSign, RefreshCw } from "lucide-react";
+import { Search, Plus, Printer } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogTrigger,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -23,12 +22,9 @@ import {
   PaginationPrevious,
 } from "./ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Badge } from "./ui/badge";
 import { formatDate, getStatusColor, cn } from "../lib/utils";
-import { JobForm } from "./job-form";
 import { JobWizard } from "./job-wizard";
 import { PrintJobDialog } from "./print-job-dialog";
-import { JobPaymentForm } from "./job-payment-form";
 import { apiRequest } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 
@@ -50,44 +46,13 @@ export function WorkshopJobsTable({
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [wizardDialogOpen, setWizardDialogOpen] = useState(false);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
-  const [selectedJob, setSelectedJob] = useState<any>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [statusChangeJob, setStatusChangeJob] = useState<any>(null);
   const [newStatus, setNewStatus] = useState<string>("");
   const itemsPerPage = 10;
   const { toast } = useToast();
   const [, navigate] = useLocation();
-
-  const refreshAllPaymentsMutation = useMutation({
-    mutationFn: async () => {
-      const refreshPromises = jobs
-        .filter((job) => job.paymentStatus !== "paid")
-        .map((job) => apiRequest("POST", `/api/jobs/${job.id}/payments/refresh`));
-
-      const results = await Promise.allSettled(refreshPromises);
-      return results.filter((result) => result.status === "fulfilled").length;
-    },
-    onSuccess: (updatedCount: number) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payment-requests"] });
-
-      toast({
-        title: "Payment Status Updated",
-        description: `Checked payment status for ${updatedCount} jobs`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to refresh payment status",
-        variant: "destructive",
-      });
-    },
-  });
 
   const statusUpdateMutation = useMutation({
     mutationFn: async ({ jobId, status }: { jobId: number; status: string }) => {
@@ -270,24 +235,6 @@ export function WorkshopJobsTable({
     }
   }
 
-  const getPaymentStatusBadge = (job: any) => {
-    if (!job.paymentStatus || job.paymentStatus === "unpaid") {
-      return <Badge variant="destructive" className="text-xs">Unpaid</Badge>;
-    }
-    if (job.paymentStatus === "paid") {
-      return <Badge variant="default" className="bg-green-600 text-xs">Paid</Badge>;
-    }
-    if (job.paymentStatus === "pending_payment_request") {
-      return <Badge variant="secondary" className="text-xs">Request Sent</Badge>;
-    }
-    return <Badge variant="outline" className="text-xs">{job.paymentStatus}</Badge>;
-  };
-
-  const handlePaymentClick = (job: any) => {
-    setSelectedJob(job);
-    setPaymentDialogOpen(true);
-  };
-
   return (
     <div className={cn("space-y-4", className)}>
       {showSearch && (
@@ -308,21 +255,6 @@ export function WorkshopJobsTable({
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refreshAllPaymentsMutation.mutate()}
-                disabled={refreshAllPaymentsMutation.isPending}
-                className="h-11 gap-1.5 border-neutral-200 text-neutral-600 hover:text-green-700"
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    refreshAllPaymentsMutation.isPending ? "animate-spin text-green-600" : "text-neutral-500"
-                  )}
-                />
-                {refreshAllPaymentsMutation.isPending ? "Checking..." : "Check Payments"}
-              </Button>
-              <Button
                 onClick={() => setWizardDialogOpen(true)}
                 className="h-11 gap-1.5 bg-green-700 text-white hover:bg-green-800"
               >
@@ -338,47 +270,44 @@ export function WorkshopJobsTable({
         <div className="hidden lg:block">
           <div className="overflow-x-auto px-4 py-4">
             <Table className="min-w-[960px]">
-              <TableHeader>
-                <TableRow className="border-b border-neutral-200">
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Job ID
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Brand &amp; Model
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Payment
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Customer
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Assigned To
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Status
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Created
-                  </TableHead>
-                  <TableHead className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+                <TableHeader>
+                  <TableRow className="border-b border-neutral-200">
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Job ID
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Brand &amp; Model
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Customer
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Assigned To
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Status
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Created
+                    </TableHead>
+                    <TableHead className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center">
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
                         <p className="text-sm text-neutral-600">Loading jobs...</p>
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredJobs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center">
+                  ) : filteredJobs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="rounded-full bg-neutral-100 p-3">
                           <svg className="h-8 w-8 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -420,22 +349,6 @@ export function WorkshopJobsTable({
                         </TableCell>
                       <TableCell className="px-6 py-4 text-sm text-neutral-700">
                         {getEquipmentName(job)}
-                      </TableCell>
-                        <TableCell className="px-6 py-4 text-sm text-neutral-700" onClick={stopPropagation}>
-                          <div className="flex items-center gap-2">
-                          {getPaymentStatusBadge(job)}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handlePaymentClick(job);
-                              }}
-                            className="h-7 w-7 p-0 text-neutral-500 hover:text-green-700"
-                          >
-                            <DollarSign className="h-4 w-4" />
-                          </Button>
-                        </div>
                       </TableCell>
                       <TableCell className="px-6 py-4 text-sm text-neutral-700">
                         <div className="flex items-center gap-3">
@@ -496,64 +409,24 @@ export function WorkshopJobsTable({
                       </TableCell>
                         <TableCell className="px-6 py-4 text-right" onClick={stopPropagation}>
                           <div className="flex items-center justify-end gap-2">
-                          <PrintJobDialog
-                            job={job}
-                            customerName={getCustomerName(job.customerId, job)}
-                            equipmentName={getEquipmentName(job)}
-                            assigneeName={getAssigneeName(job.assignedTo)}
-                            trigger={
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-1 border-neutral-200 text-neutral-600 hover:text-green-700"
-                              >
-                                <Printer size={14} />
-                                <span className="hidden sm:inline">Print</span>
-                              </Button>
-                            }
-                          />
-                          <Dialog
-                            open={editDialogOpen && selectedJobId === job.id}
-                            onOpenChange={(open) => {
-                              if (!open) {
-                                setEditDialogOpen(false);
-                                setSelectedJobId(null);
-                              }
-                            }}
-                            >
-                              <DialogTrigger asChild>
+                            <PrintJobDialog
+                              job={job}
+                              customerName={getCustomerName(job.customerId, job)}
+                              equipmentName={getEquipmentName(job)}
+                              assigneeName={getAssigneeName(job.assignedTo)}
+                              trigger={
                                 <Button
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
-                                  className="text-green-700 hover:bg-green-50 hover:text-green-800"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setSelectedJobId(job.id);
-                                    setEditDialogOpen(true);
-                                  }}
+                                  className="gap-1 border-neutral-200 text-neutral-600 hover:text-green-700"
                                 >
-                                  View &amp; Edit
+                                  <Printer size={14} />
+                                  <span className="hidden sm:inline">Print</span>
                                 </Button>
-                              </DialogTrigger>
-                            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
-                              <DialogHeader>
-                                <DialogTitle>View &amp; Edit Job</DialogTitle>
-                              </DialogHeader>
-                              <JobForm
-                                jobId={job.id}
-                                editMode
-                                onComplete={() => {
-                                  /* keep dialog open for review */
-                                }}
-                                onCancel={() => {
-                                  setEditDialogOpen(false);
-                                  setSelectedJobId(null);
-                                }}
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </TableCell>
+                              }
+                            />
+                          </div>
+                        </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -591,44 +464,30 @@ export function WorkshopJobsTable({
                     onClick={() => handleNavigateToJob(job.id)}
                   >
                     <CardContent className="space-y-4 p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="mb-1 flex items-center gap-2">
-                            <span className="text-lg font-semibold text-green-800">{job.jobId}</span>
-                            {getPaymentStatusBadge(job)}
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-lg font-semibold text-green-800 block mb-1">{job.jobId}</span>
+                            <p className="text-sm font-medium text-neutral-800">{getEquipmentName(job)}</p>
                           </div>
-                          <p className="text-sm font-medium text-neutral-800">{getEquipmentName(job)}</p>
+                          <div className="flex gap-2">
+                            <PrintJobDialog
+                              job={job}
+                              customerName={getCustomerName(job.customerId, job)}
+                              equipmentName={getEquipmentName(job)}
+                              assigneeName={getAssigneeName(job.assignedTo)}
+                              trigger={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 border-neutral-200 text-neutral-600 hover:text-green-700"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <Printer size={14} />
+                                </Button>
+                              }
+                            />
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handlePaymentClick(job);
-                            }}
-                            className="h-8 w-8 p-0 text-neutral-500 hover:text-green-700"
-                          >
-                            <DollarSign className="h-4 w-4" />
-                          </Button>
-                          <PrintJobDialog
-                            job={job}
-                            customerName={getCustomerName(job.customerId, job)}
-                            equipmentName={getEquipmentName(job)}
-                            assigneeName={getAssigneeName(job.assignedTo)}
-                            trigger={
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 w-8 p-0 border-neutral-200 text-neutral-600 hover:text-green-700"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                <Printer size={14} />
-                              </Button>
-                            }
-                          />
-                        </div>
-                      </div>
 
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-xs font-semibold text-green-700">
@@ -683,48 +542,25 @@ export function WorkshopJobsTable({
                         <span className="text-xs text-neutral-500">{formatDate(job.createdAt)}</span>
                       </div>
 
-                      <div className="flex justify-end" onClick={stopPropagation}>
-                        <Dialog
-                          open={editDialogOpen && selectedJobId === job.id}
-                          onOpenChange={(open) => {
-                            if (!open) {
-                              setEditDialogOpen(false);
-                              setSelectedJobId(null);
+                        <div className="flex justify-end" onClick={stopPropagation}>
+                          <PrintJobDialog
+                            job={job}
+                            customerName={getCustomerName(job.customerId, job)}
+                            equipmentName={getEquipmentName(job)}
+                            assigneeName={getAssigneeName(job.assignedTo)}
+                            trigger={
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1 border-neutral-200 text-neutral-600 hover:text-green-700"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <Printer size={14} />
+                                <span className="text-xs font-medium">Print</span>
+                              </Button>
                             }
-                          }}
-                        >
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="bg-green-700 text-white hover:bg-green-800"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSelectedJobId(job.id);
-                                setEditDialogOpen(true);
-                              }}
-                            >
-                              View &amp; Edit
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
-                            <DialogHeader>
-                              <DialogTitle>View &amp; Edit Job</DialogTitle>
-                            </DialogHeader>
-                            <JobForm
-                              jobId={job.id}
-                              editMode
-                              onComplete={() => {
-                                /* keep dialog open */
-                              }}
-                              onCancel={() => {
-                                setEditDialogOpen(false);
-                                setSelectedJobId(null);
-                              }}
-                            />
-                          </DialogContent>
-                        </Dialog>
-                      </div>
+                          />
+                        </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -829,17 +665,6 @@ export function WorkshopJobsTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {selectedJob && (
-        <JobPaymentForm
-          job={selectedJob}
-          open={paymentDialogOpen}
-          onClose={() => {
-            setPaymentDialogOpen(false);
-            setSelectedJob(null);
-          }}
-        />
-      )}
 
       <JobWizard open={wizardDialogOpen} onOpenChange={setWizardDialogOpen} mode="create" />
     </div>

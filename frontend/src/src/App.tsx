@@ -16,7 +16,6 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Account from "@/pages/account";
-import Payments from "@/pages/payments";
 import Customers from "@/pages/customers";
 import PaymentSuccess from "@/pages/payment-success";
 import PaymentCancel from "@/pages/payment-cancel";
@@ -97,9 +96,6 @@ function Router() {
 
       <Route path="/callbacks">
         {() => <ProtectedRoute component={Callbacks} />}
-      </Route>
-      <Route path="/payments">
-        {() => <ProtectedRoute component={Payments} />}
       </Route>
       <Route path="/payments/success" component={PaymentSuccess} />
       <Route path="/payments/cancel" component={PaymentCancel} />
