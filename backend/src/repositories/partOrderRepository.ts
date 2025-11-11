@@ -20,6 +20,10 @@ export class PartOrderRepository {
     return this.store.getOverduePartsOnOrder(daysSinceOrder);
   }
 
+  findByJob(jobId: number): Promise<PartOnOrder[]> {
+    return this.store.getPartsOnOrderByJob(jobId);
+  }
+
   create(data: InsertPartOnOrder): Promise<PartOnOrder> {
     return this.store.createPartOnOrder(data);
   }

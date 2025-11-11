@@ -207,178 +207,167 @@ export function WorkCompletedForm({ jobId, readOnly = false, onWorkAdded }: Work
           </div>
         </CardHeader>
 
-        {!readOnly && isAddingWork && (
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Work Category*</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select work category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {workCategories.map(category => (
-                              <SelectItem key={category.value} value={category.value}>
-                                {category.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+          {!readOnly && isAddingWork && (
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Work category*</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select work category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {workCategories.map((category) => (
+                                <SelectItem key={category.value} value={category.value}>
+                                  {category.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>Group the work into a service bucket for reporting.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="completedBy"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Completed by*</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select technician" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {Array.isArray(users) &&
+                                users.map((user: any) => (
+                                  <SelectItem key={user.id} value={user.id.toString()}>
+                                    {user.fullName}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>Who carried out this portion of the work.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <FormField
                     control={form.control}
-                    name="completedBy"
+                    name="workDescription"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Completed By*</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select technician" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {Array.isArray(users) && users.map((user: any) => (
-                              <SelectItem key={user.id} value={user.id.toString()}>
-                                {user.fullName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="workDescription"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Work Description*</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Describe the work completed in detail..."
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="laborHours"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Labor Hours*</FormLabel>
+                        <FormLabel>What was done*</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            step="0.25"
-                            min="0"
-                            placeholder="e.g. 2.5"
+                          <Textarea placeholder="Highlight the diagnostics and repairs performed…" rows={3} {...field} />
+                        </FormControl>
+                        <FormDescription>Customers see this on their paperwork, so be specific and friendly.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="laborHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Labour hours*</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.25"
+                              min="0"
+                              placeholder="e.g. 2.5"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>Log the time spent so we can track utilisation.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="partsCost"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Parts cost (£)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" placeholder="e.g. 45.99" {...field} />
+                          </FormControl>
+                          <FormDescription>Optional — helps reconcile job profitability.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="partsUsed"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Parts used</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="List any parts fitted or consumables used…"
+                            rows={2}
                             {...field}
                           />
+                        </FormControl>
+                        <FormDescription>This feeds into the job summary and customer paperwork.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Internal notes</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Optional handover notes for the front desk…" rows={2} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="partsCost"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Parts Cost (£)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="e.g. 45.99"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="partsUsed"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Parts Used</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="List parts and components used..."
-                          rows={2}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Additional Notes</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Any additional notes or observations..."
-                          rows={2}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    type="submit"
-                    disabled={addWorkMutation.isPending}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {addWorkMutation.isPending ? "Saving..." : "Save Work Entry"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsAddingWork(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        )}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button
+                      type="submit"
+                      disabled={addWorkMutation.isPending}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {addWorkMutation.isPending ? "Saving…" : "Save work entry"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setIsAddingWork(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </CardContent>
+          )}
       </Card>
 
       {/* Existing Work Entries */}

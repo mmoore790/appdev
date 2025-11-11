@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,6 +21,7 @@ import { PrintJobDialog } from "@/components/print-job-dialog";
 import { JobServiceForm } from "@/components/job-service-form";
 import { WorkDetailsSummary } from "@/components/work-details-summary";
 import { WorkCompletedForm } from "@/components/work-completed-form";
+import { PartOrderQuickCreate } from "@/components/part-order-quick-create";
 
 // Define the job schema for form validation
 const jobSchema = z.object({
@@ -29,6 +30,7 @@ const jobSchema = z.object({
   customerName: z.string().min(1, { message: "Customer name is required" }),
   customerEmail: z.string().email("Please enter a valid email").optional(),
   customerPhone: z.string().optional(),
+  customerAddress: z.string().optional(),
   equipmentId: z.string().optional(),
   equipmentDescription: z.string().optional(),
   assignedTo: z.string().optional(),
@@ -55,6 +57,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
   const [showPrintOption, setShowPrintOption] = useState(false);
   const [createdJob, setCreatedJob] = useState<any>(null);
   const [showServiceSection, setShowServiceSection] = useState(false);
+  const [partsDialogOpen, setPartsDialogOpen] = useState(false);
 
   // State for custom customer name
   const [customCustomerName, setCustomCustomerName] = useState("");
@@ -76,6 +79,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       customerName: "",
       customerEmail: "",
       customerPhone: "",
+    customerAddress: "",
       equipmentId: "",
       equipmentDescription: "",
       assignedTo: "",
@@ -176,8 +180,51 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
     }
   }, [form.watch("customerId"), allEquipment]);
 
-  // Use all users as potential assignees
-  console.log("Users data:", users);
+    const selectedCustomerId = form.watch("customerId");
+    const normalizedCustomerName = customCustomerName.trim().toLowerCase();
+    const matchingCustomers = useMemo(() => {
+      if (!Array.isArray(customers) || !normalizedCustomerName) return [];
+      return customers
+        .filter((customer: any) => {
+          if (!customer?.name) return false;
+          if (selectedCustomerId && String(customer.id) === selectedCustomerId) return false;
+          return customer.name.toLowerCase().includes(normalizedCustomerName);
+        })
+        .slice(0, 5);
+    }, [customers, normalizedCustomerName, selectedCustomerId]);
+    const selectedCustomer = useMemo(() => {
+      if (!selectedCustomerId || !Array.isArray(customers)) return null;
+      const id = parseInt(selectedCustomerId, 10);
+      if (Number.isNaN(id)) return null;
+      return customers.find((customer: any) => customer.id === id) ?? null;
+    }, [customers, selectedCustomerId]);
+
+    const exactMatch = useMemo(() => {
+      if (!normalizedCustomerName) return null;
+      return (
+        matchingCustomers.find(
+          (customer: any) => customer.name?.toLowerCase() === normalizedCustomerName
+        ) ?? null
+      );
+    }, [matchingCustomers, normalizedCustomerName]);
+
+    const handleSelectExistingCustomer = (customer: any) => {
+      if (!customer) return;
+      form.setValue("customerId", customer.id ? String(customer.id) : "");
+      setCustomCustomerName(customer.name || "");
+      form.setValue("customerName", customer.name || "");
+      form.setValue("customerEmail", customer.email || "");
+      form.setValue("customerPhone", customer.phone || "");
+      form.setValue("customerAddress", customer.address || "");
+    };
+
+    const clearSelectedCustomer = () => {
+      form.setValue("customerId", "");
+      form.setValue("customerName", "");
+      form.setValue("customerEmail", "");
+      form.setValue("customerPhone", "");
+      form.setValue("customerAddress", "");
+    };
 
   // Refetch job data when component mounts or jobId changes
   useEffect(() => {
@@ -193,8 +240,6 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
   useEffect(() => {
     // Only process if job exists and has data
     if (job && typeof job === 'object' && 'jobId' in job) {
-      console.log("[JobForm] Loading job data into form:", job);
-      
       // Check if we have a custom customer name from the job
       if ('customerName' in job && job.customerName) {
         setCustomCustomerName(job.customerName as string);
@@ -202,8 +247,9 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       
       // Get customer data from customers array if we have a customerId
       let customerName = (job as any).customerName || "";
-      let customerEmail = "";
-      let customerPhone = "";
+    let customerEmail = "";
+    let customerPhone = "";
+    let customerAddress = "";
       
       if ((job as any).customerId && customers && Array.isArray(customers)) {
         const customer = customers.find((c: any) => c.id === (job as any).customerId);
@@ -211,6 +257,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
           customerName = customer.name;
           customerEmail = customer.email || "";
           customerPhone = customer.phone || "";
+        customerAddress = customer.address || "";
           // Set the custom customer name state for display
           setCustomCustomerName(customer.name);
         }
@@ -226,6 +273,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
         customerName: customerName,
         customerEmail: customerEmail,
         customerPhone: customerPhone,
+        customerAddress: customerAddress,
         equipmentId: (job as any).equipmentId?.toString() || "",
         equipmentDescription: (job as any).equipmentDescription || "",
         assignedTo: (job as any).assignedTo?.toString() || "",
@@ -257,23 +305,18 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       // Check if we need to create a new customer (when customCustomerName is used)
       if (customCustomerName && customCustomerName.trim() && !data.customerId) {
         try {
-          console.log("[DEBUG] Attempting to create customer with name:", customCustomerName);
-          
           // Create customer data with proper defaults
           const customerData = {
             name: customCustomerName.trim(),
             email: data.customerEmail?.trim() || " ", // Use provided email or space character
             phone: data.customerPhone?.trim() || " ", // Use provided phone or space character
-            address: " ", // Space character to avoid empty string validation issues
+          address: data.customerAddress?.trim() || " ", // Space character to avoid empty string validation issues
             notes: "Auto-created from job form"
           };
-          
-          console.log("[DEBUG] Customer data being sent:", customerData);
           
           // Create new customer
           const newCustomer = await apiRequest("POST", "/api/customers", customerData);
           
-          console.log("[DEBUG] Customer creation response:", newCustomer);
           
           // Validate customer response
           if (!newCustomer) {
@@ -293,17 +336,17 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
           
           // Successfully created customer
           customerId = newCustomer.id.toString();
-          console.log("[DEBUG] Created new customer with ID:", customerId);
         } catch (error: any) {
           console.error("[ERROR] Failed to create customer:", error);
           throw new Error("Failed to create customer: " + (error.message || "Unknown error"));
         }
       }
       
-      try {
-        // Prepare job data with proper type conversions
-        const jobData = {
-          ...data,
+        try {
+          const { customerAddress: _customerAddress, ...jobPayload } = data;
+          // Prepare job data with proper type conversions
+          const jobData = {
+            ...jobPayload,
           equipmentId: data.useCustomEquipment ? null : (data.equipmentId ? parseInt(data.equipmentId) : null),
           equipmentDescription: data.equipmentDescription || null, // Always save equipment description from Brand & Model field
           customerId: parseInt(customerId),
@@ -311,11 +354,8 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
           estimatedHours: data.estimatedHours ? parseInt(data.estimatedHours) : null
         };
         
-        console.log("[DEBUG] Submitting job with prepared data:", jobData);
-        
         // Create the job
         const result = await apiRequest("POST", "/api/jobs", jobData);
-        console.log("[DEBUG] Job created successfully:", result);
         return result;
       } catch (error: any) {
         console.error("[ERROR] Failed to create job:", error);
@@ -355,23 +395,18 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       // Check if we need to create a new customer (when customCustomerName is used)
       if (customCustomerName && customCustomerName.trim() && !data.customerId) {
         try {
-          console.log("[Job Form] Attempting to create customer with name:", customCustomerName);
-          
           // Create customer data with proper defaults
           const customerData = {
             name: customCustomerName.trim(),
             email: data.customerEmail?.trim() || " ", // Use provided email or space character
             phone: data.customerPhone?.trim() || " ", // Use provided phone or space character
-            address: " ", // Space character to avoid empty string validation issues
+              address: data.customerAddress?.trim() || " ", // Space character to avoid empty string validation issues
             notes: "Auto-created from job form"
           };
-          
-          console.log("[Job Form] Customer data being sent:", customerData);
           
           // Create new customer
           const newCustomer = await apiRequest("POST", "/api/customers", customerData);
           
-          console.log("[Job Form] Customer creation response:", newCustomer);
           
           // Validate customer response
           if (!newCustomer) {
@@ -391,16 +426,16 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
           
           // Successfully created customer
           customerId = newCustomer.id.toString();
-          console.log("[Job Form] Created new customer with ID:", customerId);
         } catch (error: any) {
           console.error("[Job Form] Failed to create customer:", error);
           throw new Error("Failed to create customer: " + (error.message || "Unknown error"));
         }
       }
       
-      // Prepare job data
-      const jobData = {
-        ...data,
+        const { customerAddress: _customerAddress, ...jobPayload } = data;
+        // Prepare job data
+        const jobData = {
+          ...jobPayload,
         equipmentId: data.useCustomEquipment ? null : (data.equipmentId ? parseInt(data.equipmentId) : null),
         equipmentDescription: data.equipmentDescription || null, // Always save equipment description from Brand & Model field
         customerId: parseInt(customerId),
@@ -408,7 +443,6 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
         estimatedHours: data.estimatedHours ? parseInt(data.estimatedHours) : null
       };
       
-      console.log("[Job Form] Updating job with data:", jobData);
       
       // Update the job
       return apiRequest("PUT", `/api/jobs/${jobId}`, jobData);
@@ -483,8 +517,6 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
 
   // Form submission handler
   function onSubmit(data: z.infer<typeof jobSchema>) {
-    console.log("Form data being submitted:", data);
-    
     // Use the customer name from the form input
     data.customerName = customCustomerName || data.customerName;
     
@@ -600,6 +632,9 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
     );
   }
 
+  const partOrderJobId = (job as any)?.id ?? createdJob?.id ?? null;
+  const partOrderJobCode = (job as any)?.jobId ?? createdJob?.jobId ?? form.watch("jobId");
+
   return (
     <>
     <Card>
@@ -626,7 +661,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
         <TabsContent value="details">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-              <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -664,6 +699,11 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
                             } else {
                               field.onChange(value);
                               setShowCustomerNotification(value === "ready_for_pickup");
+                                if (value === "parts_ordered" && field.value !== value && editMode && jobId) {
+                                  setPartsDialogOpen(true);
+                                } else if (value !== "parts_ordered") {
+                                  setPartsDialogOpen(false);
+                                }
                             }
                           }}
                         >
@@ -686,207 +726,291 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <FormItem>
-                    <FormLabel>Customer Name*</FormLabel>
-                    <Input
-                      placeholder="Enter customer name"
-                      value={customCustomerName}
-                      onChange={(e) => handleCustomerNameChange(e.target.value)}
-                      disabled={readOnly}
-                    />
-                    {form.formState.errors.customerName && (
-                      <p className="text-sm font-medium text-destructive">
-                        {form.formState.errors.customerName.message}
+                  <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-neutral-800">Customer</h3>
+                        <p className="text-xs text-neutral-500">
+                          Select an existing customer or add a new contact for this job.
+                        </p>
+                      </div>
+                      {selectedCustomerId && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-neutral-600 hover:text-green-700"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            clearSelectedCustomer();
+                            setCustomCustomerName("");
+                          }}
+                          disabled={readOnly}
+                        >
+                          Clear selection
+                        </Button>
+                      )}
+                    </div>
+
+                    <FormItem>
+                      <FormLabel>Customer name*</FormLabel>
+                      <Input
+                        placeholder="Start typing or paste a name"
+                        value={customCustomerName}
+                        onChange={(event) => handleCustomerNameChange(event.target.value)}
+                        disabled={readOnly}
+                      />
+                      {form.formState.errors.customerName && (
+                        <p className="text-sm font-medium text-destructive">
+                          {form.formState.errors.customerName.message}
+                        </p>
+                      )}
+                      {selectedCustomer && (
+                        <p className="mt-1 text-xs text-green-700">
+                          Using saved contact details for <span className="font-medium">{selectedCustomer.name}</span>
+                        </p>
+                      )}
+                    </FormItem>
+
+                    {!readOnly && matchingCustomers.length > 0 && (
+                      <div className="rounded-md border border-neutral-200 bg-white p-2">
+                        <p className="text-xs font-semibold text-neutral-600">Matches in your customer list</p>
+                        <div className="mt-2 space-y-1">
+                          {matchingCustomers.map((customer: any) => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs hover:bg-neutral-100"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                handleSelectExistingCustomer(customer);
+                              }}
+                            >
+                              <span className="font-medium text-neutral-700">{customer.name}</span>
+                              <span className="text-neutral-500">
+                                {[customer.email, customer.phone].filter(Boolean).join(" • ")}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!readOnly && normalizedCustomerName && matchingCustomers.length === 0 && (
+                      <p className="text-xs text-neutral-500">
+                        No saved customer found. We'll add <span className="font-semibold">{customCustomerName}</span> to
+                        your customer list when you save this job.
                       </p>
                     )}
-                  </FormItem>
-                  
-                  <FormField
-                    control={form.control}
-                    name="customerEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Customer Email</FormLabel>
-                        <Input
-                          placeholder="customer@example.com"
-                          {...field}
-                          disabled={readOnly}
-                        />
-                        <FormDescription>
-                          Used for job tracking and notifications
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
+
+                    {exactMatch && (!selectedCustomer || selectedCustomer.id !== exactMatch.id) && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                        Already saved as <span className="font-semibold">{exactMatch.name}</span>. Select them above to
+                        reuse their contact details.
+                      </div>
                     )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="customerPhone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Customer Phone Number</FormLabel>
-                        <Input
-                          placeholder="e.g. 01234 567890"
-                          {...field}
-                          disabled={readOnly}
-                        />
-                        <FormDescription>
-                          Contact number for any queries about the job
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <FormField
-                  control={form.control}
-                  name="assignedTo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Assigned To</FormLabel>
-                      <Select
-                        disabled={readOnly}
-                        value={field.value}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          
-                          // If job is in 'waiting_assessment' status and someone is assigned, change to 'in_progress'
-                          const currentStatus = form.getValues("status");
-                          if (value && currentStatus === "waiting_assessment") {
-                            form.setValue("status", "in_progress");
-                            setShowServiceSection(true);
-                            // Show toast notification about status change
-                            toast({
-                              title: "Status Updated",
-                              description: "Job has been automatically moved to 'In Progress' status.",
-                            });
-                          }
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select user">
-                              {getUserName(field.value)}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {Array.isArray(users) && users.map(user => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.fullName} ({user.role})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="equipmentDescription"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Brand & Model of Machine</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Enter brand, model, and serial number" 
-                          className="min-h-[80px]"
-                          disabled={readOnly}
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description*</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Description of the problem or service required" 
-                          className="min-h-[80px]"
-                          disabled={readOnly}
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="estimatedHours"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estimated Hours</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="Estimated repair time in hours" 
-                            disabled={readOnly}
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="taskDetails"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Task Details</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="Specific tasks for this job" 
-                            disabled={readOnly}
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                {showCustomerNotification && (
-                  <FormField
-                    control={form.control}
-                    name="customerNotified"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                        <div className="space-y-0.5">
-                          <FormLabel>Customer Notified</FormLabel>
-                          <FormDescription>
-                            Toggle this when you've notified the customer that their equipment is ready.
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="customerEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <Input
+                              placeholder="customer@example.com"
+                              {...field}
+                              disabled={readOnly}
+                            />
+                            <FormDescription>We'll use this for automated updates.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="customerPhone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Phone number</FormLabel>
+                            <Input
+                              placeholder="e.g. 01234 567890"
+                              {...field}
+                              disabled={readOnly}
+                            />
+                            <FormDescription>Primary contact number for this job.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="customerAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address</FormLabel>
+                          <Textarea
+                            rows={2}
+                            placeholder="Optional address for pickup / drop-off"
+                            {...field}
                             disabled={readOnly}
                           />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                
+                  <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-neutral-800">Assignment & workflow</h3>
+                      <p className="text-xs text-neutral-500">
+                        Keep your team aligned by assigning ownership and capturing the work required.
+                      </p>
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="assignedTo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assigned to</FormLabel>
+                          <Select
+                            disabled={readOnly}
+                            value={field.value}
+                            onValueChange={(value) => {
+                              field.onChange(value);
+
+                              const currentStatus = form.getValues("status");
+                              if (value && currentStatus === "waiting_assessment") {
+                                form.setValue("status", "in_progress");
+                                setShowServiceSection(true);
+                                toast({
+                                  title: "Status Updated",
+                                  description: "Job has been automatically moved to 'In Progress' status.",
+                                });
+                              }
+                            }}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select user">{getUserName(field.value)}</SelectValue>
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="unassigned">Unassigned</SelectItem>
+                              {Array.isArray(users) &&
+                                users.map((user) => (
+                                  <SelectItem key={user.id} value={user.id.toString()}>
+                                    {user.fullName} ({user.role})
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="equipmentDescription"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Brand &amp; model of machine</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Enter brand, model, and serial number"
+                              className="min-h-[80px]"
+                              disabled={readOnly}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Job summary*</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe the problem or service required"
+                              className="min-h-[80px]"
+                              disabled={readOnly}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="estimatedHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Estimated hours</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                placeholder="Estimated repair time in hours"
+                                disabled={readOnly}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="taskDetails"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Internal notes</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Specific tasks or follow-ups for the team"
+                                disabled={readOnly}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {showCustomerNotification && (
+                    <FormField
+                      control={form.control}
+                      name="customerNotified"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                          <div className="space-y-0.5">
+                            <FormLabel>Customer notified</FormLabel>
+                            <FormDescription>
+                              Toggle this when you've notified the customer that their equipment is ready.
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={readOnly} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  )}
               </CardContent>
               
               {!readOnly && (
@@ -1013,6 +1137,19 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
 
       </Tabs>
     </Card>
+
+      {partsDialogOpen && partOrderJobId && (
+        <PartOrderQuickCreate
+          jobId={partOrderJobId}
+          jobCode={partOrderJobCode}
+          open={partsDialogOpen}
+          onOpenChange={setPartsDialogOpen}
+          customerName={customCustomerName || form.watch("customerName")}
+          customerPhone={form.watch("customerPhone")}
+          customerEmail={form.watch("customerEmail")}
+          defaultNotes={form.watch("description")}
+        />
+      )}
 
     {/* Status Change Confirmation Dialog - with high z-index to appear above other dialogs */}
     <AlertDialog open={showStatusConfirmDialog} onOpenChange={setShowStatusConfirmDialog}>

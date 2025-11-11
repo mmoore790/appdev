@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { Search, Plus, Printer, DollarSign, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
@@ -59,6 +60,7 @@ export function WorkshopJobsTable({
   const [newStatus, setNewStatus] = useState<string>("");
   const itemsPerPage = 10;
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const refreshAllPaymentsMutation = useMutation({
     mutationFn: async () => {
@@ -116,7 +118,17 @@ export function WorkshopJobsTable({
       setNewStatus(status);
       setConfirmDialogOpen(true);
     } else {
-      statusUpdateMutation.mutate({ jobId: job.id, status });
+      const navigateAfterUpdate = status === "parts_ordered";
+      statusUpdateMutation.mutate(
+        { jobId: job.id, status },
+        {
+          onSuccess: () => {
+            if (navigateAfterUpdate) {
+              handleNavigateToJob(job.id);
+            }
+          },
+        }
+      );
     }
   };
 
@@ -180,6 +192,15 @@ export function WorkshopJobsTable({
     if (page < 1) page = 1;
     if (page > totalPages) page = totalPages;
     setCurrentPage(page);
+  };
+
+  const handleNavigateToJob = (jobId: number | null | undefined) => {
+    if (!jobId) return;
+    navigate(`/workshop/jobs/${jobId}`);
+  };
+
+  const stopPropagation = (event: MouseEvent) => {
+    event.stopPropagation();
   };
 
   function getCustomerName(customerId: number | null, job?: any): string {
@@ -371,22 +392,45 @@ export function WorkshopJobsTable({
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  paginatedJobs.map((job) => (
-                    <TableRow key={job.id} className="border-b border-neutral-100 transition-colors hover:bg-neutral-50">
-                      <TableCell className="px-6 py-4 text-sm font-semibold text-green-800">
-                        {job.jobId}
-                      </TableCell>
+                  ) : (
+                    paginatedJobs.map((job) => (
+                      <TableRow
+                        key={job.id}
+                        className="border-b border-neutral-100 transition-colors hover:bg-neutral-50 cursor-pointer"
+                        onClick={() => handleNavigateToJob(job.id)}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleNavigateToJob(job.id);
+                          }
+                        }}
+                      >
+                        <TableCell className="px-6 py-4 text-sm font-semibold text-green-800">
+                          <button
+                            type="button"
+                            className="text-left underline-offset-2 hover:underline focus-visible:underline"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleNavigateToJob(job.id);
+                            }}
+                          >
+                            {job.jobId}
+                          </button>
+                        </TableCell>
                       <TableCell className="px-6 py-4 text-sm text-neutral-700">
                         {getEquipmentName(job)}
                       </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-neutral-700">
-                        <div className="flex items-center gap-2">
+                        <TableCell className="px-6 py-4 text-sm text-neutral-700" onClick={stopPropagation}>
+                          <div className="flex items-center gap-2">
                           {getPaymentStatusBadge(job)}
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handlePaymentClick(job)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handlePaymentClick(job);
+                              }}
                             className="h-7 w-7 p-0 text-neutral-500 hover:text-green-700"
                           >
                             <DollarSign className="h-4 w-4" />
@@ -419,7 +463,7 @@ export function WorkshopJobsTable({
                           <span className="font-medium text-amber-600">Unassigned</span>
                         )}
                       </TableCell>
-                      <TableCell className="px-6 py-4">
+                        <TableCell className="px-6 py-4" onClick={stopPropagation}>
                         <Select
                           value={job.status}
                           onValueChange={(status) => handleStatusChange(job, status)}
@@ -450,8 +494,8 @@ export function WorkshopJobsTable({
                       <TableCell className="px-6 py-4 text-sm text-neutral-600">
                         {formatDate(job.createdAt)}
                       </TableCell>
-                      <TableCell className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <TableCell className="px-6 py-4 text-right" onClick={stopPropagation}>
+                          <div className="flex items-center justify-end gap-2">
                           <PrintJobDialog
                             job={job}
                             customerName={getCustomerName(job.customerId, job)}
@@ -476,20 +520,21 @@ export function WorkshopJobsTable({
                                 setSelectedJobId(null);
                               }
                             }}
-                          >
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-green-700 hover:bg-green-50 hover:text-green-800"
-                                onClick={() => {
-                                  setSelectedJobId(job.id);
-                                  setEditDialogOpen(true);
-                                }}
-                              >
-                                View &amp; Edit
-                              </Button>
-                            </DialogTrigger>
+                            >
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-green-700 hover:bg-green-50 hover:text-green-800"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setSelectedJobId(job.id);
+                                    setEditDialogOpen(true);
+                                  }}
+                                >
+                                  View &amp; Edit
+                                </Button>
+                              </DialogTrigger>
                             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
                               <DialogHeader>
                                 <DialogTitle>View &amp; Edit Job</DialogTitle>
@@ -537,144 +582,153 @@ export function WorkshopJobsTable({
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {paginatedJobs.map((job) => (
-                <Card key={job.id} className="border border-neutral-200 shadow-sm">
-                  <CardContent className="space-y-4 p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="text-lg font-semibold text-green-800">{job.jobId}</span>
-                          {getPaymentStatusBadge(job)}
+            ) : (
+              <div className="space-y-4">
+                {paginatedJobs.map((job) => (
+                  <Card
+                    key={job.id}
+                    className="border border-neutral-200 shadow-sm cursor-pointer"
+                    onClick={() => handleNavigateToJob(job.id)}
+                  >
+                    <CardContent className="space-y-4 p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="text-lg font-semibold text-green-800">{job.jobId}</span>
+                            {getPaymentStatusBadge(job)}
+                          </div>
+                          <p className="text-sm font-medium text-neutral-800">{getEquipmentName(job)}</p>
                         </div>
-                        <p className="text-sm font-medium text-neutral-800">{getEquipmentName(job)}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handlePaymentClick(job)}
-                          className="h-8 w-8 p-0 text-neutral-500 hover:text-green-700"
-                        >
-                          <DollarSign className="h-4 w-4" />
-                        </Button>
-                        <PrintJobDialog
-                          job={job}
-                          customerName={getCustomerName(job.customerId, job)}
-                          equipmentName={getEquipmentName(job)}
-                          assigneeName={getAssigneeName(job.assignedTo)}
-                          trigger={
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0 border-neutral-200 text-neutral-600 hover:text-green-700"
-                            >
-                              <Printer size={14} />
-                            </Button>
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-xs font-semibold text-green-700">
-                        {getCustomerName(job.customerId, job)
-                          .split(" ")
-                          .map((n: string) => n[0])
-                          .join("")
-                          .toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-neutral-800">
-                          {getCustomerName(job.customerId, job)}
-                        </p>
-                        <p className="text-xs text-neutral-500">
-                          Assigned:&nbsp;
-                          {job.assignedTo ? (
-                            getAssigneeName(job.assignedTo)
-                          ) : (
-                            <span className="font-semibold text-amber-600">Unassigned</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <Select
-                        value={job.status}
-                        onValueChange={(status) => handleStatusChange(job, status)}
-                        disabled={statusUpdateMutation.isPending}
-                      >
-                        <SelectTrigger className="w-full border-neutral-200">
-                          <SelectValue>
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2 py-1 text-xs font-semibold",
-                                getStatusColor(job.status).bgColor,
-                                getStatusColor(job.status).textColor
-                              )}
-                            >
-                              {formatStatus(job.status)}
-                            </span>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="parts_ordered">Parts Ordered</SelectItem>
-                          <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <span className="text-xs text-neutral-500">{formatDate(job.createdAt)}</span>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Dialog
-                        open={editDialogOpen && selectedJobId === job.id}
-                        onOpenChange={(open) => {
-                          if (!open) {
-                            setEditDialogOpen(false);
-                            setSelectedJobId(null);
-                          }
-                        }}
-                      >
-                        <DialogTrigger asChild>
+                        <div className="flex gap-2">
                           <Button
-                            variant="default"
                             size="sm"
-                            className="bg-green-700 text-white hover:bg-green-800"
-                            onClick={() => {
-                              setSelectedJobId(job.id);
-                              setEditDialogOpen(true);
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handlePaymentClick(job);
                             }}
+                            className="h-8 w-8 p-0 text-neutral-500 hover:text-green-700"
                           >
-                            View &amp; Edit
+                            <DollarSign className="h-4 w-4" />
                           </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
-                          <DialogHeader>
-                            <DialogTitle>View &amp; Edit Job</DialogTitle>
-                          </DialogHeader>
-                          <JobForm
-                            jobId={job.id}
-                            editMode
-                            onComplete={() => {
-                              /* keep dialog open */
-                            }}
-                            onCancel={() => {
+                          <PrintJobDialog
+                            job={job}
+                            customerName={getCustomerName(job.customerId, job)}
+                            equipmentName={getEquipmentName(job)}
+                            assigneeName={getAssigneeName(job.assignedTo)}
+                            trigger={
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 w-8 p-0 border-neutral-200 text-neutral-600 hover:text-green-700"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <Printer size={14} />
+                              </Button>
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-xs font-semibold text-green-700">
+                          {getCustomerName(job.customerId, job)
+                            .split(" ")
+                            .map((n: string) => n[0])
+                            .join("")
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-neutral-800">
+                            {getCustomerName(job.customerId, job)}
+                          </p>
+                          <p className="text-xs text-neutral-500">
+                            Assigned:&nbsp;
+                            {job.assignedTo ? (
+                              getAssigneeName(job.assignedTo)
+                            ) : (
+                              <span className="font-semibold text-amber-600">Unassigned</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3" onClick={stopPropagation}>
+                        <Select
+                          value={job.status}
+                          onValueChange={(status) => handleStatusChange(job, status)}
+                          disabled={statusUpdateMutation.isPending}
+                        >
+                          <SelectTrigger className="w-full border-neutral-200">
+                            <SelectValue>
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-2 py-1 text-xs font-semibold",
+                                  getStatusColor(job.status).bgColor,
+                                  getStatusColor(job.status).textColor
+                                )}
+                              >
+                                {formatStatus(job.status)}
+                              </span>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="parts_ordered">Parts Ordered</SelectItem>
+                            <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className="text-xs text-neutral-500">{formatDate(job.createdAt)}</span>
+                      </div>
+
+                      <div className="flex justify-end" onClick={stopPropagation}>
+                        <Dialog
+                          open={editDialogOpen && selectedJobId === job.id}
+                          onOpenChange={(open) => {
+                            if (!open) {
                               setEditDialogOpen(false);
                               setSelectedJobId(null);
-                            }}
-                          />
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                            }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="bg-green-700 text-white hover:bg-green-800"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedJobId(job.id);
+                                setEditDialogOpen(true);
+                              }}
+                            >
+                              View &amp; Edit
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
+                            <DialogHeader>
+                              <DialogTitle>View &amp; Edit Job</DialogTitle>
+                            </DialogHeader>
+                            <JobForm
+                              jobId={job.id}
+                              editMode
+                              onComplete={() => {
+                                /* keep dialog open */
+                              }}
+                              onCancel={() => {
+                                setEditDialogOpen(false);
+                                setSelectedJobId(null);
+                              }}
+                            />
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
           )}
         </div>
       </div>

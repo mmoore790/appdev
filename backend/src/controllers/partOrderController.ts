@@ -18,6 +18,7 @@ export class PartOrderController {
 
   constructor() {
     this.router.get("/", isAuthenticated, this.listParts);
+    this.router.get("/job/:jobId", isAuthenticated, this.listPartsForJob);
     this.router.get("/overdue", isAuthenticated, this.listOverdueParts);
     this.router.get("/:id", isAuthenticated, this.getPart);
     this.router.post("/", isAuthenticated, this.createPart);
@@ -31,6 +32,20 @@ export class PartOrderController {
   private async listParts(_req: Request, res: Response, next: NextFunction) {
     try {
       const parts = await partOrderService.listPartOrders();
+      res.json(parts.map(formatPart));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async listPartsForJob(req: Request, res: Response, next: NextFunction) {
+    try {
+      const jobId = Number(req.params.jobId);
+      if (Number.isNaN(jobId)) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
+
+      const parts = await partOrderService.listPartOrdersByJob(jobId);
       res.json(parts.map(formatPart));
     } catch (error) {
       next(error);
