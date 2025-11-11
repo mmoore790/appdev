@@ -130,12 +130,13 @@ export interface IStorage {
   createPaymentRequest(paymentData: InsertPaymentRequest): Promise<PaymentRequest>;
   updatePaymentRequest(id: number, paymentData: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
   updatePaymentStatus(id: number, status: string, transactionData?: any): Promise<PaymentRequest | undefined>;
-
-  // Parts on Order operations
-  getPartOnOrder(id: number): Promise<PartOnOrder | undefined>;
-  getAllPartsOnOrder(): Promise<PartOnOrder[]>;
-  getPartsOnOrderByStatus(status: string): Promise<PartOnOrder[]>;
-  getOverduePartsOnOrder(daysSinceOrder?: number): Promise<PartOnOrder[]>;
+ 
+    // Parts on Order operations
+    getPartOnOrder(id: number): Promise<PartOnOrder | undefined>;
+    getAllPartsOnOrder(): Promise<PartOnOrder[]>;
+    getPartsOnOrderByStatus(status: string): Promise<PartOnOrder[]>;
+    getOverduePartsOnOrder(daysSinceOrder?: number): Promise<PartOnOrder[]>;
+    getPartsOnOrderByJob(jobId: number): Promise<PartOnOrder[]>;
   createPartOnOrder(partData: InsertPartOnOrder): Promise<PartOnOrder>;
   updatePartOnOrder(id: number, partData: Partial<PartOnOrder>): Promise<PartOnOrder | undefined>;
   markPartAsArrived(id: number, updatedBy: number, actualDeliveryDate?: string, actualCost?: number, notes?: string): Promise<PartOnOrder | undefined>;
@@ -1110,7 +1111,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(partsOnOrder.createdAt));
   }
 
-  async getOverduePartsOnOrder(daysSinceOrder: number = 8): Promise<PartOnOrder[]> {
+    async getOverduePartsOnOrder(daysSinceOrder: number = 8): Promise<PartOnOrder[]> {
     const overdueDate = new Date();
     overdueDate.setDate(overdueDate.getDate() - daysSinceOrder);
     
@@ -1125,6 +1126,14 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(partsOnOrder.orderDate);
   }
+
+    async getPartsOnOrderByJob(jobId: number): Promise<PartOnOrder[]> {
+      return await db
+        .select()
+        .from(partsOnOrder)
+        .where(eq(partsOnOrder.relatedJobId, jobId))
+        .orderBy(desc(partsOnOrder.createdAt));
+    }
 
   async createPartOnOrder(partData: InsertPartOnOrder): Promise<PartOnOrder> {
     // Convert decimal costs to pence if provided

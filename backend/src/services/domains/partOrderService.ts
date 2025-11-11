@@ -10,6 +10,10 @@ class PartOrderService {
     return partOrderRepository.findAll();
   }
 
+  listPartOrdersByJob(jobId: number) {
+    return partOrderRepository.findByJob(jobId);
+  }
+
   listOverduePartOrders(daysSinceOrder?: number) {
     return partOrderRepository.findOverdue(daysSinceOrder);
   }

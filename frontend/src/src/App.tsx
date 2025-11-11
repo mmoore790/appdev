@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import Dashboard from "@/pages/dashboard";
 import Tasks from "@/pages/tasks";
 import Workshop from "@/pages/workshop";
+import WorkshopJobDetail from "@/pages/workshop-job-detail";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -65,19 +66,22 @@ function Router() {
       <Route path="/job-tracker" component={JobTracker} />
       <Route path="/track" component={JobTracker} /> {/* Alternative URL for job tracking */}
       
-      {/* Protected routes */}
-      <Route path="/">
-        {() => <ProtectedRoute component={Dashboard} />}
-      </Route>
-      <Route path="/dashboard">
-        {() => <ProtectedRoute component={Dashboard} />}
-      </Route>
-      <Route path="/tasks">
-        {() => <ProtectedRoute component={Tasks} />}
-      </Route>
-      <Route path="/workshop">
-        {() => <ProtectedRoute component={Workshop} />}
-      </Route>
+        {/* Protected routes */}
+        <Route path="/">
+          {() => <ProtectedRoute component={Dashboard} />}
+        </Route>
+        <Route path="/dashboard">
+          {() => <ProtectedRoute component={Dashboard} />}
+        </Route>
+        <Route path="/tasks">
+          {() => <ProtectedRoute component={Tasks} />}
+        </Route>
+        <Route path="/workshop/jobs/:jobId">
+          {() => <ProtectedRoute component={WorkshopJobDetail} />}
+        </Route>
+        <Route path="/workshop">
+          {() => <ProtectedRoute component={Workshop} />}
+        </Route>
       <Route path="/analytics">
         {() => <ProtectedRoute component={Analytics} />}
       </Route>
