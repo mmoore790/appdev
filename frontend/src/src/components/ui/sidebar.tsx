@@ -27,7 +27,6 @@ import {
   SheetTrigger,
   SheetOverlay 
 } from "@/components/ui/sheet";
-import { ModeToggle } from "@/components/ui/mode-toggle";
 import logoPath from "@/assets/logo-m.png";
 
 interface SidebarProps {
@@ -41,12 +40,6 @@ interface NavItem {
   label: string;
   icon: ReactNode;
   allowedRoles?: UserRole[];
-  matchPaths?: string[];
-}
-
-interface NavSection {
-  title: string;
-  items: NavItem[];
 }
 
 export function Sidebar({ className }: SidebarProps) {
@@ -74,48 +67,23 @@ export function Sidebar({ className }: SidebarProps) {
   // We'll let the Sheet component handle scroll locking instead of manually managing it
   // This should fix scrolling issues on mobile
 
-  const navSections: NavSection[] = [
-    {
-      title: "Overview",
-      items: [
-        { path: "/dashboard", matchPaths: ["/", "/dashboard"], label: "Dashboard", icon: <LayoutDashboard size={18} />, allowedRoles: ["admin"] },
-        { path: "/tasks", label: "Task Board", icon: <CheckSquare size={18} /> },
-        { path: "/workshop", label: "Workshop", icon: <Wrench size={18} /> },
-      ],
-    },
-    {
-      title: "Customer",
-      items: [
-        { path: "/customers", label: "Customers", icon: <Users size={18} /> },
-        { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={18} /> },
-        { path: "/parts-on-order", label: "Parts on Order", icon: <Package size={18} /> },
-      ],
-    },
-    {
-      title: "Insights & Billing",
-      items: [
-        { path: "/analytics", label: "Analytics", icon: <BarChart3 size={18} />, allowedRoles: ["admin"] },
-        { path: "/payments", label: "Payments", icon: <CreditCard size={18} />, allowedRoles: ["admin"] },
-      ],
-    },
-    {
-      title: "Administration",
-      items: [
-        { path: "/settings", label: "Settings", icon: <Settings size={18} />, allowedRoles: ["admin"] },
-        { path: "/account", label: "Account", icon: <User size={18} /> },
-      ],
-    },
+  const navItems: NavItem[] = [
+    { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} />, allowedRoles: ["admin"] },
+    { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
+    { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
+    { path: "/parts-on-order", label: "Parts on Order", icon: <Package size={20} /> },
+    { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
+    { path: "/customers", label: "Customers", icon: <Users size={20} /> },
+    { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
+    { path: "/payments", label: "Payments", icon: <CreditCard size={20} />, allowedRoles: ["admin"] },
+    { path: "/settings", label: "Settings", icon: <Settings size={20} />, allowedRoles: ["admin"] },
+    { path: "/account", label: "Account", icon: <User size={20} /> },
   ];
 
   const userRole: UserRole = (user?.role as UserRole | undefined) ?? "staff";
-  const filteredSections = navSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter(
-        (item) => !item.allowedRoles || item.allowedRoles.includes(userRole),
-      ),
-    }))
-    .filter((section) => section.items.length > 0);
+  const filteredNavItems = navItems.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(userRole)
+  );
 
   const handleLogout = () => {
     fetch('/api/auth/logout', {
@@ -143,253 +111,208 @@ export function Sidebar({ className }: SidebarProps) {
       });
   };
 
-  const renderNavigation = (isMobile = false) => (
-    <nav
-      className={cn(
-        "flex-1 space-y-6 pb-6",
-        isMobile ? "px-2" : "px-4",
-      )}
-    >
-      {filteredSections.map((section) => (
-        <div key={section.title} className="space-y-2">
-          <p
-            className={cn(
-              "text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-sidebar-foreground/50",
-              isMobile ? "px-1" : "px-1.5",
-            )}
-          >
-            {section.title}
-          </p>
-          <div className="space-y-1.5">
-            {section.items.map((item) => {
-              const candidatePaths = item.matchPaths ?? [item.path];
-              const isActive = candidatePaths.some((path) => location === path || location.startsWith(`${path}/`));
-
-              return (
-                <div key={item.path} onClick={() => setMobileMenuOpen(false)}>
-                  <Link href={item.path}>
-                    <div
-                      className={cn(
-                        "group flex items-center gap-3 rounded-xl transition-colors",
-                        isMobile ? "px-3 py-2 text-sm" : "px-4 py-2.5 text-sm",
-                        isActive
-                          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shadow-black/10 ring-1 ring-sidebar-primary/30"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-foreground transition-colors group-hover:bg-sidebar-primary/20 group-hover:text-sidebar-primary",
-                          isActive && "bg-sidebar-primary/20 text-sidebar-primary-foreground",
-                        )}
-                      >
-                        {item.icon}
-                      </span>
-                      <span className="font-medium">{item.label}</span>
-                    </div>
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
+  const renderNavItems = (isMobile = false) => (
+    <nav className={cn(
+      "flex-1 pb-4 space-y-1",
+      isMobile ? "px-1" : "px-2"
+    )}>
+      {filteredNavItems.map((item) => (
+        <div key={item.path} onClick={() => setMobileMenuOpen(false)}>
+          <Link href={item.path}>
+            <div
+              className={cn(
+                "flex items-center rounded-md cursor-pointer transition-colors duration-200",
+                isMobile 
+                  ? "px-2.5 py-1.5 text-sm" 
+                  : "px-3 py-2 text-sm font-medium",
+                location === item.path
+                  ? "bg-green-700 text-white"
+                  : "text-neutral-500 hover:bg-neutral-100 hover:text-green-700"
+              )}
+            >
+              <span className={cn(
+                "flex-shrink-0",
+                isMobile ? "mr-2" : "mr-3"
+              )}>
+                {item.icon}
+              </span>
+              {item.label}
+            </div>
+          </Link>
         </div>
       ))}
     </nav>
   );
 
   const renderUserInfo = (isMobile = false) => (
-    <div
-      className={cn(
-        "border-t border-sidebar-border/60 bg-sidebar-background/60 backdrop-blur-sm",
-        isMobile ? "p-4" : "p-5",
-      )}
-    >
+    <div className={cn(
+      "border-t border-neutral-200",
+      isMobile ? "p-3" : "p-4"
+    )}>
       {user && (
-        <div
-          className={cn(
-            "mb-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/80 p-3 text-left shadow-sm",
-            isMobile ? "space-y-1.5" : "space-y-2",
-          )}
-        >
-          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.25em] text-sidebar-foreground/60">
-            Signed in as
+        <div className={cn(
+          "mb-2 bg-green-50 rounded-md p-2 text-center",
+          isMobile ? "px-2 py-1.5" : "px-3 py-2"
+        )}>
+          <p className={cn(
+            "font-medium text-green-800",
+            isMobile ? "text-xs" : "text-sm"
+          )}>
+            Logged in as
           </p>
-          <p
-            className={cn(
-              "truncate font-semibold text-sidebar-foreground",
-              isMobile ? "text-sm" : "text-base",
-            )}
-          >
-            {user?.fullName || user?.username || "User"}
-          </p>
-          <p className="text-xs capitalize text-sidebar-foreground/60">
-            {user?.role || "User"}
+          <p className={cn(
+            "font-semibold text-green-700 truncate",
+            isMobile ? "text-sm" : "text-base"
+          )}>
+            {user?.fullName || user?.username || 'User'}
           </p>
         </div>
       )}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center">
         <Link href="/account">
-          <div
-            className={cn(
-              "flex items-center justify-center rounded-2xl bg-sidebar-accent text-sidebar-foreground transition-colors hover:bg-sidebar-primary/15 hover:text-sidebar-primary",
-              isMobile ? "h-9 w-9 text-xs" : "h-10 w-10 text-sm",
-            )}
-            onClick={() => setMobileMenuOpen(false)}
-            title="Go to Account"
-          >
+          <div className={cn(
+            "rounded-full bg-green-100 flex items-center justify-center text-green-700 cursor-pointer hover:bg-green-200 transition-colors duration-200",
+            isMobile ? "h-7 w-7" : "h-8 w-8"
+          )} onClick={() => setMobileMenuOpen(false)} title="Go to Account">
             {user?.fullName ? (
-              <span className="font-semibold">
-                {user.fullName
-                  .split(" ")
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map((name) => name[0])
-                  .join("")
-                  .toUpperCase()}
+              <span className={cn(
+                "font-semibold",
+                isMobile ? "text-xs" : "text-sm"
+              )}>
+                {user.fullName.split(' ').map(name => name[0]).join('')}
               </span>
             ) : (
               <User size={isMobile ? 16 : 18} />
             )}
           </div>
         </Link>
-        <Link
-          href="/account"
-          onClick={() => setMobileMenuOpen(false)}
-          className="flex-1"
-        >
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-sidebar-foreground transition-colors hover:text-sidebar-primary">
-              My Account
-            </span>
-            <span className="text-[0.7rem] text-sidebar-foreground/60">
-              Manage profile & preferences
-            </span>
-          </div>
+        <Link href="/account" onClick={() => setMobileMenuOpen(false)} className={cn("flex-1", isMobile ? "ml-2" : "ml-3")}>
+          <p className={cn(
+            "font-medium text-neutral-500 truncate hover:text-green-700 transition-colors duration-200",
+            isMobile ? "text-xs" : "text-sm"
+          )}>
+            My Account
+          </p>
+          <p className={cn(
+            "text-neutral-400 capitalize",
+            isMobile ? "text-[0.65rem]" : "text-xs"
+          )}>
+            {user?.role || 'User'}
+          </p>
         </Link>
-        <ModeToggle className={isMobile ? "h-9 w-9" : "h-10 w-10"} />
         <button
           onClick={handleLogout}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10 text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground"
+          className="text-neutral-400 hover:text-red-500 cursor-pointer transition-colors duration-200"
           title="Logout"
         >
-          <LogOut size={16} />
+          <LogOut size={isMobile ? 15 : 16} />
         </button>
       </div>
     </div>
   );
 
-    // Desktop sidebar
-    return (
-      <>
-        {/* Desktop Sidebar */}
-        <div className={cn("hidden md:flex md:w-72 md:flex-col", className)}>
-          <div className="flex flex-col flex-grow overflow-y-auto border-r border-sidebar-border/70 bg-sidebar pt-6 shadow-lg shadow-black/5">
-            <div className="flex flex-shrink-0 flex-col items-center gap-2 px-6 pb-6">
-              <Link href="/" onClick={() => setMobileMenuOpen(false)}>
-                <img
-                  src={logoPath}
-                  alt="Moore Horticulture Equipment Logo"
-                  className="h-12 w-auto cursor-pointer drop-shadow-sm"
-                />
-              </Link>
-              <p className="text-center text-xs font-medium uppercase tracking-[0.3em] text-sidebar-foreground/50">
-                Service Command Centre
-              </p>
-            </div>
-            {renderNavigation()}
-
-            {/* Error Reporting Section */}
-            <div className="px-4 pb-6">
-              <a
-                href="https://forms.gle/RUmyv2Ap7fbX1QH98"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/70 px-4 py-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              >
-                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-sidebar-background text-sidebar-foreground transition-colors group-hover:bg-sidebar-primary/20 group-hover:text-sidebar-primary">
-                  <Bug size={18} />
-                </span>
-                <span className="flex flex-col">
-                  <span>Error Reporting</span>
-                  <span className="text-xs font-normal text-sidebar-foreground/60">
-                    Flag issues & improvement ideas
-                  </span>
-                </span>
-              </a>
-            </div>
-
-            {renderUserInfo()}
+  // Desktop sidebar
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <div className={cn("hidden md:flex md:w-64 md:flex-col", className)}>
+        <div className="flex flex-col flex-grow pt-5 bg-white border-r border-neutral-200 overflow-y-auto">
+          <div className="flex items-center justify-center flex-shrink-0 px-4 mb-5">
+            <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+              <img 
+                src={logoPath}
+                alt="Moore Horticulture Equipment Logo" 
+                className="h-14 w-auto cursor-pointer"
+              />
+            </Link>
           </div>
-        </div>
-
-        {/* Mobile Header with Logo and Menu Button */}
-        <div className="fixed top-0 left-0 right-0 z-20 flex items-center justify-between border-b border-border/70 bg-background/80 px-4 py-2 backdrop-blur-md md:hidden">
-          <Link href="/" onClick={() => setMobileMenuOpen(false)}>
-            <img
-              src={logoPath}
-              alt="Moore Horticulture Equipment Logo"
-              className="h-8 w-auto cursor-pointer drop-shadow-sm"
-            />
-          </Link>
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild>
-              <button
-                className="rounded-full p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                aria-label="Menu"
-              >
-                <Menu size={22} />
-              </button>
-            </SheetTrigger>
-            <SheetOverlay className="bg-black/50 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-            <SheetContent
-              side="left"
-              className="w-[220px] border-r border-sidebar-border/60 bg-sidebar p-0 sm:w-[250px] focus:outline-none"
+          {renderNavItems()}
+          
+          {/* Error Reporting Section */}
+          <div className="px-2 pb-4">
+            <a 
+              href="https://forms.gle/RUmyv2Ap7fbX1QH98" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center px-3 py-2 text-sm font-medium text-neutral-500 hover:bg-neutral-100 hover:text-green-700 rounded-md cursor-pointer transition-colors duration-200"
             >
-              <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-                <div className="flex items-center justify-between border-b border-sidebar-border/60 px-4 py-3">
-                  <Link
-                    href="/"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2"
-                  >
-                    <img
-                      src={logoPath}
-                      alt="Moore Horticulture Equipment Logo"
-                      className="h-7 w-auto cursor-pointer drop-shadow-sm"
-                    />
-                  </Link>
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-full p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    aria-label="Close menu"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto py-1.5">
-                  {renderNavigation(true)}
-
-                  {/* Error Reporting Section - Mobile */}
-                  <div className="px-3 pb-4 pt-2">
-                    <a
-                      href="https://forms.gle/RUmyv2Ap7fbX1QH98"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/60 px-3 py-2.5 text-sm text-sidebar-foreground/70 transition-colors hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-sidebar-background text-sidebar-foreground transition-colors group-hover:bg-sidebar-primary/20 group-hover:text-sidebar-primary">
-                        <Bug size={18} />
-                      </span>
-                      Error Reporting
-                    </a>
-                  </div>
-                </div>
-                {renderUserInfo(true)}
-              </div>
-            </SheetContent>
-          </Sheet>
+              <span className="flex-shrink-0 mr-3">
+                <Bug size={20} />
+              </span>
+              Error Reporting
+            </a>
+          </div>
+          
+          {renderUserInfo()}
         </div>
+      </div>
+
+      {/* Mobile Header with Logo and Menu Button */}
+      <div className="md:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-neutral-200 fixed top-0 left-0 right-0 z-20">
+        <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+          <img 
+            src={logoPath}
+            alt="Moore Horticulture Equipment Logo" 
+            className="h-8 w-auto cursor-pointer"
+          />
+        </Link>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <button 
+              className="p-1.5 rounded-md text-neutral-500 hover:text-green-700 hover:bg-neutral-100 transition-colors duration-200"
+              aria-label="Menu"
+            >
+              <Menu size={22} />
+            </button>
+          </SheetTrigger>
+          <SheetOverlay 
+            className="bg-black/50 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" 
+          />
+          <SheetContent 
+            side="left" 
+            className="p-0 border-r border-neutral-200 w-[200px] sm:w-[240px] focus:outline-none"
+          >
+            <div className="flex flex-col h-full bg-white">
+              <div className="flex items-center justify-between p-2 border-b border-neutral-200">
+                <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+                  <img 
+                    src={logoPath}
+                    alt="Moore Horticulture Equipment Logo" 
+                    className="h-6 w-auto cursor-pointer"
+                  />
+                </Link>
+                <button 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 rounded-md text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors duration-200"
+                  aria-label="Close menu"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto py-1.5">
+                {renderNavItems(true)}
+                
+                {/* Error Reporting Section - Mobile */}
+                <div className="px-1 pb-3">
+                  <a 
+                    href="https://forms.gle/RUmyv2Ap7fbX1QH98" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center px-2.5 py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 hover:text-green-700 rounded-md cursor-pointer transition-colors duration-200"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="flex-shrink-0 mr-2">
+                      <Bug size={20} />
+                    </span>
+                    Error Reporting
+                  </a>
+                </div>
+              </div>
+              {renderUserInfo(true)}
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
     </>
   );
 }

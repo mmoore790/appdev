@@ -66,27 +66,20 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
   const formattedTime = format(currentTime, "h:mm a");
 
   return (
-      <div
-        className={cn(
-          "rounded-3xl border border-border/60 bg-gradient-to-br from-primary/5 via-background to-secondary/10 p-5 shadow-sm shadow-black/5 backdrop-blur",
-          className,
-        )}
-      >
+    <div className={cn(
+      "bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/30 dark:to-blue-950/30 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800",
+      className
+    )}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <div className="flex items-center space-x-3">
           {greetingIcon}
           <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {greeting},{" "}
-                <span className="text-primary">
-                  {userName}
-                </span>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+              {greeting}, <span className="text-green-600 dark:text-green-400">{userName}</span>
             </h1>
-              <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               {userRole && (
-                  <span className="mr-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                    {userRole}
-                  </span>
+                <span className="font-medium text-green-600 dark:text-green-400 mr-2">{userRole}</span>
               )}
               Welcome to Moore Horticulture Equipment Management
             </p>
@@ -95,33 +88,33 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
 
         <div className="flex items-center space-x-4 mt-4 sm:mt-0">
           <div className="flex items-center space-x-1.5">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">{formattedDate}</span>
+            <Calendar className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">{formattedDate}</span>
           </div>
           <div className="flex items-center space-x-1.5">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">{formattedTime}</span>
+            <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">{formattedTime}</span>
           </div>
         </div>
       </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link href="/tasks" className="block w-full">
-            <div className="flex items-center rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-border hover:shadow-lg">
-              <div className="mr-3 rounded-2xl bg-primary/10 p-2 text-primary">
-                <Clock className="h-5 w-5" />
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 flex items-center shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-750 hover:shadow-md">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 mr-3">
+              <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 {pendingTasksCount > 0 ? `${pendingTasksCount} pending tasks` : 'No pending tasks'}
               </p>
-                <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {pendingTasksCount > 0 ? 'View your task list' : 'Create a new task'}
               </p>
             </div>
             {pendingTasksCount > 0 && (
               <div className="ml-auto">
-                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-300">
                   {pendingTasksCount}
                 </span>
               </div>
@@ -130,21 +123,21 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
         </Link>
 
         <Link href="/workshop" className="block w-full">
-            <div className="flex items-center rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-border hover:shadow-lg">
-              <div className="mr-3 rounded-2xl bg-accent/15 p-2 text-accent">
-                <Wrench className="h-5 w-5" />
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 flex items-center shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-750 hover:shadow-md">
+            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 mr-3">
+              <Wrench className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
             <div>
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 {urgentJobsCount > 0 ? `${urgentJobsCount} urgent repairs` : 'Workshop status'}
               </p>
-                <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {urgentJobsCount > 0 ? 'View urgent jobs' : 'View workshop jobs'}
               </p>
             </div>
             {urgentJobsCount > 0 && (
               <div className="ml-auto">
-                  <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/20 dark:text-red-200">
+                <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-red-900/30 dark:text-red-300">
                   {urgentJobsCount}
                 </span>
               </div>
@@ -153,21 +146,21 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
         </Link>
 
         <Link href="/callbacks" className="block w-full">
-            <div className="flex items-center rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-border hover:shadow-lg">
-              <div className="mr-3 rounded-2xl bg-amber-100 p-2 text-amber-600 dark:bg-amber-500/20 dark:text-amber-200">
-                <PhoneCall className="h-5 w-5" />
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 flex items-center shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-750 hover:shadow-md">
+            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 mr-3">
+              <PhoneCall className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 {pendingCallbacksCount > 0 ? `${pendingCallbacksCount} customer callbacks` : 'No pending callbacks'}
               </p>
-                <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {pendingCallbacksCount > 0 ? 'Return customer calls' : 'View callbacks'}
               </p>
             </div>
             {pendingCallbacksCount > 0 && (
               <div className="ml-auto">
-                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:bg-amber-500/20 dark:text-amber-200">
+                <span className="bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300">
                   {pendingCallbacksCount}
                 </span>
               </div>

@@ -302,7 +302,7 @@ export default function Workshop() {
                 }
               />
               <Button
-                className="h-11 w-full bg-primary hover:bg-primary/90 sm:w-auto"
+                className="h-11 w-full bg-green-700 hover:bg-green-800 sm:w-auto"
                 onClick={() => setWizardOpen(true)}
               >
                 <Plus size={18} className="mr-2" />
@@ -320,37 +320,37 @@ export default function Workshop() {
               title="Jobs In Progress"
               value={workshopMetrics.jobsInProgress}
               icon="⚙️"
-              iconColor="bg-primary/15 text-primary"
+              iconColor="bg-blue-500"
             />
             <StatCard
               title="Active Jobs"
               value={workshopMetrics.activeJobs}
               icon="📋"
-              iconColor="bg-secondary/80 text-secondary-foreground"
+              iconColor="bg-amber-500"
             />
             <StatCard
               title="Jobs Last 7 Days"
               value={workshopMetrics.jobsLast7Days}
               icon="📈"
-              iconColor="bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200"
+              iconColor="bg-green-500"
             />
           </div>
 
-          <Card className="border border-border/60 bg-card/80 shadow-sm shadow-black/5 backdrop-blur">
-            <CardHeader className="space-y-6 border-b border-border/60 pb-6">
+          <Card className="border border-neutral-200 shadow-sm">
+            <CardHeader className="space-y-6 border-b border-neutral-100 pb-6">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <CardTitle className="text-2xl font-semibold text-foreground">
+                  <CardTitle className="text-2xl font-semibold text-neutral-800">
                     Job Pipeline
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-neutral-500">
                     Filter by technician, focus on bottlenecks, and keep every repair moving.
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                   <div className="w-full sm:w-64">
-                      <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
-                        <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-background/80">
+                    <Select value={selectedMechanic} onValueChange={setSelectedMechanic}>
+                      <SelectTrigger className="h-11 w-full border-neutral-200">
                         <SelectValue placeholder="All mechanics" />
                       </SelectTrigger>
                       <SelectContent>
@@ -366,35 +366,35 @@ export default function Workshop() {
                   </div>
                 </div>
               </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                    {mechanicFilteredJobs.length} {mechanicFilteredJobs.length === 1 ? "job" : "jobs"} in view
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className="bg-neutral-100 text-neutral-600">
+                  {mechanicFilteredJobs.length} {mechanicFilteredJobs.length === 1 ? "job" : "jobs"} in view
+                </Badge>
+                {dateRange?.from && dateRange?.to && (
+                  <Badge variant="outline" className="border-neutral-200 text-neutral-500">
+                    {`${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`}
                   </Badge>
-                  {dateRange?.from && dateRange?.to && (
-                    <Badge variant="outline" className="border-border/60 text-muted-foreground">
-                      {`${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`}
-                    </Badge>
-                  )}
-                </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="pt-6">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as StatusTabValue)}>
-                <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-border/60 bg-muted/40 p-2 sm:flex-nowrap sm:overflow-x-auto">
+                <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 sm:flex-nowrap sm:overflow-x-auto">
                   {STATUS_TABS.map((tab) => (
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="group flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-lg border border-transparent bg-card/80 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:text-primary data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:min-w-[170px] sm:text-sm"
+                      className="group flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-lg border border-transparent bg-white px-3 py-2 text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:min-w-[170px] sm:text-sm"
                     >
                       <span className="truncate">{tab.shortLabel}</span>
-                      <span className="flex h-6 min-w-[2.5rem] items-center justify-center rounded-full bg-muted px-2 text-[11px] font-semibold text-muted-foreground transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-primary-foreground">
+                      <span className="flex h-6 min-w-[2.5rem] items-center justify-center rounded-full bg-neutral-100 px-2 text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
                         {statusCounts[tab.value]}
                       </span>
                     </TabsTrigger>
                   ))}
                 </TabsList>
 
-                <div className="mt-4 text-sm font-medium text-foreground">
+                <div className="mt-4 text-sm font-medium text-neutral-700">
                   {tabSummaryText}
                 </div>
 
