@@ -6,10 +6,14 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TaskList } from "@/components/task-list";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TaskBoard } from "@/components/task-board"; // This component now handles ALL DnD logic
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getDueDateMeta } from "@/lib/utils";
@@ -34,7 +38,6 @@ export default function Tasks() {
     queryKey: ["/api/users"],
   });
 
-  // No changes to your existing filtering logic
   const quickMetrics = useMemo(() => {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
     let overdue = 0;
@@ -48,7 +51,14 @@ export default function Tasks() {
 
       const meta = getDueDateMeta(task.dueDate);
       if (meta.tone === "danger") overdue += 1;
-      if (meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2) dueSoon += 1;
+      if (
+        task.status !== "completed" &&
+        meta.tone === "warning" &&
+        meta.daysUntil !== null &&
+        meta.daysUntil <= 2
+      ) {
+        dueSoon += 1;
+      }
       if (task.status === "completed") completed += 1;
     });
 
@@ -63,7 +73,8 @@ export default function Tasks() {
       }
 
       const matchesSearch =
-        search.trim() === "" || task.title.toLowerCase().includes(search.toLowerCase());
+        search.trim() === "" ||
+        task.title.toLowerCase().includes(search.toLowerCase());
 
       let matchesAssignedToFilter = true;
       if (assignedToFilter !== "all") {
@@ -71,8 +82,11 @@ export default function Tasks() {
           matchesAssignedToFilter = !task.assignedTo;
         } else {
           const numericAssignee =
-            typeof task.assignedTo === "string" ? parseInt(task.assignedTo, 10) : task.assignedTo;
-          matchesAssignedToFilter = numericAssignee === parseInt(assignedToFilter, 10);
+            typeof task.assignedTo === "string"
+              ? parseInt(task.assignedTo, 10)
+              : task.assignedTo;
+          matchesAssignedToFilter =
+            numericAssignee === parseInt(assignedToFilter, 10);
         }
       }
 
@@ -86,7 +100,12 @@ export default function Tasks() {
 
       if (quickFilter === "dueSoon") {
         const meta = getDueDateMeta(task.dueDate);
-        return meta.tone === "warning" && meta.daysUntil !== null && meta.daysUntil <= 2;
+        return (
+          task.status !== "completed" &&
+          meta.tone === "warning" &&
+          meta.daysUntil !== null &&
+          meta.daysUntil <= 2
+        );
       }
 
       if (quickFilter === "completed") {
@@ -96,14 +115,6 @@ export default function Tasks() {
       return true;
     });
   }, [allTasks, assignedToFilter, quickFilter, search]);
-
-  const listViewTasks = useMemo(
-    () =>
-      filteredTasks.filter(
-        (task: any) => task.status !== "archived" && task.status !== "deleted"
-      ),
-    [filteredTasks]
-  );
 
   const handleQuickFilterChange = (value: string) => {
     if (!value) {
@@ -117,11 +128,13 @@ export default function Tasks() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
       <Card>
         <CardHeader className="space-y-6 pb-4">
-          {/* ... (no changes to your header JSX) ... */}
           <div className="space-y-1">
-            <CardTitle className="text-2xl font-semibold text-neutral-800">Tasks</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-neutral-800">
+              Tasks
+            </CardTitle>
             <p className="text-sm text-neutral-500">
-              Monitor workloads, filter assignments, and keep the board moving smoothly.
+              Monitor workloads, filter assignments, and keep the board moving
+              smoothly.
             </p>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -138,7 +151,10 @@ export default function Tasks() {
                   className="w-full pl-8"
                 />
               </div>
-              <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+              <Select
+                value={assignedToFilter}
+                onValueChange={setAssignedToFilter}
+              >
                 <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Assigned To" />
                 </SelectTrigger>
@@ -159,7 +175,10 @@ export default function Tasks() {
               onValueChange={handleQuickFilterChange}
               className="flex flex-wrap gap-2 md:justify-end"
             >
-              <ToggleGroupItem value="all" className="border border-neutral-200 px-3 py-1 text-xs">
+              <ToggleGroupItem
+                value="all"
+                className="border border-neutral-200 px-3 py-1 text-xs"
+              >
                 All
               </ToggleGroupItem>
               <ToggleGroupItem
@@ -193,35 +212,13 @@ export default function Tasks() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="board" className="w-full">
-            <TabsList className="flex w-full justify-start gap-2">
-              <TabsTrigger value="board" className="flex-1 sm:flex-none">
-                Board View
-              </TabsTrigger>
-              <TabsTrigger value="list" className="flex-1 sm:flex-none">
-                List View
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="list" className="mt-6">
-              <TaskList
-                isLoading={isLoading}
-                tasks={listViewTasks}
-                users={users}
-                showAllDetails
-              />
-            </TabsContent>
-            
-            {/*
-              This is the only change in the JSX.
-              We are NO LONGER wrapping TaskBoard in a DndContext.
-              The TaskBoard component handles its own context.
-            */}
-            <TabsContent value="board" className="mt-6">
-              <TaskBoard tasks={filteredTasks} users={users} isLoading={isLoading} />
-            </TabsContent>
-
-          </Tabs>
+          <div className="mt-6">
+            <TaskBoard
+              tasks={filteredTasks}
+              users={users}
+              isLoading={isLoading}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>
