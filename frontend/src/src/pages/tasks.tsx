@@ -159,7 +159,7 @@ export default function Tasks() {
                   <SelectValue placeholder="Assigned To" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Members</SelectItem>
+                  <SelectItem value="all">All Staff</SelectItem>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
                   {users.map((user: any) => (
                     <SelectItem key={user.id} value={user.id.toString()}>
@@ -169,46 +169,6 @@ export default function Tasks() {
                 </SelectContent>
               </Select>
             </div>
-            <ToggleGroup
-              type="single"
-              value={quickFilter}
-              onValueChange={handleQuickFilterChange}
-              className="flex flex-wrap gap-2 md:justify-end"
-            >
-              <ToggleGroupItem
-                value="all"
-                className="border border-neutral-200 px-3 py-1 text-xs"
-              >
-                All
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="overdue"
-                className="border border-red-200 px-3 py-1 text-xs data-[state=on]:bg-red-50 data-[state=on]:text-red-700"
-              >
-                Overdue
-                <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-                  {quickMetrics.overdue}
-                </span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="dueSoon"
-                className="border border-amber-200 px-3 py-1 text-xs data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700"
-              >
-                Due Soon
-                <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-                  {quickMetrics.dueSoon}
-                </span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="completed"
-                className="border border-green-200 px-3 py-1 text-xs data-[state=on]:bg-green-50 data-[state=on]:text-green-700"
-              >
-                Completed
-                <span className="ml-2 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
-                  {quickMetrics.completed}
-                </span>
-              </ToggleGroupItem>
-            </ToggleGroup>
           </div>
         </CardHeader>
         <CardContent>

@@ -164,39 +164,39 @@ const STATUS_CONFIG: StatusConfig[] = [
   {
     id: "pending",
     title: "To Do",
-    description: "Ideas and requests waiting to be picked up.",
+    description: "",
     accent: "text-amber-600",
     badge: "bg-amber-100 text-amber-700",
-    emptyMessage: "Drop a task here when you're ready to schedule it.",
+    emptyMessage: "",
     icon: AlertCircle,
     wipLimit: null,
   },
   {
     id: "in_progress",
     title: "In Progress",
-    description: "Active work that is currently underway.",
+    description: "",
     accent: "text-blue-600",
     badge: "bg-blue-100 text-blue-700",
-    emptyMessage: "Drag tasks here when work is underway.",
+    emptyMessage: "",
     icon: Clock,
     wipLimit: 6,
-    wipHelper: "Helps the team stay within focus bandwidth.",
+    wipHelper: "",
   },
   {
     id: "review",
     title: "Review",
-    description: "Work pending feedback or quality checks.",
+    description: "",
     accent: "text-purple-600",
     badge: "bg-purple-100 text-purple-700",
-    emptyMessage: "Tasks that need review will appear here.",
+    emptyMessage: "",
     icon: ClipboardList,
     wipLimit: 4,
-    wipHelper: "Keep feedback queues thin to ship faster.",
+    wipHelper: "",
   },
   {
     id: "completed",
     title: "Completed",
-    description: "Recently delivered work and closed loops.",
+    description: "",
     accent: "text-green-600",
     badge: "bg-green-100 text-green-700",
     emptyMessage: "Completed tasks will drop in here automatically.",
@@ -1895,13 +1895,6 @@ function TaskBoardColumn({
   const { setNodeRef, isOver } = useDroppableColumn(status.id);
   const columnPadding = COLUMN_PADDING[density];
   const columnGap = COLUMN_GAP[density];
-  const wipLimit =
-    typeof status.wipLimit === "number" && status.wipLimit > 0
-      ? status.wipLimit
-      : null;
-  const isOverLimit = wipLimit != null && tasks.length > wipLimit;
-  const wipProgress =
-    wipLimit != null ? Math.min((tasks.length / wipLimit) * 100, 100) : 0;
 
   const priorityBreakdown = useMemo(() => {
     const breakdown: Record<"high" | "medium" | "low", number> = {
@@ -1948,7 +1941,6 @@ function TaskBoardColumn({
       className={cn(
         "group/column flex h-full flex-col rounded-2xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
         isOver && "border-green-200 ring-2 ring-green-500/40",
-        !isOver && isOverLimit && "border-red-200 bg-red-50/70",
         isCollapsed && "bg-neutral-50",
       )}
       data-column={status.id}
@@ -1967,51 +1959,26 @@ function TaskBoardColumn({
                 className={cn(
                   "rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
                   status.badge,
-                  wipLimit != null && "tracking-wide",
-                  isOverLimit && "bg-red-100 text-red-700 shadow-[0_0_0_1px_rgba(248,113,113,0.45)]",
                 )}
               >
-                {wipLimit != null ? `${tasks.length}/${wipLimit} WIP` : tasks.length}
               </span>
             </div>
             <p className="max-w-xs text-xs leading-relaxed text-neutral-500">
               {status.description}
             </p>
-            {wipLimit != null && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px] font-medium text-neutral-400">
-                  <span>Work in progress</span>
                   <span
                     className={cn(
                       "text-neutral-500",
-                      isOverLimit && "text-red-600",
                     )}
                   >
-                    {tasks.length} / {wipLimit}
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      isOverLimit ? "bg-red-500" : "bg-neutral-400",
-                    )}
-                    style={{ width: `${wipProgress}%` }}
-                  />
                 </div>
-                {status.wipHelper && (
-                  <p className="text-[11px] text-neutral-400">
-                    {status.wipHelper}
-                  </p>
-                )}
-                {isOverLimit && (
-                  <p className="text-[11px] font-medium text-red-500">
-                    Over capacity by {tasks.length - wipLimit} task
-                    {tasks.length - wipLimit === 1 ? "" : "s"}.
-                  </p>
-                )}
+              
               </div>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-1">
