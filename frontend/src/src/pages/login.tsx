@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -87,12 +89,10 @@ export default function LoginPage() {
         }
       });
 
-      // Wait a moment for the session cookie to be set, then redirect
-      // The auth query data is already set, so ProtectedRoute won't redirect back to login
-      setTimeout(() => {
-        console.log("[Login] Redirecting to:", destination);
-        window.location.href = destination;
-      }, 1000);
+      // Use React Router navigation instead of window.location.href to preserve query cache
+      // This ensures the user data we just set persists across navigation
+      console.log("[Login] Redirecting to:", destination);
+      navigate(destination);
     } catch (err) {
       console.error("Login error:", err);
       let errorMessage = "An unexpected error occurred";

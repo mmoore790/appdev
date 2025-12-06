@@ -50,21 +50,24 @@ function ProtectedRoute({ component: Component, allowedRoles, ...rest }: Protect
 
     // Only redirect if we're sure the user is not authenticated
     // With returnNull behavior, 401 errors won't set error, they'll just return null user
-    // So we only check isAuthenticated, not error
     if (!isAuthenticated) {
-      // Check if we have a token in localStorage - if so, give it a moment to work
+      // Check if we have a token in localStorage - if so, give it more time to work
       const hasToken = typeof window !== "undefined" && localStorage.getItem("authToken");
       if (!hasToken) {
         console.log("Not authenticated and no token, redirecting to login page");
         navigate("/login");
       } else {
-        // We have a token, wait a bit longer for the auth check to complete
+        // We have a token - the auth query might still be loading or retrying
+        // Give it more time (3 seconds) before redirecting
+        console.log("Not authenticated but token exists, waiting for auth check...");
         const timeoutId = setTimeout(() => {
+          // Re-check authentication state after delay
           if (!isAuthenticated) {
-            console.log("Still not authenticated after delay, redirecting to login");
+            console.log("Still not authenticated after delay with token, redirecting to login");
+            console.log("Token in localStorage:", localStorage.getItem("authToken") ? "exists" : "missing");
             navigate("/login");
           }
-        }, 1000);
+        }, 3000);
         return () => clearTimeout(timeoutId);
       }
     }
