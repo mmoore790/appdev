@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const backendUrl =
   process.env.VITE_BACKEND_URL ??
@@ -12,18 +15,18 @@ export default defineConfig({
   plugins: [react()],
   
   // 2. 'root' is 'frontend/src' (where your index.html is)
-  root: path.resolve(import.meta.dirname, "src"),
+  root: path.resolve(__dirname, "src"),
   
   resolve: {
     alias: {
       // 3. '@' alias points to your *actual* code: 'frontend/src/src'
-      "@": path.resolve(import.meta.dirname, "src", "src"),
+      "@": path.resolve(__dirname, "src", "src"),
       
       // 4. '@assets' alias points to your assets folder
-      "@assets": path.resolve(import.meta.dirname, "src", "src", "assets"),
+      "@assets": path.resolve(__dirname, "src", "src", "assets"),
       
       // 5. '@shared' alias points to your BACKEND schema folder
-      "@shared": path.resolve(import.meta.dirname, "..", "backend", "src", "shared"),
+      "@shared": path.resolve(__dirname, "..", "backend", "src", "shared"),
     },
   },
 
@@ -39,8 +42,8 @@ export default defineConfig({
   },
   
   build: {
-    // 6. Build output will be in 'frontend/dist'
-    outDir: path.resolve(import.meta.dirname, "dist"),
+    // 6. Build output will be in 'frontend/dist' (relative to root)
+    outDir: "dist",
     emptyOutDir: true,
   },
 });
