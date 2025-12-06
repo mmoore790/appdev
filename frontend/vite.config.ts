@@ -42,8 +42,8 @@ export default defineConfig({
   },
   
   build: {
-    // 6. Build output will be in 'frontend/dist' (relative to vite.config.ts location, not root)
-    outDir: path.resolve(__dirname, "dist"),
+    // 6. Build output will be in 'frontend/dist' (relative to root)
+    outDir: "dist",
     emptyOutDir: true,
   },
 });
