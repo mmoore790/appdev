@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
+import { resolveApiUrl } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
@@ -94,7 +95,7 @@ export default function RegisterPage() {
     async function fetchBusinesses() {
       setLoadingBusinesses(true);
       try {
-        const response = await fetch("/api/auth/businesses");
+        const response = await fetch(resolveApiUrl("/api/auth/businesses"));
         if (response.ok) {
           const data = await response.json();
           setBusinesses(data.filter((b: Business) => b.isActive));
@@ -130,7 +131,7 @@ export default function RegisterPage() {
         payload.businessId = data.businessId;
       }
 
-      const response = await fetch("/api/auth/register", {
+      const response = await fetch(resolveApiUrl("/api/auth/register"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

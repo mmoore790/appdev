@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
+import { resolveApiUrl } from '@/lib/api';
 import { 
   Card, 
   CardContent, 
@@ -213,7 +214,7 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/auth/logout', {
+      const response = await fetch(resolveApiUrl('/api/auth/logout'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -252,7 +253,7 @@ export default function AccountPage() {
         formData.append('avatarImage', values.avatarImage);
       }
       
-      const response = await fetch('/api/auth/profile', {
+      const response = await fetch(resolveApiUrl('/api/auth/profile'), {
         method: 'PUT',
         body: formData,
         credentials: 'include'
@@ -287,7 +288,7 @@ export default function AccountPage() {
   const onPasswordSubmit = async (values: PasswordFormValues) => {
     setIsChangingPassword(true);
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await fetch(resolveApiUrl('/api/auth/change-password'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,7 +332,7 @@ export default function AccountPage() {
   const onNotificationPrefsSubmit = async (values: NotificationPreferencesValues) => {
     setIsUpdatingNotifications(true);
     try {
-      const response = await fetch('/api/auth/notification-preferences', {
+      const response = await fetch(resolveApiUrl('/api/auth/notification-preferences'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

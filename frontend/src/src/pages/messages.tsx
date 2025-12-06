@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { resolveApiUrl } from '@/lib/api';
 import { 
   Card, 
   CardContent, 
@@ -277,7 +278,7 @@ export default function Messages() {
       Array.from(files).forEach(file => {
         formData.append('images', file);
       });
-      const response = await fetch('/api/messages/images', {
+      const response = await fetch(resolveApiUrl('/api/messages/images'), {
         method: 'POST',
         body: formData,
         credentials: 'include',

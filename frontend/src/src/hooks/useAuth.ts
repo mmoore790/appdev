@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { User } from "@shared/schema"; 
+import { User } from "@shared/schema";
+import { resolveApiUrl } from "@/lib/api"; 
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -22,7 +23,8 @@ export function useAuth() {
       localStorage.removeItem('authToken');
       
       // Make API request to log out
-      await fetch('/api/auth/logout', {
+      const logoutUrl = resolveApiUrl('/api/auth/logout');
+      await fetch(logoutUrl, {
         method: 'POST',
         credentials: 'include',
       });

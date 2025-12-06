@@ -9,9 +9,9 @@ if (typeof window !== "undefined") {
   if (API_BASE_URL) {
     console.log("[api] Using API_BASE_URL:", API_BASE_URL);
   } else {
-    console.warn(
-      "[api] VITE_API_BASE_URL has not set. Falling back to relative URLs. Configure it in Vercel environment variables when deploying."
-    );
+  console.warn(
+      "[api] VITE_API_BASE_URL is not set. Falling back to relative URLs. Configure it in Vercel environment variables when deploying."
+  );
   }
 }
 

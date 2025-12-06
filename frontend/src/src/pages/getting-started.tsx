@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveApiUrl } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -38,7 +39,7 @@ export default function GettingStarted() {
 
   const dismissMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/auth/dismiss-getting-started", {
+      const response = await fetch(resolveApiUrl("/api/auth/dismiss-getting-started"), {
         method: "POST",
         credentials: "include",
       });

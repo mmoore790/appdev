@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveApiUrl } from "@/lib/api";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { MessagesIcon } from "@/components/messages-icon";
 import { HelpDialog } from "@/components/help-dialog";
@@ -145,7 +146,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
   );
 
   const handleLogout = () => {
-    fetch('/api/auth/logout', {
+    fetch(resolveApiUrl('/api/auth/logout'), {
       method: 'POST',
       credentials: 'include'
     }).then((response) => response.json())

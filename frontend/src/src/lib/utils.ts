@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { formatDistanceToNow, format, parseISO, differenceInCalendarDays, startOfDay } from "date-fns";
+import { resolveApiUrl } from "./api";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -146,7 +147,7 @@ export function getTaskPriorityColor(priority: string): {
 export async function generateJobId(): Promise<string> {
   try {
     // Use the new sequential job ID generation API endpoint
-    const response = await fetch('/api/generate-job-id');
+    const response = await fetch(resolveApiUrl('/api/generate-job-id'));
     if (!response.ok) {
       throw new Error(`API response not ok: ${response.status}`);
     }
