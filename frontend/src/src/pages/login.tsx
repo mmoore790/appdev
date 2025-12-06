@@ -71,15 +71,28 @@ export default function LoginPage() {
 
       if (authToken) {
         localStorage.setItem("authToken", authToken);
+        console.log("[Login] Auth token stored in localStorage");
       }
 
-      // Clear all cached queries to ensure fresh data for the new user
-      // This prevents data leakage between different users
-      queryClient.clear();
+      // Set the user data in the query cache immediately so useAuth() knows we're authenticated
+      // This prevents the redirect from triggering an auth check that fails
+      queryClient.setQueryData(["/api/auth/me"], result.user);
+      console.log("[Login] User data set in query cache:", result.user);
 
+      // Clear all other cached queries to ensure fresh data for the new user
+      // But preserve the auth query data we just set
+      queryClient.getQueryCache().getAll().forEach(query => {
+        if (query.queryKey[0] !== "/api/auth/me") {
+          queryClient.removeQueries({ queryKey: query.queryKey });
+        }
+      });
+
+      // Wait a moment for the session cookie to be set, then redirect
+      // The auth query data is already set, so ProtectedRoute won't redirect back to login
       setTimeout(() => {
+        console.log("[Login] Redirecting to:", destination);
         window.location.href = destination;
-      }, 400);
+      }, 1000);
     } catch (err) {
       console.error("Login error:", err);
       let errorMessage = "An unexpected error occurred";

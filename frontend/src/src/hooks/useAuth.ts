@@ -1,18 +1,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { User } from "@shared/schema";
-import { resolveApiUrl } from "@/lib/api"; 
+import { resolveApiUrl } from "@/lib/api";
+import { getQueryFn } from "@/lib/queryClient";
 
 export function useAuth() {
   const queryClient = useQueryClient();
   
   // Query to fetch the current user from the server
+  // Use "returnNull" behavior so 401 errors don't throw (expected when not logged in)
   const { 
     data: user, 
     isLoading, 
     error 
   } = useQuery<User>({ 
     queryKey: ["/api/auth/me"],
-    retry: 1,
+    queryFn: getQueryFn<User>({ on401: "returnNull" }),
+    retry: false, // Don't retry auth checks
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
   

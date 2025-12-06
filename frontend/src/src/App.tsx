@@ -43,18 +43,32 @@ function ProtectedRoute({ component: Component, allowedRoles, ...rest }: Protect
   const [, navigate] = useLocation();
   
   useEffect(() => {
-    // If we're not loading and the user is not authenticated, redirect to login
-    if (!isLoading && !isAuthenticated) {
-      console.log("Not authenticated, redirecting to login page");
-      navigate("/login");
+    // Don't redirect if we're still loading
+    if (isLoading) {
+      return;
     }
-    
-    // If there was an auth error (like 401), also redirect
-    if (error) {
-      console.error("Auth error:", error);
-      navigate("/login");
+
+    // Only redirect if we're sure the user is not authenticated
+    // With returnNull behavior, 401 errors won't set error, they'll just return null user
+    // So we only check isAuthenticated, not error
+    if (!isAuthenticated) {
+      // Check if we have a token in localStorage - if so, give it a moment to work
+      const hasToken = typeof window !== "undefined" && localStorage.getItem("authToken");
+      if (!hasToken) {
+        console.log("Not authenticated and no token, redirecting to login page");
+        navigate("/login");
+      } else {
+        // We have a token, wait a bit longer for the auth check to complete
+        const timeoutId = setTimeout(() => {
+          if (!isAuthenticated) {
+            console.log("Still not authenticated after delay, redirecting to login");
+            navigate("/login");
+          }
+        }, 1000);
+        return () => clearTimeout(timeoutId);
+      }
     }
-  }, [isAuthenticated, isLoading, navigate, error]);
+  }, [isAuthenticated, isLoading, navigate]);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && allowedRoles && user && !allowedRoles.includes(user.role)) {
