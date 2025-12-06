@@ -13,7 +13,7 @@ You need to set the API base URL so your frontend can connect to your Render bac
 - **Value:** Your Render backend URL (e.g., `https://your-app.onrender.com`)
 
 **How to add:**
-1. Go to your Vercel project dashboard
+1. Go to your Vercel project dashboard test
 2. Navigate to **Settings** → **Environment Variables**
 3. Add:
    - Variable: `VITE_API_BASE_URL`
