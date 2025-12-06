@@ -351,9 +351,14 @@ export class MessageController {
       // Validate file types
       const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
       const uploadedUrls: string[] = [];
-      
+
       for (const file of files) {
-        const contentType = file.mimetype || "image/png";
+        // Type guard to ensure file has required properties
+        if (!file || typeof file !== 'object' || !('buffer' in file) || !('mimetype' in file)) {
+          return res.status(400).json({ message: "Invalid file object" });
+        }
+        
+        const contentType = (typeof file.mimetype === 'string' ? file.mimetype : "image/png");
         
         if (!allowedTypes.includes(contentType)) {
           return res.status(400).json({ 
@@ -363,15 +368,17 @@ export class MessageController {
 
         // Validate file size (max 10MB per file)
         const maxSize = 10 * 1024 * 1024; // 10MB
-        if (file.size > maxSize) {
-          return res.status(400).json({ message: `File ${file.originalname} exceeds 10MB limit` });
+        const originalname = typeof file.originalname === 'string' ? file.originalname : 'image';
+        const fileSize = typeof file.size === 'number' ? file.size : 0;
+        if (fileSize > maxSize) {
+          return res.status(400).json({ message: `File ${originalname} exceeds 10MB limit` });
         }
 
-        const fileBuffer = file.buffer;
+        const fileBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer as any);
         const imageUrl = await uploadPublicFile(fileBuffer, contentType, {
           businessId,
           folder: "message-images",
-          filename: file.originalname,
+          filename: originalname,
         });
         
         uploadedUrls.push(imageUrl);

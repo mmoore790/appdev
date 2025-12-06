@@ -45,6 +45,23 @@ interface Business {
   activeUserCount?: number;
 }
 
+interface Analytics {
+  businesses?: {
+    total?: number;
+    active?: number;
+  };
+  users?: {
+    total?: number;
+    active?: number;
+    byRole?: {
+      master?: number;
+      admin?: number;
+      staff?: number;
+      mechanic?: number;
+    };
+  };
+}
+
 interface User {
   id: number;
   username: string;
@@ -126,7 +143,7 @@ export default function MasterDashboard() {
     retry: 1,
   });
 
-  const { data: analytics, error: analyticsError } = useQuery({
+  const { data: analytics, error: analyticsError } = useQuery<Analytics>({
     queryKey: ["/api/master/analytics"],
     retry: 1,
   });

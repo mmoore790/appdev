@@ -1118,14 +1118,15 @@ export default function CalendarPage() {
       const response = await apiRequest(
         `/api/time-entries?startDate=${dateRange.start.toISOString()}&endDate=${dateRange.end.toISOString()}`
       );
-      return response;
+      return Array.isArray(response) ? response as TimeEntry[] : [];
     },
   });
 
   // Group time entries by user and calculate positions for rendering
   const entriesByUser = useMemo(() => {
     const map = new Map<number, TimeEntry[]>();
-    timeEntries.forEach((entry) => {
+    const entriesArray = Array.isArray(timeEntries) ? timeEntries : [];
+    entriesArray.forEach((entry) => {
       if (!map.has(entry.userId)) {
         map.set(entry.userId, []);
       }
@@ -1755,7 +1756,7 @@ export default function CalendarPage() {
         }}
         job={schedulingJob}
         users={users}
-        timeEntries={timeEntries}
+        timeEntries={Array.isArray(timeEntries) ? timeEntries : []}
         onSave={handleScheduleSave}
         initialTime={schedulingJob ? manualEventInitialTime : undefined}
         initialUserId={schedulingJob ? manualEventInitialUserId : undefined}
@@ -1773,7 +1774,7 @@ export default function CalendarPage() {
         }}
         job={null}
         users={users}
-        timeEntries={timeEntries}
+        timeEntries={Array.isArray(timeEntries) ? timeEntries : []}
         onSave={handleScheduleSave}
         initialTime={manualEventInitialTime}
         initialUserId={manualEventInitialUserId}

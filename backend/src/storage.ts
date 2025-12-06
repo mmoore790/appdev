@@ -2078,6 +2078,8 @@ export class DatabaseStorage implements IStorage {
     // Convert decimal costs to pence if provided
     const processedData = {
       ...orderData,
+      orderNumber: orderData.orderNumber || `ORD-${Date.now()}`,
+      businessId: orderData.businessId,
       createdBy: orderData.createdBy ?? 1,
       estimatedTotalCost: orderData.estimatedTotalCost ? Math.round(orderData.estimatedTotalCost * 100) : undefined,
       actualTotalCost: orderData.actualTotalCost ? Math.round(orderData.actualTotalCost * 100) : undefined,
@@ -2232,9 +2234,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrderItem(itemData: InsertOrderItem): Promise<OrderItem> {
+    if (!itemData.businessId || !itemData.orderId) {
+      throw new Error('businessId and orderId are required for order items');
+    }
     // Convert decimal prices to pence if provided
     const processedData = {
       ...itemData,
+      businessId: itemData.businessId,
+      orderId: itemData.orderId,
       unitPrice: itemData.unitPrice ? Math.round(itemData.unitPrice * 100) : undefined,
       totalPrice: itemData.totalPrice ? Math.round(itemData.totalPrice * 100) : undefined,
       createdAt: new Date().toISOString(),

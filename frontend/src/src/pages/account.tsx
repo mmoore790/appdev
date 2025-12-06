@@ -145,7 +145,8 @@ export default function AccountPage() {
   // Filter activities for current user
   const userActivities = React.useMemo(() => {
     if (!allActivities || !user?.id) return [];
-    return allActivities
+    const activitiesArray = Array.isArray(allActivities) ? allActivities : [];
+    return activitiesArray
       .filter((activity: any) => activity.userId === user.id)
       .slice(0, 10);
   }, [allActivities, user?.id]);

@@ -144,14 +144,15 @@ export default function OrderTracker() {
       // Search for order by number
       const searchResponse = await apiRequest("GET", `/api/orders/search?q=${encodeURIComponent(values.orderNumber)}`);
       
-      if (!searchResponse || searchResponse.length === 0) {
+      const ordersArray = Array.isArray(searchResponse) ? searchResponse : [];
+      if (ordersArray.length === 0) {
         setError("Order not found. Please check your order number and try again.");
         setIsLoading(false);
         return;
       }
 
       // Find order that matches email
-      const matchingOrder = searchResponse.find(
+      const matchingOrder = ordersArray.find(
         (order: Order) =>
           order.orderNumber.toLowerCase() === values.orderNumber.toLowerCase() &&
           order.customerEmail?.toLowerCase() === values.email.toLowerCase()

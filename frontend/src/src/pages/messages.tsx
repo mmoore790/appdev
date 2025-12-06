@@ -97,6 +97,7 @@ interface GroupConversation {
 }
 
 interface User {
+  username?: string;
   id: number;
   fullName: string;
   avatarUrl: string | null;

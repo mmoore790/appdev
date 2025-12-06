@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -103,10 +103,14 @@ export default function WorkshopJobDetail() {
     queryKey: [`/api/jobs/${numericJobId}`],
     enabled: Number.isFinite(numericJobId) && numericJobId > 0,
     retry: 1,
-    onError: (error) => {
-      console.error("Error loading job:", error);
-    },
   });
+
+  // Handle errors separately
+  useEffect(() => {
+    if (jobError) {
+      console.error("Error loading job:", jobError);
+    }
+  }, [jobError]);
 
   const { data: services = [] } = useQuery<any[]>({
     queryKey: Number.isFinite(numericJobId) ? [`/api/services?jobId=${numericJobId}`] : ["services/disabled"],

@@ -166,6 +166,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   messageNotifications: true,
   jobNotifications: true,
   businessId: true,
+  gettingStartedDismissedAt: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

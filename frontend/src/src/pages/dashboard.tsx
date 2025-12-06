@@ -109,7 +109,6 @@ export default function Dashboard() {
     // If the user has dismissed the more detailed Getting Started page in the past,
     // respect that and don't force the tour.
     const hasDismissedGettingStarted = Boolean(
-      // @ts-expect-error gettingStartedDismissedAt is part of the backend User type
       (user as any).gettingStartedDismissedAt
     );
 

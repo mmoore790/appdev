@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { isMaster } from "../auth";
 import { hashPassword } from "../auth";
-import { InsertUser, InsertBusiness, customers, jobs, equipment, users } from "@shared/schema";
+import { InsertUser, InsertBusiness, customers, jobs, equipment, users as usersTable } from "@shared/schema";
 import { logActivity } from "../services/activityService";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
@@ -391,13 +391,13 @@ export class MasterController {
       }
 
       // Check if email already exists across all businesses (all users, active or inactive)
-      const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        const [existingUserByEmail] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
       if (existingUserByEmail) {
         return res.status(400).json({ message: "Email already in use" });
       }
 
       // Check if username already exists across all businesses (all users, active or inactive)
-      const [existingUserByUsername] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+      const [existingUserByUsername] = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
       if (existingUserByUsername) {
         return res.status(400).json({ message: "Username already taken" });
       }
@@ -492,16 +492,16 @@ export class MasterController {
       // Check for conflicts if updating email or username
       if (email && email !== user.email) {
         // Check email across all businesses (all users, active or inactive)
-        const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-        if (existingUserByEmail && existingUserByEmail.id !== id) {
+        const existingUsersByEmail = await db.select().from(usersTable).where(eq(usersTable.email, email));
+        if (existingUsersByEmail.length > 0 && existingUsersByEmail[0]?.id !== id) {
           return res.status(400).json({ message: "Email already in use" });
         }
       }
 
       if (username && username !== user.username) {
         // Check username across all businesses (all users, active or inactive)
-        const [existingUserByUsername] = await db.select().from(users).where(eq(users.username, username)).limit(1);
-        if (existingUserByUsername && existingUserByUsername.id !== id) {
+        const existingUsersByUsername = await db.select().from(usersTable).where(eq(usersTable.username, username));
+        if (existingUsersByUsername.length > 0 && existingUsersByUsername[0]?.id !== id) {
           return res.status(400).json({ message: "Username already taken" });
         }
       }

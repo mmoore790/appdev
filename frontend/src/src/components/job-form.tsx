@@ -184,9 +184,10 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
 
   // Filtered customers for searchable dropdown
   const filteredCustomers = useMemo(() => {
-    if (!customerSearchQuery.trim()) return customers.slice(0, 10);
+    const customersArray = Array.isArray(customers) ? customers : [];
+    if (!customerSearchQuery.trim()) return customersArray.slice(0, 10);
     const query = customerSearchQuery.toLowerCase();
-    return customers
+    return customersArray
       .filter((customer: any) => {
         const nameMatch = customer.name?.toLowerCase().includes(query);
         const phoneMatch = customer.phone?.includes(query);

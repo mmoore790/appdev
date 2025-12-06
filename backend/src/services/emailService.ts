@@ -1,8 +1,23 @@
 import nodemailer = require('nodemailer');
-import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import { Resend } from "resend";
 import { storage } from '../storage';
 import { format } from 'date-fns';
+
+// Optional mailersend import - only load if package is installed
+let MailerSend: any = null;
+let EmailParams: any = null;
+let Sender: any = null;
+let Recipient: any = null;
+
+try {
+  const mailersendModule = require("mailersend");
+  MailerSend = mailersendModule.MailerSend;
+  EmailParams = mailersendModule.EmailParams;
+  Sender = mailersendModule.Sender;
+  Recipient = mailersendModule.Recipient;
+} catch (e) {
+  // mailersend is optional, continue without it
+}
 
 interface CallbackEmailData {
   id: number;
@@ -16,7 +31,7 @@ interface CallbackEmailData {
 
 export class EmailService {
   private transporter?: nodemailer.Transporter;
-  private mailerSend: MailerSend | null = null;
+  private mailerSend: any = null;
   private resend: Resend | null = null;
 
   constructor() {
@@ -26,7 +41,7 @@ export class EmailService {
       console.log("✅ Email service initialized with Resend");
     }
     // Try to use MailerSend next if API key is available
-    else if (process.env.MAILERSEND_API_KEY) {
+    else if (process.env.MAILERSEND_API_KEY && MailerSend) {
       this.mailerSend = new MailerSend({
         apiKey: process.env.MAILERSEND_API_KEY,
       });
@@ -94,8 +109,8 @@ export class EmailService {
     text: string;
     html: string;
   }): Promise<any> {
-    if (!this.mailerSend) {
-      throw new Error('MailerSend not initialized');
+    if (!this.mailerSend || !Sender || !Recipient || !EmailParams) {
+      throw new Error('MailerSend not initialized or package not installed');
     }
 
     const sentFrom = new Sender("info@mooresmowers.co.uk", "Moore Horticulture Equipment");
@@ -576,6 +591,60 @@ export class EmailService {
     text += `Please log into the Moore Horticulture Equipment Management System to manage these callbacks.\n`;
     
     return text;
+  }
+
+  getFromAddress(): string {
+    // Return default from address based on configured provider
+    if (process.env.RESEND_API_KEY) {
+      return 'support@boltdown.co.uk';
+    }
+    if (process.env.MAILERSEND_API_KEY) {
+      return 'info@mooresmowers.co.uk';
+    }
+    if (process.env.SMTP_USER) {
+      return process.env.SMTP_USER;
+    }
+    return 'noreply@example.com';
+  }
+
+  async sendGenericEmail(options: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<boolean> {
+    try {
+      // Prefer Resend if configured
+      if (this.resend) {
+        await this.sendEmailWithResend(options);
+        return true;
+      }
+      // Fallback to MailerSend if configured
+      if (this.mailerSend) {
+        await this.sendEmailWithMailerSend(options);
+        return true;
+      }
+      // Fallback to SMTP if configured
+      if (this.transporter) {
+        await this.transporter.sendMail({
+          from: options.from,
+          to: options.to,
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+        });
+        return true;
+      }
+      // Demo mode
+      console.log('📧 Demo mode: Email not sent (no email credentials)');
+      console.log(`To: ${options.to}`);
+      console.log(`Subject: ${options.subject}`);
+      return false;
+    } catch (error) {
+      console.error('Error sending generic email:', error);
+      return false;
+    }
   }
 }
 
@@ -1097,4 +1166,190 @@ The Moore Horticulture Team
 This email was sent automatically from the Moore Horticulture Equipment Management System on ${currentDate}.
 If you believe you received this email in error, please contact us immediately.
   `;
+}
+
+// Standalone exported functions for backward compatibility
+export async function sendWelcomeEmail(
+  email: string,
+  fullName: string,
+  username: string,
+  business: { name: string; emailFromAddress?: string | null }
+): Promise<void> {
+  const emailService = new EmailService();
+  const fromAddress = business.emailFromAddress || emailService.getFromAddress();
+  
+  const subject = `Welcome to ${business.name}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #22c55e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to ${business.name}!</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${fullName},</p>
+      <p>Your account has been created successfully.</p>
+      <p><strong>Username:</strong> ${username}</p>
+      <p>You can now log in to access the system.</p>
+      <p>Best regards,<br>${business.name}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  const text = `Welcome to ${business.name}!\n\nDear ${fullName},\n\nYour account has been created successfully.\n\nUsername: ${username}\n\nYou can now log in to access the system.\n\nBest regards,\n${business.name}`;
+  
+  await emailService.sendGenericEmail({
+    from: fromAddress,
+    to: email,
+    subject,
+    text,
+    html,
+  });
+}
+
+export async function sendOrderPlacedEmail(
+  order: { orderNumber: string; customerName: string; customerEmail: string | null; orderDate: string; status: string; expectedDeliveryDate?: string | null },
+  orderItems: Array<{ itemName: string; quantity: number; itemType: string }>
+): Promise<void> {
+  if (!order.customerEmail) {
+    console.warn(`Cannot send order placed email - no customer email for order ${order.orderNumber}`);
+    return;
+  }
+
+  const emailService = new EmailService();
+  const fromAddress = emailService.getFromAddress();
+  
+  const itemsList = orderItems.map(item => 
+    `  • ${item.itemName} (${item.quantity}x) - ${item.itemType}`
+  ).join('\n');
+
+  const subject = `Order Confirmation - ${order.orderNumber}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #22c55e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
+    .order-info { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; }
+    .status { display: inline-block; padding: 5px 15px; background: #dbeafe; color: #1e40af; border-radius: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Order Confirmation</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${order.customerName},</p>
+      <p>Thank you for your order! We've received your order and will process it shortly.</p>
+      
+      <div class="order-info">
+        <h3>Order Details</h3>
+        <p><strong>Order Number:</strong> ${order.orderNumber}</p>
+        <p><strong>Order Date:</strong> ${new Date(order.orderDate).toLocaleDateString()}</p>
+        <p><strong>Status:</strong> <span class="status">${order.status}</span></p>
+        ${order.expectedDeliveryDate ? `<p><strong>Expected Delivery:</strong> ${new Date(order.expectedDeliveryDate).toLocaleDateString()}</p>` : ''}
+      </div>
+
+      <div class="order-info">
+        <h3>Items Ordered</h3>
+        <pre style="font-family: inherit; white-space: pre-wrap;">${itemsList}</pre>
+      </div>
+
+      <p>We'll keep you updated on the status of your order. If you have any questions, please don't hesitate to contact us.</p>
+      
+      <p>Best regards,<br>The Team</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  const text = `Order Confirmation - ${order.orderNumber}\n\nDear ${order.customerName},\n\nThank you for your order! We've received your order and will process it shortly.\n\nOrder Details:\n- Order Number: ${order.orderNumber}\n- Order Date: ${new Date(order.orderDate).toLocaleDateString()}\n- Status: ${order.status}\n${order.expectedDeliveryDate ? `- Expected Delivery: ${new Date(order.expectedDeliveryDate).toLocaleDateString()}\n` : ''}\nItems Ordered:\n${itemsList}\n\nWe'll keep you updated on the status of your order.\n\nBest regards,\nThe Team`;
+  
+  await emailService.sendGenericEmail({
+    from: fromAddress,
+    to: order.customerEmail,
+    subject,
+    text,
+    html,
+  });
+}
+
+export async function sendOrderArrivedEmail(
+  order: { orderNumber: string; customerName: string; customerEmail: string | null; actualDeliveryDate?: string | null },
+  orderItems: Array<{ itemName: string; quantity: number; itemType: string }>
+): Promise<void> {
+  if (!order.customerEmail) {
+    console.warn(`Cannot send order arrived email - no customer email for order ${order.orderNumber}`);
+    return;
+  }
+
+  const emailService = new EmailService();
+  const fromAddress = emailService.getFromAddress();
+  
+  const subject = `Your Order is Ready - ${order.orderNumber}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #22c55e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
+    .order-info { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; }
+    .cta { display: inline-block; padding: 12px 24px; background: #22c55e; color: white; text-decoration: none; border-radius: 8px; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Your Order is Ready!</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${order.customerName},</p>
+      <p>Great news! Your order has arrived and is ready for pickup.</p>
+      
+      <div class="order-info">
+        <h3>Order Details</h3>
+        <p><strong>Order Number:</strong> ${order.orderNumber}</p>
+        <p><strong>Arrival Date:</strong> ${order.actualDeliveryDate ? new Date(order.actualDeliveryDate).toLocaleDateString() : 'Today'}</p>
+      </div>
+
+      <p>Please visit us during our business hours to collect your order. If you have any questions or need to arrange a different pickup time, please contact us.</p>
+      
+      <p>Best regards,<br>The Team</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  const text = `Your Order is Ready - ${order.orderNumber}\n\nDear ${order.customerName},\n\nGreat news! Your order has arrived and is ready for pickup.\n\nOrder Details:\n- Order Number: ${order.orderNumber}\n- Arrival Date: ${order.actualDeliveryDate ? new Date(order.actualDeliveryDate).toLocaleDateString() : 'Today'}\n\nPlease visit us during our business hours to collect your order.\n\nBest regards,\nThe Team`;
+  
+  await emailService.sendGenericEmail({
+    from: fromAddress,
+    to: order.customerEmail,
+    subject,
+    text,
+    html,
+  });
 }

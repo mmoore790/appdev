@@ -79,9 +79,9 @@ app.use((req, res, next) => {
 // Add user to request type
 declare module 'express-session' {
   interface SessionData {
-    userId: number;
-    role: string;
-    businessId: number;
+    userId?: number;
+    role?: string;
+    businessId?: number;
   }
 }
 

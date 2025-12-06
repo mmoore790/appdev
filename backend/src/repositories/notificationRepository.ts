@@ -4,7 +4,12 @@ import { eq, and, desc, or, isNull } from "drizzle-orm";
 
 export class NotificationRepository {
   async create(data: InsertNotification): Promise<Notification> {
-    const [notification] = await db.insert(notifications).values(data).returning();
+    // Ensure metadata is properly typed for Drizzle
+    const insertData = {
+      ...data,
+      metadata: data.metadata === undefined ? null : (data.metadata as Record<string, unknown> | null),
+    };
+    const [notification] = await db.insert(notifications).values(insertData).returning();
     return notification;
   }
 

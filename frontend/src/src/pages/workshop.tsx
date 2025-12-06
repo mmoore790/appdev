@@ -87,7 +87,6 @@ export default function Workshop() {
       all: mechanicFilteredJobs,
       waiting: [],
       "in-progress": [],
-      parts: [],
       ready: [],
       completed: [],
     };
@@ -119,7 +118,6 @@ export default function Workshop() {
       all: tabbedJobs.all.length,
       waiting: tabbedJobs.waiting.length,
       "in-progress": tabbedJobs["in-progress"].length,
-      parts: tabbedJobs.parts.length,
       ready: tabbedJobs.ready.length,
       completed: tabbedJobs.completed.length,
     }),

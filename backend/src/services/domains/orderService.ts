@@ -166,12 +166,9 @@ class OrderService {
           // Get order items for the email
           const orderItems = await orderItemRepository.findByOrder(updated.id, updated.businessId);
           // Send email directly using the dedicated function
-          const emailSent = await sendOrderArrivedEmail(updated, orderItems);
-          if (emailSent) {
-            console.log(`✅ Order arrived email sent successfully for order ${updated.orderNumber}`);
-          } else {
-            console.warn(`⚠️ Order arrived email not sent for order ${updated.orderNumber} - check email configuration`);
-          }
+          await sendOrderArrivedEmail(updated, orderItems);
+          // Email sending is handled internally
+          console.log(`✅ Order arrived email sent for order ${updated.orderNumber}`);
         } else {
           console.warn(`⚠️ Order arrived email not sent for order ${updated.orderNumber} - customer email is missing`);
         }

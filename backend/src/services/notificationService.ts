@@ -1,6 +1,7 @@
 import { EmailService } from "./emailService";
 import { storage } from "../storage";
 import { Business } from "@shared/schema";
+import { notificationRepository } from "../repositories/notificationRepository";
 
 export interface NotificationProvider {
   sendEmail(to: string, subject: string, htmlBody: string, business?: Business): Promise<boolean>;
@@ -283,6 +284,218 @@ export class NotificationService implements NotificationProvider {
       case 'arrived':
         return `${data.businessName}: Great news! Your order ${data.orderNumber} has arrived and is ready for pickup.`;
     }
+  }
+
+  async notifyCallbackAssignment(
+    callbackId: number,
+    customerName: string,
+    subject: string,
+    assignedTo: number,
+    businessId: number,
+    priority?: string
+  ): Promise<void> {
+    await notificationRepository.create({
+      type: 'callback_assigned',
+      title: `New callback assigned: ${customerName}`,
+      description: subject,
+      businessId,
+      userId: assignedTo,
+      entityType: 'callback',
+      entityId: callbackId,
+      priority: priority || 'medium',
+      link: `/callbacks/${callbackId}`,
+        metadata: null,
+    });
+  }
+
+  async notifyCallbackReassignment(
+    callbackId: number,
+    customerName: string,
+    subject: string,
+    previousAssignee: number | null,
+    newAssignee: number | null,
+    businessId: number,
+    priority?: string
+  ): Promise<void> {
+    // Notify previous assignee if exists
+    if (previousAssignee) {
+      await notificationRepository.create({
+        type: 'callback_unassigned',
+        title: `Callback unassigned: ${customerName}`,
+        description: subject,
+        businessId,
+        userId: previousAssignee,
+        entityType: 'callback',
+        entityId: callbackId,
+        priority: priority || 'medium',
+        link: `/callbacks/${callbackId}`,
+        metadata: null,
+      });
+    }
+
+    // Notify new assignee if exists
+    if (newAssignee) {
+      await notificationRepository.create({
+        type: 'callback_assigned',
+        title: `Callback assigned: ${customerName}`,
+        description: subject,
+        businessId,
+        userId: newAssignee,
+        entityType: 'callback',
+        entityId: callbackId,
+        priority: priority || 'medium',
+        link: `/callbacks/${callbackId}`,
+        metadata: null,
+      });
+    }
+  }
+
+  async notifyJobAssignment(
+    jobId: number,
+    jobNumber: string,
+    assignedTo: number,
+    businessId: number,
+    description?: string | null
+  ): Promise<void> {
+    await notificationRepository.create({
+      type: 'job_assigned',
+      title: `New job assigned: ${jobNumber}`,
+      description: description || undefined,
+      businessId,
+      userId: assignedTo,
+      entityType: 'job',
+      entityId: jobId,
+      priority: 'high',
+      link: `/jobs/${jobId}`,
+      metadata: null,
+    });
+  }
+
+  async notifyJobReassignment(
+    jobId: number,
+    jobNumber: string,
+    previousAssignee: number | null,
+    newAssignee: number | null,
+    businessId: number,
+    description?: string | null
+  ): Promise<void> {
+    // Notify previous assignee if exists
+    if (previousAssignee) {
+      await notificationRepository.create({
+        type: 'job_unassigned',
+        title: `Job unassigned: ${jobNumber}`,
+        description: description || undefined,
+        businessId,
+        userId: previousAssignee,
+        entityType: 'job',
+        entityId: jobId,
+        priority: 'high',
+        link: `/jobs/${jobId}`,
+        metadata: null,
+      });
+    }
+
+    // Notify new assignee if exists
+    if (newAssignee) {
+      await notificationRepository.create({
+        type: 'job_assigned',
+        title: `Job assigned: ${jobNumber}`,
+        description: description || undefined,
+        businessId,
+        userId: newAssignee,
+        entityType: 'job',
+        entityId: jobId,
+        priority: 'high',
+        link: `/jobs/${jobId}`,
+        metadata: null,
+      });
+    }
+  }
+
+  async notifyTaskAssignment(
+    taskId: number,
+    title: string,
+    assignedTo: number,
+    businessId: number,
+    priority?: string | null,
+    dueDate?: string | null
+  ): Promise<void> {
+    await notificationRepository.create({
+      type: 'task_assigned',
+      title: `New task assigned: ${title}`,
+      description: dueDate ? `Due: ${new Date(dueDate).toLocaleDateString()}` : undefined,
+      businessId,
+      userId: assignedTo,
+      entityType: 'task',
+      entityId: taskId,
+      priority: priority || 'medium',
+      link: `/tasks/${taskId}`,
+      metadata: null,
+    });
+  }
+
+  async notifyTaskReassignment(
+    taskId: number,
+    title: string,
+    previousAssignee: number | null,
+    newAssignee: number | null,
+    businessId: number,
+    priority?: string | null,
+    dueDate?: string | null
+  ): Promise<void> {
+    // Notify previous assignee if exists
+    if (previousAssignee) {
+      await notificationRepository.create({
+        type: 'task_unassigned',
+        title: `Task unassigned: ${title}`,
+        description: dueDate ? `Due: ${new Date(dueDate).toLocaleDateString()}` : undefined,
+        businessId,
+        userId: previousAssignee,
+        entityType: 'task',
+        entityId: taskId,
+        priority: priority || 'medium',
+        link: `/tasks/${taskId}`,
+        metadata: null,
+      });
+    }
+
+    // Notify new assignee if exists
+    if (newAssignee) {
+      await notificationRepository.create({
+        type: 'task_assigned',
+        title: `Task assigned: ${title}`,
+        description: dueDate ? `Due: ${new Date(dueDate).toLocaleDateString()}` : undefined,
+        businessId,
+        userId: newAssignee,
+        entityType: 'task',
+        entityId: taskId,
+        priority: priority || 'medium',
+        link: `/tasks/${taskId}`,
+        metadata: null,
+      });
+    }
+  }
+
+  async notifyCalendarAssignment(
+    entryId: number,
+    title: string,
+    assignedTo: number,
+    businessId: number,
+    startTime: string,
+    createdBy?: number
+  ): Promise<void> {
+    await notificationRepository.create({
+      type: 'calendar_assigned',
+      title: `Calendar entry assigned: ${title}`,
+      description: `Scheduled for ${new Date(startTime).toLocaleString()}`,
+      businessId,
+      userId: assignedTo,
+      entityType: 'time_entry',
+      entityId: entryId,
+      priority: 'medium',
+      link: `/calendar`,
+      metadata: createdBy ? ({ createdBy } as Record<string, unknown>) : null,
+    });
   }
 }
 
