@@ -4,10 +4,15 @@ const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 const API_BASE_URL = rawBaseUrl ? rawBaseUrl.replace(/\/$/, "") : "";
 
-if (!rawBaseUrl && import.meta.env.DEV) {
-  console.warn(
-    "[api] VITE_API_BASE_URL is not set. Falling back to relative URLs. Configure it in frontend/.env.[mode] when deploying."
-  );
+// Log the API base URL configuration (helpful for debugging)
+if (typeof window !== "undefined") {
+  if (API_BASE_URL) {
+    console.log("[api] Using API_BASE_URL:", API_BASE_URL);
+  } else {
+    console.warn(
+      "[api] VITE_API_BASE_URL is not set. Falling back to relative URLs. Configure it in Vercel environment variables when deploying."
+    );
+  }
 }
 
 export class ApiError extends Error {
@@ -30,7 +35,11 @@ export const resolveApiUrl = (path: string): string => {
     return path;
   }
   const normalized = ensureLeadingSlash(path);
-  return API_BASE_URL ? `${API_BASE_URL}${normalized}` : normalized;
+  const resolved = API_BASE_URL ? `${API_BASE_URL}${normalized}` : normalized;
+  if (typeof window !== "undefined" && import.meta.env.DEV) {
+    console.log(`[api] Resolved URL: ${path} -> ${resolved}`);
+  }
+  return resolved;
 };
 
 const looksLikeJson = (payload: string): boolean => {

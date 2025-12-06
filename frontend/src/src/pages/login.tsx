@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { resolveApiUrl } from "@/lib/api";
 import logoPath from "@assets/logo-m.png";
 
 // Form validation schema - accepts either email or username
@@ -38,7 +39,9 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const loginUrl = resolveApiUrl("/api/auth/login");
+      console.log("[Login] API URL:", loginUrl);
+      const response = await fetch(loginUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
