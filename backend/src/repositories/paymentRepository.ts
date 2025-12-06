@@ -4,32 +4,32 @@ import { IStorage, storage } from "../storage";
 export class PaymentRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findById(id: number): Promise<PaymentRequest | undefined> {
-    return this.store.getPaymentRequest(id);
+  findById(id: number, businessId: number): Promise<PaymentRequest | undefined> {
+    return this.store.getPaymentRequest(id, businessId);
   }
 
-  findByReference(reference: string): Promise<PaymentRequest | undefined> {
-    return this.store.getPaymentRequestByReference(reference);
+  findByReference(reference: string, businessId: number): Promise<PaymentRequest | undefined> {
+    return this.store.getPaymentRequestByReference(reference, businessId);
   }
 
-  findByJob(jobId: number): Promise<PaymentRequest[]> {
-    return this.store.getPaymentRequestsByJob(jobId);
+  findByJob(jobId: number, businessId: number): Promise<PaymentRequest[]> {
+    return this.store.getPaymentRequestsByJob(jobId, businessId);
   }
 
-  findAll(): Promise<PaymentRequest[]> {
-    return this.store.getAllPaymentRequests();
+  findAll(businessId: number): Promise<PaymentRequest[]> {
+    return this.store.getAllPaymentRequests(businessId);
   }
 
   create(data: InsertPaymentRequest): Promise<PaymentRequest> {
     return this.store.createPaymentRequest(data);
   }
 
-  update(id: number, data: Partial<PaymentRequest>): Promise<PaymentRequest | undefined> {
-    return this.store.updatePaymentRequest(id, data);
+  update(id: number, data: Partial<PaymentRequest>, businessId: number): Promise<PaymentRequest | undefined> {
+    return this.store.updatePaymentRequest(id, data, businessId);
   }
 
-  updateStatus(id: number, status: string, transactionData?: any): Promise<PaymentRequest | undefined> {
-    return this.store.updatePaymentStatus(id, status, transactionData);
+  updateStatus(id: number, status: string, businessId: number, transactionData?: any): Promise<PaymentRequest | undefined> {
+    return this.store.updatePaymentStatus(id, status, businessId, transactionData);
   }
 
   recordJobPayment(jobId: number, paymentData: any, recordedBy: number) {

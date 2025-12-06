@@ -11,10 +11,15 @@ import { callbackController } from "./controllers/callbackController";
 import { activityController } from "./controllers/activityController";
 import { analyticsController } from "./controllers/analyticsController";
 import { workCompletedController } from "./controllers/workCompletedController";
-import { partOrderController } from "./controllers/partOrderController";
+import { orderController } from "./controllers/orderController";
 import { paymentController } from "./controllers/paymentController";
-import { backupController } from "./controllers/backupController";
 import { reportController } from "./controllers/reportController";
+import { timeEntryController } from "./controllers/timeEntryController";
+import { masterController } from "./controllers/masterController";
+import { announcementController } from "./controllers/announcementController";
+import { businessController } from "./controllers/businessController";
+import { messageController } from "./controllers/messageController";
+import { notificationController } from "./controllers/notificationController";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await initAuthRoutes(app);
@@ -34,10 +39,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/activities", activityController.router);
   app.use("/api/analytics", analyticsController.router);
   app.use("/api/work-completed", workCompletedController.router);
-  app.use("/api/parts-on-order", partOrderController.router);
+  app.use("/api/orders", orderController.router);
   app.use("/api", paymentController.router);
-  app.use("/api/backup", backupController.router);
   app.use("/api/reports", reportController.router);
+  app.use("/api/time-entries", timeEntryController.router);
+  app.use("/api/master", masterController.router);
+  app.use("/api/announcements", announcementController.router);
+  app.use("/api/business", businessController.router);
+  app.use("/api/messages", messageController.router);
+  app.use("/api/notifications", notificationController.router);
 
   app.get("/callback", (req: Request, res: Response) => {
     const { session_id } = req.query;

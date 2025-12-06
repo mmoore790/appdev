@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
 import { schedulerService } from "./services/schedulerService";
+import { pool } from "./db";
 import cors from 'cors';
 
 const app = express();
@@ -39,18 +40,24 @@ app.use(express.urlencoded({ extended: false }));
 const PgSession = ConnectPgSimple(session);
 
 // Session configuration with PostgreSQL store
+// Use the shared pool instead of creating a new connection pool
 app.use(session({
   store: new PgSession({
-    conString: process.env.DATABASE_URL, // This uses the pg driver, which is correct
+    pool: pool, // Share the same pool to avoid connection limit issues
     tableName: 'sessions',
     createTableIfMissing: false,
-    pruneSessionInterval: 60 * 15,
-    errorLog: console.error
+    pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
+    errorLog: (err) => {
+      // Only log non-timeout errors to reduce noise
+      if (!err.message?.includes('timeout') && !err.message?.includes('Connection terminated')) {
+        console.error('[Session Store Error]', err);
+      }
+    }
   }),
   secret: process.env.SESSION_SECRET || 'moorehorticulture-secret',
-  resave: false,
-  saveUninitialized: true,
-  rolling: true,
+  resave: false, // Don't save session if unmodified
+  saveUninitialized: false, // Don't create session until something is stored (reduces DB connections)
+  rolling: true, // Reset expiration on activity
   cookie: {
     secure: false, // Set to true in production with HTTPS
     httpOnly: true,
@@ -74,6 +81,7 @@ declare module 'express-session' {
   interface SessionData {
     userId: number;
     role: string;
+    businessId: number;
   }
 }
 
@@ -114,9 +122,31 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    
+    // Log the full error for debugging
+    console.error("Error handler caught error:", {
+      message: err.message,
+      stack: err.stack,
+      status,
+      originalError: err
+    });
 
-    res.status(status).json({ message });
-    throw err;
+    // If response was already sent, don't send again
+    if (res.headersSent) {
+      return _next(err);
+    }
+
+    // Preserve detailed error info in development
+    const isDevelopment = process.env.NODE_ENV === "development";
+    res.status(status).json({ 
+      message,
+      ...(isDevelopment && {
+        stack: err.stack,
+        error: err
+      })
+    });
+    
+    // Don't re-throw - error is handled
   });
   
   // Add a direct test job data endpoint that will always return test data

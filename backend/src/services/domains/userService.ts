@@ -3,18 +3,19 @@ import { userRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 
 class UserService {
-  async listUsers() {
-    return userRepository.findAll();
+  async listUsers(businessId: number) {
+    return userRepository.findAll(businessId);
   }
 
-  async getUserById(id: number) {
-    return userRepository.findById(id);
+  async getUserById(id: number, businessId: number) {
+    return userRepository.findById(id, businessId);
   }
 
   async createUser(data: InsertUser, actorUserId?: number) {
     const newUser = await userRepository.create(data);
 
     await logActivity({
+      businessId: newUser.businessId,
       userId: actorUserId ?? null,
       activityType: "user_created",
       description: getActivityDescription("user_created", "user", newUser.id, {

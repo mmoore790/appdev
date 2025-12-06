@@ -120,8 +120,6 @@ export function getStatusColor(status: string): {
       return { bgColor: 'bg-green-600', textColor: 'text-white' };
     case 'in_progress':
       return { bgColor: 'bg-amber-500', textColor: 'text-white' };
-    case 'parts_ordered':
-      return { bgColor: 'bg-blue-600', textColor: 'text-white' };
     case 'waiting_assessment':
       return { bgColor: 'bg-red-600', textColor: 'text-white' };
     default:
@@ -157,9 +155,9 @@ export async function generateJobId(): Promise<string> {
     return data.jobId;
   } catch (error) {
     console.error('Error generating job ID:', error);
-    // Fallback to timestamp-based ID if API call fails
-    const timestamp = Date.now().toString().slice(-4);
-    return `WS-1${timestamp}`;
+    // Don't use fallback - throw error to force retry
+    // The API endpoint should always work, so if it fails, we want to know about it
+    throw new Error('Failed to generate job ID. Please try again.');
   }
 }
 

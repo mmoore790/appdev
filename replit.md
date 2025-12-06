@@ -14,7 +14,7 @@ Dashboard layout: Industry-standard design with exceptional clarity, removed tot
 - **Components**: Shadcn/ui built on Radix UI primitives
 - **Styling**: Tailwind CSS with custom design tokens
 - **Icons**: Lucide-react
-- **Design Elements**: Professional A4 printable work completion certificates with company branding, automated weekly job backup email, professional payment request email templates with responsive design, custom favicon.
+- **Design Elements**: Professional A4 printable work completion certificates with company branding, professional payment request email templates with responsive design, custom favicon.
 - **User Interface**: Simplified navigation with focus on "Workshop", "Task Board", and "Payments". Streamlined job forms. Combined View and Edit actions into single "View & Edit" button for reduced interface complexity. Smart help chatbot with category-organized FAQ system for user assistance.
 - **Information Display**: Job creation dates in local timezone, exact date and time for callbacks, workshop capacity counters, date filters for jobs and callbacks, "Assigned To" filter for tasks, actual timestamps in payments section instead of relative times.
 - **Job Creation**: Multi-step wizard interface for non-technical users with progress indicators, simplified customer input (name, email, phone), equipment details (brand, model, serial, description), and job description steps (work description, assignment). Job deletion capabilities from view/edit interface with cascade deletion of related records.
@@ -29,7 +29,7 @@ Dashboard layout: Industry-standard design with exceptional clarity, removed tot
     - **Customer Interaction**: Public job tracking (requires job ID and email), customer notification system, callback requests, automated job receipt emails.
     - **Internal Communication**: Messaging, email notifications for job assignments, activity logging.
     - **Payment Integration**: Stripe checkout session integration with automated webhook processing for instant payment completion detection and job status updates.
-    - **Reporting/Utilities**: Automated weekly job backup emails, printable work completion certificates, error reporting feedback mechanism, intelligent help chatbot with comprehensive FAQ system.
+    - **Reporting/Utilities**: Printable work completion certificates, error reporting feedback mechanism, intelligent help chatbot with comprehensive FAQ system.
 
 ### System Design Choices
 - **Full-Stack Architecture**: React frontend, Express backend, PostgreSQL database.

@@ -3,8 +3,8 @@ import { customerRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 
 class CustomerService {
-  async listCustomers(search?: string) {
-    const customers = await customerRepository.findAll();
+  async listCustomers(businessId: number, search?: string) {
+    const customers = await customerRepository.findAll(businessId);
 
     if (!search) {
       return customers;
@@ -20,14 +20,15 @@ class CustomerService {
     });
   }
 
-  getCustomerById(id: number) {
-    return customerRepository.findById(id);
+  getCustomerById(id: number, businessId: number) {
+    return customerRepository.findById(id, businessId);
   }
 
   async createCustomer(data: InsertCustomer, actorUserId?: number) {
     const customer = await customerRepository.create(data);
 
     await logActivity({
+      businessId: customer.businessId,
       userId: actorUserId ?? null,
       activityType: "customer_created",
       description: getActivityDescription(
@@ -55,14 +56,16 @@ class CustomerService {
   async updateCustomer(
     id: number,
     data: Partial<InsertCustomer>,
+    businessId: number,
     actorUserId?: number
   ) {
-    const customer = await customerRepository.update(id, data);
+    const customer = await customerRepository.update(id, data, businessId);
     if (!customer) {
       return undefined;
     }
 
     await logActivity({
+      businessId: businessId,
       userId: actorUserId ?? null,
       activityType: "customer_updated",
       description: getActivityDescription(
@@ -85,8 +88,8 @@ class CustomerService {
     return customer;
   }
 
-  deleteCustomer(id: number) {
-    return customerRepository.delete(id);
+  deleteCustomer(id: number, businessId: number) {
+    return customerRepository.delete(id, businessId);
   }
 }
 

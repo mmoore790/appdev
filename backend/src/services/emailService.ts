@@ -1,5 +1,6 @@
 import nodemailer = require('nodemailer');
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
+import { Resend } from "resend";
 import { storage } from '../storage';
 import { format } from 'date-fns';
 
@@ -16,10 +17,16 @@ interface CallbackEmailData {
 export class EmailService {
   private transporter?: nodemailer.Transporter;
   private mailerSend: MailerSend | null = null;
+  private resend: Resend | null = null;
 
   constructor() {
-    // Try to use MailerSend first if API key is available
-    if (process.env.MAILERSEND_API_KEY) {
+    // Prefer Resend if API key is available
+    if (process.env.RESEND_API_KEY) {
+      this.resend = new Resend(process.env.RESEND_API_KEY);
+      console.log("✅ Email service initialized with Resend");
+    }
+    // Try to use MailerSend next if API key is available
+    else if (process.env.MAILERSEND_API_KEY) {
       this.mailerSend = new MailerSend({
         apiKey: process.env.MAILERSEND_API_KEY,
       });
@@ -50,7 +57,37 @@ export class EmailService {
     }
   }
 
-  private async sendEmailWithMailerSend(options: {
+  async sendEmailWithResend(options: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<any> {
+    if (!this.resend) {
+      throw new Error("Resend not initialized");
+    }
+
+    const fromAddress = `support@boltdown.co.uk`;
+
+    try {
+      const response = await this.resend.emails.send({
+        from: fromAddress,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      });
+
+      console.log(`✅ Email sent successfully via Resend to ${options.to}`);
+      return response;
+    } catch (error) {
+      console.error("❌ Resend error:", error);
+      throw error;
+    }
+  }
+
+  async sendEmailWithMailerSend(options: {
     from: string;
     to: string;
     subject: string;
@@ -81,10 +118,18 @@ export class EmailService {
     }
   }
 
-  async sendWeeklyCallbackReport(): Promise<boolean> {
+  async sendWeeklyCallbackReport(businessId?: number): Promise<boolean> {
     try {
-      // Get all pending callbacks
-      const callbacks = await storage.getAllCallbackRequests();
+      // If businessId is provided, get callbacks for that business only
+      // Otherwise, this would need to be called per business or iterate through all businesses
+      // For now, we'll require businessId
+      if (!businessId) {
+        console.error("Business ID is required for weekly callback report");
+        return false;
+      }
+      
+      // Get all pending callbacks for the business
+      const callbacks = await storage.getAllCallbackRequests(businessId);
       const pendingCallbacks = callbacks.filter((callback: any) => callback.status === 'pending');
 
       if (pendingCallbacks.length === 0) {
@@ -95,19 +140,39 @@ export class EmailService {
       const emailContent = this.generateCallbackReportHTML(pendingCallbacks);
       const textContent = this.generateCallbackReportText(pendingCallbacks);
 
-      const mailOptions = {
-        from: process.env.SMTP_USER || 'noreply@mooresmowers.co.uk',
-        to: 'info@mooresmowers.co.uk',
-        subject: `Weekly Callback Report - ${pendingCallbacks.length} Pending Callbacks`,
-        text: textContent,
-        html: emailContent,
-      };
+      const subject = `Weekly Callback Report - ${pendingCallbacks.length} Pending Callbacks`;
+
+      // Prefer Resend if configured
+      if (process.env.RESEND_API_KEY) {
+        await this.sendEmailWithResend({
+          from: 'support@boltdown.co.uk',
+          to: 'support@boltdown.co.uk',
+          subject,
+          text: textContent,
+          html: emailContent,
+        });
+        console.log(`✅ Weekly callback report email sent successfully via Resend`);
+        return true;
+      }
+
+      // Fallback to MailerSend if configured
+      if (process.env.MAILERSEND_API_KEY) {
+        await this.sendEmailWithMailerSend({
+          from: 'support@boltdown.co.uk',
+          to: 'support@boltdown.co.uk',
+          subject,
+          text: textContent,
+          html: emailContent,
+        });
+        console.log(`✅ Weekly callback report email sent successfully via MailerSend`);
+        return true;
+      }
 
       // Demo mode: Show email content instead of sending
       console.log('\n📧 === WEEKLY CALLBACK EMAIL REPORT (DEMO MODE) ===');
-      console.log(`To: ${mailOptions.to}`);
-      console.log(`From: ${mailOptions.from}`);
-      console.log(`Subject: ${mailOptions.subject}`);
+      console.log(`To: support@boltdown.co.uk`);
+      console.log(`From: support@boltdown.co.uk`);
+      console.log(`Subject: ${subject}`);
       console.log('\n--- EMAIL CONTENT (TEXT VERSION) ---');
       console.log(textContent);
       console.log('\n--- EMAIL CONTENT (HTML VERSION) ---');
@@ -116,10 +181,9 @@ export class EmailService {
       console.log(`   • ${pendingCallbacks.length} callback details with priorities`);
       console.log(`   • Customer contact information`);
       console.log(`   • Email size: ${emailContent.length} characters`);
-      console.log('\n📌 Note: SMTP credentials needed for actual email delivery');
       console.log('=== END EMAIL REPORT ===\n');
 
-      console.log(`✅ Weekly callback report generated successfully - ${pendingCallbacks.length} pending callbacks`);
+      console.log(`✅ Weekly callback report generated successfully (demo mode) - ${pendingCallbacks.length} pending callbacks`);
       return true;
     } catch (error) {
       console.error('Error generating weekly callback report:', error);
@@ -138,223 +202,347 @@ export class EmailService {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weekly Callback Report</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
-            color: #333;
-            max-width: 800px;
+            color: #1a1a1a;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .email-wrapper {
+            max-width: 700px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f8f9fa;
+            background: #ffffff;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
         .header {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             color: white;
-            padding: 30px;
-            border-radius: 12px;
+            padding: 50px 40px;
             text-align: center;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 8s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+        .header-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            display: inline-block;
+            animation: bounce 2s ease-in-out infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
         }
         .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 600;
+            margin: 0 0 12px 0;
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
         .header p {
-            margin: 10px 0 0 0;
+            margin: 8px 0 0 0;
             font-size: 16px;
-            opacity: 0.9;
+            opacity: 0.95;
+            font-weight: 400;
         }
-        .summary {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            border-left: 4px solid #22c55e;
+        .summary-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 40px;
+            margin: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
         }
-        .summary h2 {
-            margin: 0 0 15px 0;
-            color: #16a34a;
-            font-size: 22px;
+        .summary-card::after {
+            content: '';
+            position: absolute;
+            top: -50px;
+            right: -50px;
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-radius: 50%;
+        }
+        .summary-content {
+            position: relative;
+            z-index: 1;
+        }
+        .summary-number {
+            font-size: 72px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+            line-height: 1;
+        }
+        .summary-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 12px;
+        }
+        .summary-text {
+            font-size: 16px;
+            color: #4a5568;
+            line-height: 1.7;
+        }
+        .callbacks-container {
+            padding: 0 40px 40px 40px;
         }
         .callback-item {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s;
+            background: #ffffff;
+            border: 2px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .callback-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
         }
         .callback-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
         }
         .callback-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
+            align-items: flex-start;
+            margin-bottom: 24px;
             flex-wrap: wrap;
+            gap: 16px;
         }
         .customer-name {
-            font-size: 20px;
-            font-weight: 600;
-            color: #111827;
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a202c;
             margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .customer-name::before {
+            content: '👤';
+            font-size: 28px;
         }
         .priority {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .priority::before {
+            content: '●';
+            font-size: 10px;
         }
         .priority.high {
-            background-color: #fee2e2;
-            color: #dc2626;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
         }
         .priority.medium {
-            background-color: #fef3c7;
-            color: #d97706;
+            background: linear-gradient(135deg, #ffd93d 0%, #f6c23e 100%);
+            color: #1a202c;
         }
         .priority.low {
-            background-color: #f0fdf4;
-            color: #16a34a;
+            background: linear-gradient(135deg, #51cf66 0%, #40c057 100%);
+            color: white;
         }
         .callback-details {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
         }
         .detail-item {
             display: flex;
             flex-direction: column;
+            padding: 16px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
         }
         .detail-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
+            font-size: 11px;
+            font-weight: 700;
+            color: #718096;
             text-transform: uppercase;
-            margin-bottom: 4px;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
         }
         .detail-value {
-            font-size: 14px;
-            color: #111827;
-            font-weight: 500;
+            font-size: 16px;
+            color: #2d3748;
+            font-weight: 600;
         }
         .reason {
-            background-color: #f9fafb;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 3px solid #22c55e;
-            margin-top: 15px;
+            background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+            padding: 20px;
+            border-radius: 16px;
+            border-left: 4px solid #fc8181;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
         .reason-label {
             font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
+            font-weight: 700;
+            color: #c53030;
             text-transform: uppercase;
-            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .reason-label::before {
+            content: '📝';
+            font-size: 16px;
         }
         .reason-text {
-            font-size: 14px;
-            color: #374151;
-            line-height: 1.5;
+            font-size: 15px;
+            color: #2d3748;
+            line-height: 1.7;
         }
         .footer {
-            text-align: center;
-            margin-top: 40px;
-            padding: 25px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-        .footer p {
-            margin: 0;
-            color: #6b7280;
-            font-size: 14px;
-        }
-        .no-callbacks {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: #cbd5e0;
             text-align: center;
             padding: 40px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .footer p {
+            margin: 8px 0;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .footer-strong {
+            color: #ffffff;
+            font-weight: 600;
         }
         @media (max-width: 600px) {
-            .callback-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
-            }
-            .callback-details {
-                grid-template-columns: 1fr;
-            }
+            body { padding: 20px 10px; }
+            .email-wrapper { border-radius: 16px; }
+            .header { padding: 40px 24px; }
+            .header h1 { font-size: 28px; }
+            .summary-card { margin: 24px; padding: 32px 24px; }
+            .summary-number { font-size: 56px; }
+            .callbacks-container { padding: 0 24px 24px 24px; }
+            .callback-item { padding: 24px; }
+            .callback-header { flex-direction: column; }
+            .callback-details { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🔔 Weekly Callback Report</h1>
-        <p>Moore Horticulture Equipment Management System</p>
-        <p>${currentDate}</p>
-    </div>
-
-    <div class="summary">
-        <h2>📊 Summary</h2>
-        <p><strong>${callbacks.length}</strong> pending customer callbacks require attention this week.</p>
-        <p>Each callback represents a customer waiting for contact regarding their equipment service.</p>
-    </div>
-
-    ${callbacks.map((callback, index) => `
-    <div class="callback-item">
-        <div class="callback-header">
-            <h3 class="customer-name">${callback.customerName}</h3>
-            <span class="priority ${callback.priority.toLowerCase()}">${callback.priority} Priority</span>
-        </div>
-        
-        <div class="callback-details">
-            <div class="detail-item">
-                <span class="detail-label">Phone Number</span>
-                <span class="detail-value">${callback.phoneNumber || 'Not provided'}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Requested Date</span>
-                <span class="detail-value">${format(new Date(callback.requestedAt), 'MMM do, yyyy \'at\' h:mm a')}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Status</span>
-                <span class="detail-value">${callback.status}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Callback #</span>
-                <span class="detail-value">#${callback.id}</span>
+    <div class="email-wrapper">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-icon">🔔</div>
+                <h1>Weekly Callback Report</h1>
+                <p>Moore Horticulture Equipment Management System</p>
+                <p style="margin-top: 8px; font-size: 14px; opacity: 0.9;">${currentDate}</p>
             </div>
         </div>
 
-        ${callback.details ? `
-        <div class="reason">
-            <div class="reason-label">Details</div>
-            <div class="reason-text">${callback.details}</div>
+        <div class="summary-card">
+            <div class="summary-content">
+                <div class="summary-number">${callbacks.length}</div>
+                <div class="summary-title">Pending Callbacks</div>
+                <div class="summary-text">
+                    ${callbacks.length === 1 ? 'customer callback' : 'customer callbacks'} require your attention this week. 
+                    Each callback represents a customer waiting for contact regarding their equipment service.
+                </div>
+            </div>
         </div>
-        ` : ''}
-        
-        ${callback.subject ? `
-        <div class="reason">
-            <div class="reason-label">Subject</div>
-            <div class="reason-text">${callback.subject}</div>
-        </div>
-        ` : ''}
-    </div>
-    `).join('')}
 
-    <div class="footer">
-        <p>This is an automated weekly report from the Moore Horticulture Equipment Management System.</p>
-        <p>Please log into the system to manage these callbacks and update their status.</p>
+        <div class="callbacks-container">
+            ${callbacks.map((callback, index) => `
+            <div class="callback-item">
+                <div class="callback-header">
+                    <h3 class="customer-name">${callback.customerName}</h3>
+                    <span class="priority ${callback.priority.toLowerCase()}">${callback.priority} Priority</span>
+                </div>
+                
+                <div class="callback-details">
+                    <div class="detail-item">
+                        <span class="detail-label">📞 Phone Number</span>
+                        <span class="detail-value">${callback.phoneNumber || 'Not provided'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">📅 Requested Date</span>
+                        <span class="detail-value">${format(new Date(callback.requestedAt), 'MMM do, yyyy \'at\' h:mm a')}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">⚡ Status</span>
+                        <span class="detail-value">${callback.status}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">🔢 Callback #</span>
+                        <span class="detail-value">#${callback.id}</span>
+                    </div>
+                </div>
+
+                ${callback.details ? `
+                <div class="reason">
+                    <div class="reason-label">Details</div>
+                    <div class="reason-text">${callback.details}</div>
+                </div>
+                ` : ''}
+                
+                ${callback.subject ? `
+                <div class="reason">
+                    <div class="reason-label">Subject</div>
+                    <div class="reason-text">${callback.subject}</div>
+                </div>
+                ` : ''}
+            </div>
+            `).join('')}
+        </div>
+
+        <div class="footer">
+            <p>This is an automated weekly report from the <span class="footer-strong">Moore Horticulture Equipment Management System</span>.</p>
+            <p>Please log into the system to manage these callbacks and update their status.</p>
+        </div>
     </div>
 </body>
 </html>
@@ -433,56 +621,56 @@ export async function sendJobBookedEmail(job: any, customer: any): Promise<boole
 
     const emailContent = generateJobBookedHTML(job, customer);
     const textContent = generateJobBookedText(job, customer);
-    
-    const mailOptions = {
-      from: 'info@mooresmowers.co.uk',
-      to: customer.email,
-      subject: `Job Booked - ${job.jobId}`,
-      text: textContent,
-      html: emailContent,
-    };
 
-    // Try to send via MailerSend if available
-    if (process.env.MAILERSEND_API_KEY) {
-      const mailerSend = new MailerSend({
-        apiKey: process.env.MAILERSEND_API_KEY,
+    const subject = `Job Booked - ${job.jobId}`;
+
+    // Prefer Resend if configured
+    if (process.env.RESEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithResend({
+        from: "support@boltdown.co.uk",
+        to: customer.email,
+        subject,
+        text: textContent,
+        html: emailContent,
       });
-
-      const sentFrom = new Sender("info@mooresmowers.co.uk", "Moore Horticulture Equipment");
-      const recipients = [new Recipient(customer.email, customer.name)];
-
-      const emailParams = new EmailParams()
-        .setFrom(sentFrom)
-        .setTo(recipients)
-        .setSubject(mailOptions.subject)
-        .setHtml(emailContent)
-        .setText(textContent);
-
-      const response = await mailerSend.email.send(emailParams);
-      console.log(`✅ Job booked email sent successfully to ${customer.name} (${customer.email})`);
-      return true;
-    } 
-    // Fallback to demo mode
-    else {
-      console.log(`\n📧 === JOB BOOKED NOTIFICATION (DEMO MODE) ===`);
-      console.log(`To: ${customer.email}`);
-      console.log(`Customer: ${customer.name}`);
-      console.log(`Job ID: ${job.jobId}`);
-      console.log(`Equipment: ${job.equipmentDescription || 'N/A'}`);
-      console.log(`Phone: ${customer.phone || 'N/A'}`);
-      
-      console.log('\n--- EMAIL CONTENT (TEXT VERSION) ---');
-      console.log(textContent);
-      console.log('\n--- EMAIL CONTENT (HTML VERSION) ---');
-      console.log('✅ Professional HTML email generated with:');
-      console.log(`   • Company branding and responsive design`);
-      console.log(`   • Job details and equipment information`);
-      console.log(`   • Contact details for customer convenience`);
-      console.log(`   • Email size: ${emailContent.length} characters`);
-      console.log('============================================\n');
-      
+      console.log(`✅ Job booked email sent successfully via Resend to ${customer.name} (${customer.email})`);
       return true;
     }
+
+    // Fallback to MailerSend if configured
+    if (process.env.MAILERSEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithMailerSend({
+        from: "support@boltdown.co.uk",
+        to: customer.email,
+        subject,
+        text: textContent,
+        html: emailContent,
+      });
+      console.log(`✅ Job booked email sent successfully via MailerSend to ${customer.name} (${customer.email})`);
+      return true;
+    }
+
+    // Fallback to demo mode
+    console.log(`\n📧 === JOB BOOKED NOTIFICATION (DEMO MODE) ===`);
+    console.log(`To: ${customer.email}`);
+    console.log(`Customer: ${customer.name}`);
+    console.log(`Job ID: ${job.jobId}`);
+    console.log(`Equipment: ${job.equipmentDescription || 'N/A'}`);
+    console.log(`Phone: ${customer.phone || 'N/A'}`);
+    
+    console.log('\n--- EMAIL CONTENT (TEXT VERSION) ---');
+    console.log(textContent);
+    console.log('\n--- EMAIL CONTENT (HTML VERSION) ---');
+    console.log('✅ Professional HTML email generated with:');
+    console.log(`   • Company branding and responsive design`);
+    console.log(`   • Job details and equipment information`);
+    console.log(`   • Contact details for customer convenience`);
+    console.log(`   • Email size: ${emailContent.length} characters`);
+    console.log('============================================\n');
+    
+    return true;
   } catch (error) {
     console.error('Error in sendJobBookedEmail:', error);
     return false;
@@ -533,56 +721,56 @@ export async function sendPartReadyEmail(part: any): Promise<boolean> {
   try {
     const emailContent = generatePartReadyHTML(part);
     const textContent = generatePartReadyText(part);
-    
-    const mailOptions = {
-      from: 'info@mooresmowers.co.uk',
-      to: part.customerEmail,
-      subject: `Part Ready for Collection - ${part.partName}`,
-      text: textContent,
-      html: emailContent,
-    };
 
-    // Try to send via MailerSend if available
-    if (process.env.MAILERSEND_API_KEY) {
-      const mailerSend = new MailerSend({
-        apiKey: process.env.MAILERSEND_API_KEY,
+    const subject = `Part Ready for Collection - ${part.partName}`;
+
+    // Prefer Resend if configured
+    if (process.env.RESEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithResend({
+        from: "support@boltdown.co.uk",
+        to: part.customerEmail,
+        subject,
+        text: textContent,
+        html: emailContent,
       });
-
-      const sentFrom = new Sender("info@mooresmowers.co.uk", "Moore Horticulture Equipment");
-      const recipients = [new Recipient(part.customerEmail, part.customerName)];
-
-      const emailParams = new EmailParams()
-        .setFrom(sentFrom)
-        .setTo(recipients)
-        .setSubject(mailOptions.subject)
-        .setHtml(emailContent)
-        .setText(textContent);
-
-      const response = await mailerSend.email.send(emailParams);
-      console.log(`✅ Part ready email sent successfully to ${part.customerName} (${part.customerEmail})`);
-      return true;
-    } 
-    // Fallback to demo mode
-    else {
-      console.log(`\n📧 === PART READY NOTIFICATION (DEMO MODE) ===`);
-      console.log(`To: ${part.customerEmail}`);
-      console.log(`Customer: ${part.customerName}`);
-      console.log(`Part: ${part.partName}${part.partNumber ? ` (${part.partNumber})` : ''}`);
-      console.log(`Supplier: ${part.supplier}`);
-      console.log(`Phone: ${part.customerPhone}`);
-      
-      console.log('\n--- EMAIL CONTENT (TEXT VERSION) ---');
-      console.log(textContent);
-      console.log('\n--- EMAIL CONTENT (HTML VERSION) ---');
-      console.log('✅ Professional HTML email generated with:');
-      console.log(`   • Company branding and responsive design`);
-      console.log(`   • Part details and collection information`);
-      console.log(`   • Contact details for customer convenience`);
-      console.log(`   • Email size: ${emailContent.length} characters`);
-      console.log('============================================\n');
-      
+      console.log(`✅ Part ready email sent successfully via Resend to ${part.customerName} (${part.customerEmail})`);
       return true;
     }
+
+    // Fallback to MailerSend if configured
+    if (process.env.MAILERSEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithMailerSend({
+        from: "support@boltdown.co.uk",
+        to: part.customerEmail,
+        subject,
+        text: textContent,
+        html: emailContent,
+      });
+      console.log(`✅ Part ready email sent successfully via MailerSend to ${part.customerName} (${part.customerEmail})`);
+      return true;
+    }
+
+    // Fallback to demo mode
+    console.log(`\n📧 === PART READY NOTIFICATION (DEMO MODE) ===`);
+    console.log(`To: ${part.customerEmail}`);
+    console.log(`Customer: ${part.customerName}`);
+    console.log(`Part: ${part.partName}${part.partNumber ? ` (${part.partNumber})` : ''}`);
+    console.log(`Supplier: ${part.supplier}`);
+    console.log(`Phone: ${part.customerPhone}`);
+    
+    console.log('\n--- EMAIL CONTENT (TEXT VERSION) ---');
+    console.log(textContent);
+    console.log('\n--- EMAIL CONTENT (HTML VERSION) ---');
+    console.log('✅ Professional HTML email generated with:');
+    console.log(`   • Company branding and responsive design`);
+    console.log(`   • Part details and collection information`);
+    console.log(`   • Contact details for customer convenience`);
+    console.log(`   • Email size: ${emailContent.length} characters`);
+    console.log('============================================\n');
+    
+    return true;
   } catch (error) {
     console.error('Error in sendPartReadyEmail:', error);
     return false;

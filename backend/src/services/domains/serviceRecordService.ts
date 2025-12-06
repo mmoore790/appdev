@@ -1,14 +1,15 @@
 import { InsertService } from "@shared/schema";
 import { jobRepository, serviceRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
+import { jobService } from "./jobService";
 
 class ServiceRecordService {
-  listServices() {
-    return serviceRepository.findAll();
+  listServices(businessId: number) {
+    return serviceRepository.findAll(businessId);
   }
 
-  getServiceById(id: number) {
-    return serviceRepository.findById(id);
+  getServiceById(id: number, businessId: number) {
+    return serviceRepository.findById(id, businessId);
   }
 
   async createService(data: InsertService, actorUserId?: number) {
@@ -17,7 +18,7 @@ class ServiceRecordService {
     let jobIdLabel = "Unknown";
     if (service.jobId) {
       try {
-        const job = await jobRepository.findById(service.jobId);
+        const job = await jobRepository.findById(service.jobId, service.businessId);
         if (job) {
           jobIdLabel = job.jobId;
         }
@@ -27,6 +28,7 @@ class ServiceRecordService {
     }
 
     await logActivity({
+      businessId: service.businessId,
       userId: actorUserId ?? null,
       activityType: "service_added",
       description: getActivityDescription("service_added", "service", service.id, {
@@ -44,11 +46,24 @@ class ServiceRecordService {
       },
     });
 
+    // Update job's updatedAt timestamp
+    if (service.jobId) {
+      await jobService.touchJob(service.jobId, service.businessId);
+    }
+
     return service;
   }
 
-  updateService(id: number, data: InsertService) {
-    return serviceRepository.update(id, data);
+  async updateService(id: number, data: InsertService, businessId: number) {
+    const service = await serviceRepository.findById(id, businessId);
+    const updated = await serviceRepository.update(id, data, businessId);
+    
+    // Update job's updatedAt timestamp if service has a jobId
+    if (updated && updated.jobId) {
+      await jobService.touchJob(updated.jobId, businessId);
+    }
+    
+    return updated;
   }
 }
 

@@ -70,7 +70,7 @@ export function Sidebar({ className }: SidebarProps) {
     { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} />, allowedRoles: ["admin"] },
     { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
-    { path: "/parts-on-order", label: "Parts on Order", icon: <Package size={20} /> },
+    { path: "/orders", label: "Orders", icon: <Package size={20} /> },
     { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
     { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },

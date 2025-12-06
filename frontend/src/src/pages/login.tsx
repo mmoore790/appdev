@@ -2,20 +2,19 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
-import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 import logoPath from "@assets/logo-m.png";
 
-// Form validation schema
+// Form validation schema - accepts either email or username
 const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().min(1, "Email or username is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -24,13 +23,12 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
+      email: "",
       password: "",
     },
   });
@@ -46,40 +44,35 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
-        credentials: "include" // Important: include credentials for session cookies
+        credentials: "include",
       });
+      const result = await response.json();
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Login failed");
+        throw new Error(result?.message || "Login failed");
       }
 
-      // Check for the special auth headers
-      const hasAuthSuccess = response.headers.get('X-Auth-Success') === 'true';
-      const authToken = response.headers.get('X-Auth-Token');
-      
-      console.log("Login successful, auth token received:", authToken ? 'Yes' : 'No');
+      const authToken = response.headers.get("X-Auth-Token");
+      const userRole = result?.user?.role;
+      const destination = userRole === "master" ? "/master" : "/dashboard";
 
-      // Show success toast notification
       toast({
-        title: "Login Successful",
-        description: `Welcome back, ${data.username}!`,
+        title: "Welcome back",
+        description: `Securing your workspace...`,
         duration: 1500,
       });
 
-      console.log("Redirecting to dedicated redirect page with token...");
-      
-      // Store auth token in localStorage immediately
       if (authToken) {
-        localStorage.setItem('authToken', authToken);
+        localStorage.setItem("authToken", authToken);
       }
-      
-      // Redirect directly to the dashboard
+
+      // Clear all cached queries to ensure fresh data for the new user
+      // This prevents data leakage between different users
+      queryClient.clear();
+
       setTimeout(() => {
-        // Navigate to dashboard
-        window.location.href = '/';
-      }, 300);
-      
+        window.location.href = destination;
+      }, 400);
     } catch (err) {
       console.error("Login error:", err);
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
@@ -89,89 +82,113 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
-      <div className="w-full max-w-md p-4">
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="space-y-1">
-            <div className="flex justify-center mb-6">
-              <img src={logoPath} alt="Moore Horticulture Equipment Logo" className="h-24 object-contain" />
+    <div className="relative min-h-screen overflow-hidden bg-white">
+      <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.08),_transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white via-white to-emerald-50/30" />
+        <div className="absolute -left-32 top-10 h-[32rem] w-[32rem] rounded-full bg-emerald-100/40 blur-[200px]" />
+        <div className="absolute bottom-0 right-0 h-[28rem] w-[28rem] rounded-full bg-sky-100/40 blur-[180px]" />
+      </div>
+
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <main className="container mx-auto flex flex-1 items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
+          <section className="w-full max-w-md space-y-6 sm:space-y-8 px-2">
+            <div className="space-y-3 sm:space-y-4">
+              <img
+                src={logoPath}
+                alt="Moore Horticulture Equipment Logo"
+                className="mx-auto h-28 sm:h-36 w-auto drop-shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
+              />
             </div>
-            <CardDescription className="text-center text-gray-600 text-base">
-              Enter your credentials to access your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
 
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-gray-700 font-medium">Username</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Enter your username" 
-                          className="py-6 text-base shadow-sm focus:ring-2 focus:ring-green-500/50" 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <Card className="border border-gray-200 bg-white text-gray-900 shadow-xl shadow-gray-200/50">
+              <CardHeader className="space-y-2 p-4 sm:p-6">
+                <CardTitle className="text-xl sm:text-2xl font-semibold text-gray-900 text-center">
+                  Login
+                </CardTitle>
+                <CardDescription className="text-sm sm:text-base text-gray-600 text-center">
+                  Access your business, online, and secure
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6">
+                {error && (
+                  <Alert variant="destructive" className="mb-4 border-rose-300 bg-rose-50 text-rose-800">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-gray-700 font-medium">Password</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="password" 
-                          placeholder="••••••••" 
-                          className="py-6 text-base shadow-sm focus:ring-2 focus:ring-green-500/50" 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-semibold text-gray-700">Email or Username</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder="email@example.com or username"
+                              className="h-14 border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <Button 
-                  type="submit" 
-                  className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-medium text-base py-6" 
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-          <CardFooter className="flex flex-col">
-            <p className="text-base text-center text-gray-600 mt-2">
-              Need to register an account?{" "}
-              <a href="/register" className="text-green-600 hover:text-green-800 font-medium hover:underline">
-                Register Now
-              </a>
-            </p>
-          </CardFooter>
-        </Card>
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-semibold text-gray-700">Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="••••••••"
+                              className="h-14 border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus-visible:ring-emerald-500 focus-visible:border-emerald-500"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button
+                      type="submit"
+                      className="h-12 sm:h-14 w-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 text-base sm:text-lg font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:from-emerald-600 hover:to-emerald-800 disabled:opacity-70 min-h-[44px]"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Authorising...
+                        </>
+                      ) : (
+                        "Enter workspace"
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-2 sm:gap-3 text-center text-xs sm:text-sm text-gray-600 p-4 sm:p-6 pt-0">
+                <p>
+                  Need to register an account?{" "}
+                  <a href="/register" className="font-medium text-emerald-600 hover:text-emerald-700 underline-offset-2">
+                    Request access
+                  </a>
+                </p>
+                <p className="text-[10px] sm:text-xs text-gray-500 break-words">
+                  Email: support@boltdown.co.uk • +44 7476888602
+                </p>
+              </CardFooter>
+            </Card>
+          </section>
+        </main>
+
       </div>
     </div>
   );

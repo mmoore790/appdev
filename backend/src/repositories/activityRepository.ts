@@ -4,16 +4,16 @@ import { IStorage, storage } from "../storage";
 export class ActivityRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findAll(limit?: number): Promise<Activity[]> {
-    return this.store.getAllActivities(limit);
+  findAll(businessId: number, limit?: number): Promise<Activity[]> {
+    return this.store.getAllActivities(businessId, limit);
   }
 
-  findByUser(userId: number, limit?: number): Promise<Activity[]> {
-    return this.store.getActivityByUser(userId, limit);
+  findByUser(userId: number, businessId: number, limit?: number): Promise<Activity[]> {
+    return this.store.getActivityByUser(userId, businessId, limit);
   }
 
-  findByEntity(entityType: string, entityId: number): Promise<Activity[]> {
-    return this.store.getActivityByEntity(entityType, entityId);
+  findByEntity(entityType: string, entityId: number, businessId: number): Promise<Activity[]> {
+    return this.store.getActivityByEntity(entityType, entityId, businessId);
   }
 
   create(data: InsertActivity): Promise<Activity> {

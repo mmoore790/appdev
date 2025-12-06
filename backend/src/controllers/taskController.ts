@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { insertTaskSchema } from "@shared/schema";
 import { taskService, InvalidTaskStatusError } from "../services/domains/taskService";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
 
 export class TaskController {
@@ -16,9 +17,15 @@ export class TaskController {
 
   private async listTasks(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
+      const userId = (req.session as any)?.userId;
+      console.log(`[TaskController] listTasks - userId: ${userId}, businessId: ${businessId}`);
+      
       const assignedTo = req.query.assignedTo ? Number(req.query.assignedTo) : undefined;
       const pendingOnly = req.query.pendingOnly === "true";
-      const tasks = await taskService.listTasks({ assignedTo, pendingOnly });
+      const tasks = await taskService.listTasks(businessId, { assignedTo, pendingOnly });
+      
+      console.log(`[TaskController] listTasks - Returning ${tasks.length} tasks for businessId: ${businessId}`);
       res.json(tasks);
     } catch (error) {
       next(error);
@@ -27,8 +34,9 @@ export class TaskController {
 
   private async getTask(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const task = await taskService.getTaskById(id);
+      const task = await taskService.getTaskById(id, businessId);
 
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
@@ -42,7 +50,8 @@ export class TaskController {
 
   private async createTask(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = insertTaskSchema.parse(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const data = insertTaskSchema.parse({ ...req.body, businessId });
       const actorId = (req.session as any)?.userId ?? undefined;
       const task = await taskService.createTask(data, actorId);
       res.status(201).json(task);
@@ -62,12 +71,13 @@ export class TaskController {
 
   private async updateTask(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
       if (!Number.isFinite(id)) {
         return res.status(400).json({ message: "Invalid task identifier" });
       }
       const actorId = (req.session as any)?.userId ?? undefined;
-      const updated = await taskService.updateTask(id, req.body, actorId);
+      const updated = await taskService.updateTask(id, req.body, businessId, actorId);
 
       if (!updated) {
         return res.status(404).json({ message: "Task not found" });

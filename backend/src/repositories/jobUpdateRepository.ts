@@ -4,12 +4,12 @@ import { IStorage, storage } from "../storage";
 export class JobUpdateRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findByJob(jobId: number): Promise<JobUpdate[]> {
-    return this.store.getJobUpdates(jobId);
+  findByJob(jobId: number, businessId: number): Promise<JobUpdate[]> {
+    return this.store.getJobUpdates(jobId, businessId);
   }
 
-  findPublicByJob(jobId: number): Promise<JobUpdate[]> {
-    return this.store.getPublicJobUpdates(jobId);
+  findPublicByJob(jobId: number, businessId: number): Promise<JobUpdate[]> {
+    return this.store.getPublicJobUpdates(jobId, businessId);
   }
 
   create(data: InsertJobUpdate): Promise<JobUpdate> {

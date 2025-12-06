@@ -125,14 +125,14 @@ export default function Tasks() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 mt-4 sm:mt-6 md:mt-8">
       <Card>
         <CardHeader className="space-y-6 pb-4">
           <div className="space-y-1">
-            <CardTitle className="text-2xl font-semibold text-neutral-800">
+            <CardTitle className="text-xl sm:text-2xl font-semibold text-neutral-800">
               Tasks
             </CardTitle>
-            <p className="text-sm text-neutral-500">
+            <p className="text-xs sm:text-sm text-neutral-500">
               Monitor workloads, filter assignments, and keep the board moving
               smoothly.
             </p>

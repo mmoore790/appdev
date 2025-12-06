@@ -1,13 +1,15 @@
 import { NextFunction, Request, Response } from "express";
 import { storage } from "./storage";
 import * as bcrypt from 'bcryptjs';
-import { InsertRegistrationRequest, InsertUser } from "@shared/schema";
+import { InsertRegistrationRequest, InsertUser, users } from "@shared/schema";
 import { tokenStorage } from "./tokenStorage";
 import {
   sendRegistrationApprovalEmail,
   sendRegistrationRejectionEmail
 } from "./services/emailService";
 import { logActivity } from "./services/activityService";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 
 // Middleware to check if user is authenticated with token fallback
@@ -29,9 +31,10 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
 
     if (tokenData) {
       // Valid token - use it to set session data for this request
-      console.log(`User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}`);
+      console.log(`User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
       req.session.userId = tokenData.userId;
       req.session.role = tokenData.role;
+      req.session.businessId = tokenData.businessId;
       return next();
     }
   }
@@ -43,9 +46,10 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
 
     if (tokenData) {
       // Valid token - use it to set session data for this request
-      console.log(`User authenticated via query token: userId=${tokenData.userId}, role=${tokenData.role}`);
+      console.log(`User authenticated via query token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
       req.session.userId = tokenData.userId;
       req.session.role = tokenData.role;
+      req.session.businessId = tokenData.businessId;
       return next();
     }
   }
@@ -72,10 +76,38 @@ export const isAdmin = async (req: Request, res: Response, next: NextFunction) =
 
   // Use type assertion to ensure userId is treated as a number
   const userId = req.session.userId as number;
-  const user = await storage.getUser(userId);
+  const businessId = req.session.businessId as number;
+  
+  if (!businessId) {
+    return res.status(401).json({ message: "Business context not found" });
+  }
+  
+  const user = await storage.getUser(userId, businessId);
 
   if (!user || user.role !== "admin") {
     return res.status(403).json({ message: "Forbidden" });
+  }
+
+  return next();
+};
+
+// Middleware to check if user is a master
+export const isMaster = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const userId = req.session.userId as number;
+  const businessId = req.session.businessId as number;
+  
+  if (!businessId) {
+    return res.status(401).json({ message: "Business context not found" });
+  }
+  
+  const user = await storage.getUser(userId, businessId);
+
+  if (!user || user.role !== "master") {
+    return res.status(403).json({ message: "Forbidden: Master access required" });
   }
 
   return next();
@@ -97,31 +129,80 @@ export const verifyPassword = async (
 
 // Initialize authentication endpoints
 export const initAuthRoutes = (app: any) => {
+  // Test endpoint to verify routes are working
+  app.get("/api/auth/test", (req: Request, res: Response) => {
+    res.json({ message: "Auth routes are working", timestamp: new Date().toISOString() });
+  });
+
   // Login endpoint
   app.post("/api/auth/login", async (req: Request, res: Response) => {
+    console.log("=== LOGIN REQUEST START ===");
+    console.log("Request body:", JSON.stringify(req.body));
+    console.log("Storage object exists:", !!storage);
+    
     try {
-      const { username, password } = req.body;
+      const { email, password } = req.body;
+      console.log("Extracted email:", email, "Password provided:", !!password);
 
-      if (!username || !password) {
-        return res.status(400).json({ message: "Username and password are required" });
+      if (!email || !password) {
+        console.log("Missing email or password");
+        return res.status(400).json({ message: "Email/username and password are required" });
       }
 
-      console.log(`Login attempt for username: ${username}`);
-      const user = await storage.getUserByUsername(username);
+      console.log(`Login attempt for identifier: ${email}`);
+      
+      // Try to find user by email first
+      let user: any;
+      try {
+        user = await storage.getUserByEmail(email);
+      } catch (dbError) {
+        console.error("Database error when searching by email:", dbError);
+        throw new Error(`Database query failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
+      }
+      
+      // If not found by email, try username
+      if (!user) {
+        console.log(`User not found with email, trying username: ${email}`);
+        try {
+          user = await storage.getUserByUsernameAcrossAllBusinesses(email);
+        } catch (dbError) {
+          console.error("Database error when searching by username:", dbError);
+          throw new Error(`Database query failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
+        }
+      }
 
       if (!user) {
-        console.log(`User not found: ${username}`);
+        console.log(`User not found with email or username: ${email}`);
         return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      if (!user.email) {
+        console.log(`User ${user.id} has no email address`);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Check if user has a businessId
+      if (!user.businessId) {
+        console.error(`User ${user.id} (${user.email}) has no businessId associated`);
+        return res.status(500).json({ message: "Account configuration error. Please contact administrator." });
       }
 
       // Check if is_active is false (only if the column exists and is defined)
       if (user.isActive === false) {
-        console.log(`User account inactive: ${username}`);
+        console.log(`User account inactive: ${user.email}`);
         return res.status(403).json({ message: "Account is inactive" });
       }
 
-      // For debugging, log the hashed password from DB
-      console.log(`Stored password hash: ${user.password.substring(0, 10)}...`);
+      // Check if user has a password set
+      if (!user.password) {
+        console.error(`User ${user.id} (${user.email}) has no password set`);
+        return res.status(500).json({ message: "Account configuration error. Please contact administrator." });
+      }
+
+      // For debugging, log the hashed password from DB (safely)
+      if (user.password && user.password.length > 0) {
+        console.log(`Stored password hash: ${user.password.substring(0, 10)}...`);
+      }
 
       // Try to verify the password
       try {
@@ -141,39 +222,55 @@ export const initAuthRoutes = (app: any) => {
       // Create session
       req.session.userId = user.id;
       req.session.role = user.role;
+      req.session.businessId = user.businessId;
 
       // Debug session data
-      console.log(`Setting session data: userId=${user.id}, role=${user.role}`);
+      console.log(`Setting session data: userId=${user.id}, role=${user.role}, businessId=${user.businessId}`);
       console.log('Session ID:', req.sessionID);
       console.log('Session BEFORE save:', req.session);
 
-      // Generate auth token as fallback for session issues
-      const authToken = tokenStorage.generateToken(user.id, user.role);
-      console.log(`Generated auth token for user ${user.id}`);
+      // Generate auth token as fallback for session issues (include businessId in token)
+      let authToken: string;
+      try {
+        authToken = tokenStorage.generateToken(user.id, user.role, user.businessId);
+        console.log(`Generated auth token for user ${user.id}`);
+      } catch (tokenError) {
+        console.error('Token generation error:', tokenError);
+        // Continue without token if generation fails
+        authToken = '';
+      }
 
       // Force session save with promise-based approach
-      await new Promise<void>((resolve, reject) => {
-        req.session.save(err => {
-          if (err) {
-            console.error('Session save error:', err);
-            reject(err);
-          } else {
-            console.log('Session AFTER save:', req.session);
-            console.log(`User logged in successfully: ${username}, id: ${user.id}, role: ${user.role}`);
-            resolve();
-          }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          req.session.save(err => {
+            if (err) {
+              console.error('Session save error:', err);
+              reject(err);
+            } else {
+              console.log('Session AFTER save:', req.session);
+              console.log(`User logged in successfully: ${user.email}, id: ${user.id}, role: ${user.role}, businessId: ${user.businessId}`);
+              resolve();
+            }
+          });
         });
-      });
+      } catch (sessionError) {
+        console.error('Session save failed:', sessionError);
+        // Continue with login even if session save fails - token will be used as fallback
+        console.warn('Continuing login despite session save failure - using token authentication');
+      }
 
       // Log user login activity
       try {
         await logActivity({
+          businessId: user.businessId,
           userId: user.id,
           activityType: 'user_login',
-          description: `User ${user.username} logged in`,
+          description: `User ${user.email} logged in`,
           entityType: 'user',
           entityId: user.id,
           metadata: {
+            email: user.email,
             username: user.username,
             role: user.role,
             loginTime: new Date().toISOString()
@@ -189,12 +286,40 @@ export const initAuthRoutes = (app: any) => {
 
       // Set a header to indicate successful login
       res.setHeader('X-Auth-Success', 'true');
-      res.setHeader('X-Auth-Token', authToken);
+      if (authToken) {
+        res.setHeader('X-Auth-Token', authToken);
+      }
 
       return res.status(200).json({ user: userInfo });
     } catch (error) {
-      console.error("Login error:", error);
-      return res.status(500).json({ message: "An error occurred during login" });
+      console.error("=== LOGIN ERROR CAUGHT ===");
+      console.error("Error type:", error instanceof Error ? error.constructor.name : typeof error);
+      console.error("Error message:", error instanceof Error ? error.message : String(error));
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      
+      if (error instanceof Error) {
+        console.error("Error name:", error.name);
+        console.error("Error cause:", error.cause);
+      }
+      
+      // Log the full error object
+      console.error("Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      // Return more detailed error in development
+      const isDevelopment = process.env.NODE_ENV === "development";
+      return res.status(500).json({ 
+        message: "An error occurred during login",
+        ...(isDevelopment && {
+          error: errorMessage,
+          stack: errorStack,
+          type: error instanceof Error ? error.constructor.name : typeof error
+        })
+      });
+    } finally {
+      console.log("=== LOGIN REQUEST END ===");
     }
   });
 
@@ -214,9 +339,14 @@ export const initAuthRoutes = (app: any) => {
     try {
       // userId is set by isAuthenticated middleware from either session or token
       const userId = req.session.userId as number;
-      console.log(`/api/auth/me - Processing for userId: ${userId}`);
+      const businessId = req.session.businessId as number;
+      console.log(`/api/auth/me - Processing for userId: ${userId}, businessId: ${businessId}`);
 
-      const user = await storage.getUser(userId);
+      if (!businessId) {
+        return res.status(401).json({ message: "Business context not found" });
+      }
+
+      const user = await storage.getUser(userId, businessId);
 
       if (!user) {
         console.log(`/api/auth/me - User not found for userId: ${userId}`);
@@ -252,8 +382,12 @@ export const initAuthRoutes = (app: any) => {
       if (email !== undefined) updateData.email = email;
       if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
 
+      // Get businessId from session
+      const businessId = req.session.businessId as number;
+      
       // Add activity logging for profile update
       await logActivity({
+        businessId: businessId,
         userId: userId,
         activityType: 'profile_update',
         description: `User updated their profile`,
@@ -300,8 +434,12 @@ export const initAuthRoutes = (app: any) => {
       if (messageNotifications !== undefined) updateData.messageNotifications = messageNotifications;
       if (jobNotifications !== undefined) updateData.jobNotifications = jobNotifications;
 
+      // Get businessId from session
+      const businessId = req.session.businessId as number;
+      
       // Add activity logging for notification preference update
       await logActivity({
+        businessId: businessId,
         userId: userId,
         activityType: 'notification_preferences_update',
         description: `User updated notification preferences`,
@@ -333,6 +471,42 @@ export const initAuthRoutes = (app: any) => {
     }
   });
 
+  // Dismiss getting started page
+  app.post("/api/auth/dismiss-getting-started", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as number;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get businessId from session
+      const businessId = req.session.businessId as number;
+      
+      // Update user to set dismissal timestamp
+      const updateData: Partial<InsertUser> = {
+        gettingStartedDismissedAt: new Date().toISOString()
+      };
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Don't return password
+      const { password, ...userInfo } = updatedUser;
+
+      return res.json({
+        message: "Getting started page dismissed successfully",
+        user: userInfo
+      });
+    } catch (error) {
+      console.error('Error dismissing getting started:', error);
+      return res.status(500).json({ message: "Failed to dismiss getting started page" });
+    }
+  });
+
   // Change password
   app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -350,8 +524,14 @@ export const initAuthRoutes = (app: any) => {
         });
       }
 
+      // Get businessId from session
+      const businessId = req.session.businessId as number;
+      if (!businessId) {
+        return res.status(401).json({ message: "Business context not found" });
+      }
+
       // Verify current password
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(userId, businessId);
 
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -370,8 +550,9 @@ export const initAuthRoutes = (app: any) => {
         // updatedAt field is handled by the storage layer
       });
 
-      // Add activity logging for password change
+      // Add activity logging for password change (businessId already retrieved above)
       await logActivity({
+        businessId: businessId,
         userId: userId,
         activityType: 'password_change',
         description: `User changed their password`,
@@ -393,10 +574,21 @@ export const initAuthRoutes = (app: any) => {
     }
   });
 
-  // Register endpoint (creates a user directly)
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
+  // Get all businesses (for registration/joining) - MASTER ONLY
+  app.get("/api/auth/businesses", isMaster, async (req: Request, res: Response) => {
     try {
-      const { username, password, email, fullName, requestedRole } = req.body;
+      const businesses = await storage.getAllBusinesses();
+      return res.status(200).json(businesses);
+    } catch (error) {
+      console.error("Error fetching businesses:", error);
+      return res.status(500).json({ message: "An error occurred" });
+    }
+  });
+
+  // Register endpoint (creates a user and optionally a business) - MASTER ONLY
+  app.post("/api/auth/register", isMaster, async (req: Request, res: Response) => {
+    try {
+      const { username, password, email, fullName, requestedRole, businessName, businessId, createNewBusiness } = req.body;
 
       if (!username || !password || !email || !fullName) {
         return res.status(400).json({
@@ -404,22 +596,77 @@ export const initAuthRoutes = (app: any) => {
         });
       }
 
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) {
+      let finalBusinessId: number;
+
+      // Handle business creation or joining
+      if (createNewBusiness) {
+        // Create a new business
+        if (!businessName) {
+          return res.status(400).json({
+            message: "Business name is required when creating a new business"
+          });
+        }
+
+        // Check if business name already exists
+        const existingBusiness = await storage.getBusinessByName(businessName);
+        if (existingBusiness) {
+          return res.status(400).json({ message: "Business name already taken" });
+        }
+
+        // Create the business
+        const newBusiness = await storage.createBusiness({
+          name: businessName,
+          email: email, // Use user's email as business email initially
+        });
+
+        finalBusinessId = newBusiness.id;
+      } else {
+        // Join existing business
+        if (!businessId) {
+          return res.status(400).json({
+            message: "Business ID is required when joining an existing business"
+          });
+        }
+
+        // Verify business exists
+        const business = await storage.getBusiness(businessId);
+        if (!business) {
+          return res.status(404).json({ message: "Business not found" });
+        }
+
+        if (!business.isActive) {
+          return res.status(400).json({ message: "Business is not active" });
+        }
+
+        finalBusinessId = businessId;
+      }
+
+      // Check if email already exists (email should be unique across all businesses and all users, active or inactive)
+      const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (existingUserByEmail) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      // Check if username already exists across all businesses (all users, active or inactive)
+      const [existingUserByUsername] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+      if (existingUserByUsername) {
         return res.status(400).json({ message: "Username already taken" });
       }
 
       // Hash password before storing
       const hashedPassword = await hashPassword(password);
 
-      // Create the user directly
+      // Determine role: if creating new business, user becomes admin; otherwise use requested role
+      const userRole = createNewBusiness ? "admin" : (requestedRole || "staff");
+
+      // Create the user
       const userData: InsertUser = {
         username,
         password: hashedPassword,
         email,
         fullName,
-        role: requestedRole || "staff", // Default to "staff"
+        role: userRole,
+        businessId: finalBusinessId,
         isActive: true // Activate the user immediately
       };
       
@@ -427,7 +674,8 @@ export const initAuthRoutes = (app: any) => {
 
       // Log user creation
       await logActivity({
-        userId: null, 
+        businessId: finalBusinessId,
+        userId: newUser.id, 
         activityType: 'user_registration',
         description: `New user registered: ${username}`,
         entityType: 'user',
@@ -435,13 +683,16 @@ export const initAuthRoutes = (app: any) => {
         metadata: {
           username: newUser.username,
           email: newUser.email,
-          role: newUser.role
+          role: newUser.role,
+          createdBusiness: createNewBusiness || false
         }
       });
 
-      // Send a success response. The frontend will handle the redirect.
+      // Send a success response with business info
       return res.status(201).json({
-        message: "Registration successful. Please log in."
+        message: "Registration successful. Please log in.",
+        businessId: finalBusinessId,
+        businessName: createNewBusiness ? businessName : undefined
       });
     } catch (error) {
       console.error("Registration error:", error);
@@ -454,7 +705,8 @@ export const initAuthRoutes = (app: any) => {
   // Get all registration requests (admin only)
   app.get("/api/auth/registration-requests", isAdmin, async (req: Request, res: Response) => {
     try {
-      const requests = await storage.getAllRegistrationRequests();
+      const businessId = req.session.businessId as number;
+      const requests = await storage.getAllRegistrationRequests(businessId);
       // Don't return passwords
       const sanitizedRequests = requests.map(req => {
         const { password, ...rest } = req;
@@ -463,6 +715,7 @@ export const initAuthRoutes = (app: any) => {
 
       // Log retrieval of all registration requests
       await logActivity({
+        businessId: businessId,
         userId: req.session.userId as number,
         activityType: 'view_registration_requests',
         description: `Admin viewed all registration requests`,
@@ -481,7 +734,8 @@ export const initAuthRoutes = (app: any) => {
   // Get pending registration requests (admin only)
   app.get("/api/auth/pending-registration-requests", isAdmin, async (req: Request, res: Response) => {
     try {
-      const requests = await storage.getPendingRegistrationRequests();
+      const businessId = req.session.businessId as number;
+      const requests = await storage.getPendingRegistrationRequests(businessId);
       // Don't return passwords
       const sanitizedRequests = requests.map(req => {
         const { password, ...rest } = req;
@@ -490,6 +744,7 @@ export const initAuthRoutes = (app: any) => {
 
       // Log retrieval of pending registration requests
       await logActivity({
+        businessId: businessId,
         userId: req.session.userId as number,
         activityType: 'view_pending_registration_requests',
         description: `Admin viewed pending registration requests`,
@@ -531,12 +786,14 @@ export const initAuthRoutes = (app: any) => {
       }
 
       // Create the user
+      const businessId = req.session.businessId as number;
       const userData: InsertUser = {
         username: request.username,
         password: request.password, // Already hashed during registration
         fullName: request.fullName,
         email: request.email,
         role: role || request.requestedRole || "staff", // Use requested role if no role provided
+        businessId: businessId,
         isActive: true
       };
 
@@ -553,6 +810,7 @@ export const initAuthRoutes = (app: any) => {
 
       // Log registration approval
       await logActivity({
+        businessId: businessId,
         userId: reviewerId,
         activityType: 'approve_registration',
         description: `Registration request for ${request.username} approved`,
@@ -615,6 +873,7 @@ export const initAuthRoutes = (app: any) => {
 
       // Update registration request status
       const reviewerId = req.session.userId as number;
+      const businessId = req.session.businessId as number;
       await storage.updateRegistrationRequestStatus(
         registrationId,
         "rejected",
@@ -624,6 +883,7 @@ export const initAuthRoutes = (app: any) => {
 
       // Log registration rejection
       await logActivity({
+        businessId: businessId,
         userId: reviewerId,
         activityType: 'reject_registration',
         description: `Registration request for ${request.username} rejected`,

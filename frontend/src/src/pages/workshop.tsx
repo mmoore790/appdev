@@ -10,8 +10,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { WorkshopJobsTable } from "@/components/workshop-jobs-table";
 import { JobWizard } from "@/components/job-wizard";
 import { PrintWorkOrders } from "@/components/print-work-orders";
-import { format, subDays, isWithinInterval } from "date-fns";
-import { StatCard } from "@/components/ui/stat-card";
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,7 +18,6 @@ const STATUS_TABS = [
   { value: "all", label: "All Jobs", shortLabel: "All Jobs", statuses: "all" as const },
   { value: "waiting", label: "Waiting Assessment", shortLabel: "Waiting", statuses: ["waiting_assessment"] as const },
   { value: "in-progress", label: "In Progress", shortLabel: "In Progress", statuses: ["in_progress"] as const },
-  { value: "parts", label: "Parts Ordered", shortLabel: "Parts", statuses: ["parts_ordered"] as const },
   { value: "ready", label: "Ready for Pickup", shortLabel: "Ready", statuses: ["ready_for_pickup"] as const },
   { value: "completed", label: "Completed", shortLabel: "Completed", statuses: ["completed"] as const },
 ] as const;
@@ -56,11 +54,15 @@ export default function Workshop() {
     if (!jobs || !dateRange.from || !dateRange.to) return Array.isArray(jobs) ? jobs : [];
     if (!Array.isArray(jobs)) return [];
 
+    // Normalize the range to whole days so newly created jobs later today are still included
+    const rangeStart = startOfDay(dateRange.from);
+    const rangeEnd = endOfDay(dateRange.to);
+
     return jobs.filter((job: any) => {
       const jobDate = new Date(job.createdAt);
       return isWithinInterval(jobDate, {
-        start: dateRange.from,
-        end: dateRange.to,
+        start: rangeStart,
+        end: rangeEnd,
       });
     });
   }, [jobs, dateRange]);
@@ -97,9 +99,6 @@ export default function Workshop() {
           break;
         case "in_progress":
           base["in-progress"].push(job);
-          break;
-        case "parts_ordered":
-          base.parts.push(job);
           break;
         case "ready_for_pickup":
           base.ready.push(job);
@@ -160,43 +159,13 @@ export default function Workshop() {
     return parts.join(" • ");
   }, [currentTab, currentTabCount, mechanicLabel, selectedMechanic]);
 
-  const workshopMetrics = useMemo(() => {
-    if (!Array.isArray(mechanicFilteredJobs) || mechanicFilteredJobs.length === 0) {
-      return {
-        jobsInProgress: 0,
-        activeJobs: 0,
-        jobsLast7Days: 0,
-      };
-    }
-
-    const jobsInProgress = mechanicFilteredJobs.filter(
-      (job: any) => job.status === "in_progress" || job.status === "parts_ordered"
-    ).length;
-
-    const activeJobs = mechanicFilteredJobs.filter(
-      (job: any) => job.status !== "ready_for_pickup" && job.status !== "completed"
-    ).length;
-
-    const sevenDaysAgo = subDays(new Date(), 7);
-    const jobsLast7Days = mechanicFilteredJobs.filter((job: any) => {
-      const jobDate = new Date(job.createdAt);
-      return jobDate >= sevenDaysAgo;
-    }).length;
-
-    return {
-      jobsInProgress,
-      activeJobs,
-      jobsLast7Days,
-    };
-  }, [mechanicFilteredJobs]);
-
   return (
     <>
       <PageHeader
         title="Workshop Management"
         description="Monitor throughput, triage incoming repairs, and keep every technician aligned."
         actions={
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-end">
             <div className="flex w-full flex-col gap-2 sm:w-auto">
               <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 Date Range
@@ -313,29 +282,8 @@ export default function Workshop() {
         }
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-3 py-4 sm:px-4 sm:py-6 lg:px-8">
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <StatCard
-              title="Jobs In Progress"
-              value={workshopMetrics.jobsInProgress}
-              icon="⚙️"
-              iconColor="bg-blue-500"
-            />
-            <StatCard
-              title="Active Jobs"
-              value={workshopMetrics.activeJobs}
-              icon="📋"
-              iconColor="bg-amber-500"
-            />
-            <StatCard
-              title="Jobs Last 7 Days"
-              value={workshopMetrics.jobsLast7Days}
-              icon="📈"
-              iconColor="bg-green-500"
-            />
-          </div>
-
           <Card className="border border-neutral-200 shadow-sm">
             <CardHeader className="space-y-6 border-b border-neutral-100 pb-6">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -379,15 +327,15 @@ export default function Workshop() {
             </CardHeader>
             <CardContent className="pt-6">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as StatusTabValue)}>
-                <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 sm:flex-nowrap sm:overflow-x-auto">
+                <TabsList className="flex h-auto w-full flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 overflow-x-auto">
                   {STATUS_TABS.map((tab) => (
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="group flex min-w-[150px] flex-1 items-center justify-between gap-3 rounded-lg border border-transparent bg-white px-3 py-2 text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:min-w-[170px] sm:text-sm"
+                      className="group flex min-w-[120px] sm:min-w-[150px] flex-1 items-center justify-between gap-2 sm:gap-3 rounded-lg border border-transparent bg-white px-2 sm:px-3 py-2 text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:text-sm"
                     >
                       <span className="truncate">{tab.shortLabel}</span>
-                      <span className="flex h-6 min-w-[2.5rem] items-center justify-center rounded-full bg-neutral-100 px-2 text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
+                      <span className="flex h-5 sm:h-6 min-w-[2rem] sm:min-w-[2.5rem] items-center justify-center rounded-full bg-neutral-100 px-1.5 sm:px-2 text-[10px] sm:text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
                         {statusCounts[tab.value]}
                       </span>
                     </TabsTrigger>

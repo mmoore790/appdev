@@ -6,8 +6,7 @@ import {
   ClipboardList, 
   UserPlus,
   Wrench,
-  MessageCircle,
-  Settings
+  MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +21,21 @@ interface AddMenuProps {
   className?: string;
   variant?: "default" | "outline" | "ghost";
   size?: "sm" | "md" | "lg";
+  onNewTask?: () => void;
+  onNewCustomer?: () => void;
+  onNewJob?: () => void;
+  onNewMessage?: () => void;
 }
 
-export function AddMenu({ className, variant = "default", size = "md" }: AddMenuProps) {
+export function AddMenu({ 
+  className, 
+  variant = "default", 
+  size = "md",
+  onNewTask,
+  onNewCustomer,
+  onNewJob,
+  onNewMessage
+}: AddMenuProps) {
   const [open, setOpen] = useState(false);
   const [, navigate] = useLocation();
   const { user } = useAuth();
@@ -41,32 +52,26 @@ export function AddMenu({ className, variant = "default", size = "md" }: AddMenu
     {
       label: "New Task",
       icon: <ClipboardList size={16} />,
-      onClick: () => navigate("/tasks"), // Go to tasks page where the + button exists
+      onClick: onNewTask || (() => navigate("/tasks")),
       permission: "all" // Everyone can create tasks
     },
     {
       label: "New Customer",
       icon: <UserPlus size={16} />,
-      onClick: () => navigate("/customers"), // Go to customers page where the + button exists
+      onClick: onNewCustomer || (() => navigate("/customers")),
       permission: "all" // Everyone can create customers
     },
     {
       label: "New Job",
       icon: <Wrench size={16} />,
-      onClick: () => navigate("/workshop"), // Go to workshop page where the + button exists
+      onClick: onNewJob || (() => navigate("/workshop")),
       permission: "all" // Everyone can create jobs
     },
     {
       label: "New Message",
       icon: <MessageCircle size={16} />,
-      onClick: () => navigate("/messages"), // Go to messages page
+      onClick: onNewMessage || (() => navigate("/messages")),
       permission: "all" // Everyone can send messages
-    },
-    {
-      label: "New Equipment Type",
-      icon: <Settings size={16} />,
-      onClick: () => navigate("/settings"), // Go to settings page
-      permission: "admin" // Only admins can add equipment types
     }
   ];
   

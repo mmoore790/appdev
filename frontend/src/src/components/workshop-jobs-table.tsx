@@ -83,7 +83,7 @@ export function WorkshopJobsTable({
       setNewStatus(status);
       setConfirmDialogOpen(true);
     } else {
-      const navigateAfterUpdate = status === "parts_ordered";
+      const navigateAfterUpdate = false;
       statusUpdateMutation.mutate(
         { jobId: job.id, status },
         {
@@ -224,8 +224,6 @@ export function WorkshopJobsTable({
         return "Waiting Assessment";
       case "in_progress":
         return "In Progress";
-      case "parts_ordered":
-        return "Parts Ordered";
       case "completed":
         return "Completed";
       case "cancelled":
@@ -268,7 +266,7 @@ export function WorkshopJobsTable({
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
         <div className="hidden lg:block">
-          <div className="overflow-x-auto px-4 py-4">
+          <div className="overflow-x-auto overflow-y-auto max-h-[600px] px-4 py-4">
             <Table className="min-w-[960px]">
                 <TableHeader>
                   <TableRow className="border-b border-neutral-200">
@@ -398,7 +396,6 @@ export function WorkshopJobsTable({
                           <SelectContent>
                             <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
                             <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="parts_ordered">Parts Ordered</SelectItem>
                             <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                           </SelectContent>
@@ -435,7 +432,7 @@ export function WorkshopJobsTable({
           </div>
         </div>
 
-        <div className="lg:hidden px-4 py-4">
+        <div className="lg:hidden overflow-y-auto max-h-[600px] px-4 py-4">
           {isLoading ? (
             <div className="py-10 text-center">
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
@@ -534,7 +531,6 @@ export function WorkshopJobsTable({
                           <SelectContent>
                             <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
                             <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="parts_ordered">Parts Ordered</SelectItem>
                             <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                           </SelectContent>

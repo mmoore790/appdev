@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { workCompletedService } from "../services/domains/workCompletedService";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 
 export class WorkCompletedController {
   public readonly router = Router();
@@ -14,8 +15,9 @@ export class WorkCompletedController {
 
   private async listWorkEntries(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
-      const entries = await workCompletedService.listByJob(jobId);
+      const entries = await workCompletedService.listByJob(jobId, businessId);
       res.json(entries);
     } catch (error) {
       next(error);
@@ -24,7 +26,9 @@ export class WorkCompletedController {
 
   private async createWorkEntry(req: Request, res: Response, next: NextFunction) {
     try {
-      const entry = await workCompletedService.createWorkEntry(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const data = { ...req.body, businessId };
+      const entry = await workCompletedService.createWorkEntry(data);
       res.status(201).json(entry);
     } catch (error) {
       next(error);
@@ -33,8 +37,9 @@ export class WorkCompletedController {
 
   private async updateWorkEntry(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const entry = await workCompletedService.updateWorkEntry(id, req.body);
+      const entry = await workCompletedService.updateWorkEntry(id, req.body, businessId);
 
       if (!entry) {
         return res.status(404).json({ message: "Work completed entry not found" });
@@ -48,8 +53,9 @@ export class WorkCompletedController {
 
   private async deleteWorkEntry(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const deleted = await workCompletedService.deleteWorkEntry(id);
+      const deleted = await workCompletedService.deleteWorkEntry(id, businessId);
 
       if (!deleted) {
         return res.status(404).json({ message: "Work completed entry not found" });

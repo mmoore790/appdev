@@ -57,13 +57,39 @@ const useSSL = shouldUseSSL(connectionString);
 // Ensure downstream consumers see the fully constructed connection string
 process.env.DATABASE_URL = connectionString;
 
+// For serverless databases (like Neon), use a smaller pool size to avoid exceeding server limits
+// Session mode typically allows fewer connections than regular PostgreSQL
+const poolSize = parseInt(process.env.DB_POOL_SIZE || "10", 10);
+
 export const pool = new Pool({
   connectionString,
   ssl: useSSL ? { rejectUnauthorized: false } : undefined,
+  max: poolSize, // Reduced from 20 to avoid exceeding serverless database limits
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 30000, // Return an error after 30 seconds if connection could not be established
+  allowExitOnIdle: true, // Allow process to exit when pool is idle
 });
 
 pool.on("error", (err) => {
   console.error("Unexpected Postgres client error", err);
 });
+
+// Monitor pool usage for debugging
+pool.on("connect", () => {
+  console.log(`[DB Pool] Connection established. Total: ${pool.totalCount}, Idle: ${pool.idleCount}, Waiting: ${pool.waitingCount}`);
+});
+
+pool.on("acquire", () => {
+  if (pool.totalCount >= poolSize * 0.8) {
+    console.warn(`[DB Pool] High connection usage: ${pool.totalCount}/${poolSize} connections in use`);
+  }
+});
+
+// Log pool stats periodically
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    console.log(`[DB Pool Stats] Total: ${pool.totalCount}, Idle: ${pool.idleCount}, Waiting: ${pool.waitingCount}`);
+  }, 60000); // Every minute
+}
 
 export const db = drizzle(pool, { schema });

@@ -27,14 +27,17 @@ export function useAuth() {
         credentials: 'include',
       });
       
-      // Invalidate the user query to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.setQueryData(["/api/auth/me"], null);
+      // Clear ALL queries to prevent data leakage between users
+      // This ensures that when a new user logs in, they don't see the previous user's cached data
+      queryClient.clear();
       
       // Redirect to login page
       window.location.href = '/login';
     } catch (error) {
       console.error('Logout failed:', error);
+      // Even if logout fails, clear the cache and redirect
+      queryClient.clear();
+      window.location.href = '/login';
     }
   };
 

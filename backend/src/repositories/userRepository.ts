@@ -4,20 +4,20 @@ import { IStorage, storage } from "../storage";
 export class UserRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findAll(): Promise<User[]> {
-    return this.store.getAllUsers();
+  findAll(businessId: number): Promise<User[]> {
+    return this.store.getAllUsers(businessId);
   }
 
-  findById(id: number): Promise<User | undefined> {
-    return this.store.getUser(id);
+  findById(id: number, businessId: number): Promise<User | undefined> {
+    return this.store.getUser(id, businessId);
   }
 
-  findByUsername(username: string): Promise<User | undefined> {
-    return this.store.getUserByUsername(username);
+  findByUsername(username: string, businessId: number): Promise<User | undefined> {
+    return this.store.getUserByUsername(username, businessId);
   }
 
-  findByRole(role: string): Promise<User[]> {
-    return this.store.getUsersByRole(role);
+  findByRole(role: string, businessId: number): Promise<User[]> {
+    return this.store.getUsersByRole(role, businessId);
   }
 
   create(data: InsertUser): Promise<User> {

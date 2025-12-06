@@ -12,12 +12,12 @@ export class RegistrationRepository {
     return this.store.getRegistrationRequest(id);
   }
 
-  findAll(): Promise<RegistrationRequest[]> {
-    return this.store.getAllRegistrationRequests();
+  findAll(businessId: number): Promise<RegistrationRequest[]> {
+    return this.store.getAllRegistrationRequests(businessId);
   }
 
-  findPending(): Promise<RegistrationRequest[]> {
-    return this.store.getPendingRegistrationRequests();
+  findPending(businessId: number): Promise<RegistrationRequest[]> {
+    return this.store.getPendingRegistrationRequests(businessId);
   }
 
   updateStatus(id: number, status: string, reviewedBy: number, notes?: string) {

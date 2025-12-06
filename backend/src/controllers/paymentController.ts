@@ -7,6 +7,7 @@ import {
 import { paymentService } from "../services/domains/paymentService";
 import StripeService from "../stripe-service";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
 
 export class PaymentController {
@@ -59,9 +60,10 @@ export class PaymentController {
     this.router.post("/jobs/payments/webhook", this.handleLegacyWebhook);
   }
 
-  private async listPaymentRequests(_req: Request, res: Response, next: NextFunction) {
+  private async listPaymentRequests(req: Request, res: Response, next: NextFunction) {
     try {
-      const requests = await paymentService.listPaymentRequests();
+      const businessId = getBusinessIdFromRequest(req);
+      const requests = await paymentService.listPaymentRequests(businessId);
       res.json(requests);
     } catch (error) {
       next(error);
@@ -74,8 +76,9 @@ export class PaymentController {
     next: NextFunction
   ) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
-      const requests = await paymentService.listPaymentRequestsByJob(jobId);
+      const requests = await paymentService.listPaymentRequestsByJob(jobId, businessId);
       res.json(requests);
     } catch (error) {
       next(error);
@@ -84,7 +87,8 @@ export class PaymentController {
 
   private async createPaymentRequest(req: Request, res: Response, next: NextFunction) {
     try {
-      const payload = insertPaymentRequestSchema.parse(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const payload = insertPaymentRequestSchema.parse({ ...req.body, businessId });
       const actorId = (req.session as any).userId || 1;
       const result = await paymentService.createPaymentRequest(payload, actorId);
 
@@ -113,8 +117,9 @@ export class PaymentController {
     next: NextFunction
   ) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const status = await paymentService.getPaymentStatus(id);
+      const status = await paymentService.getPaymentStatus(id, businessId);
 
       if (!status) {
         return res.status(404).json({ message: "Payment request not found" });
@@ -128,8 +133,9 @@ export class PaymentController {
 
   private async updatePaymentRequest(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const updated = await paymentService.updatePaymentRequest(id, req.body);
+      const updated = await paymentService.updatePaymentRequest(id, req.body, businessId);
 
       if (!updated) {
         return res.status(404).json({ message: "Payment request not found" });
@@ -175,6 +181,7 @@ export class PaymentController {
     next: NextFunction
   ) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
       const actorId = req.session.userId;
 
@@ -183,7 +190,7 @@ export class PaymentController {
       }
 
       const payload = jobPaymentRequestSchema.parse(req.body);
-      const result = await paymentService.createJobPaymentRequest(jobId, payload, actorId);
+      const result = await paymentService.createJobPaymentRequest(jobId, payload, businessId, actorId);
 
       res.json({
         message: result.error
@@ -204,8 +211,9 @@ export class PaymentController {
 
   private async getJobPaymentHistory(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
-      const history = await paymentService.getJobPaymentHistory(jobId);
+      const history = await paymentService.getJobPaymentHistory(jobId, businessId);
 
       if (!history) {
         return res.status(404).json({ message: "Job not found" });
@@ -219,8 +227,9 @@ export class PaymentController {
 
   private async refreshJobPayments(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
-      const result = await paymentService.refreshJobPaymentStatuses(jobId);
+      const result = await paymentService.refreshJobPaymentStatuses(jobId, businessId);
       res.json({
         message: `Payment status refreshed. ${result.updatedCount} requests updated, ${result.paidRequests} payments completed.`,
         ...result,
@@ -246,12 +255,13 @@ export class PaymentController {
     next: NextFunction
   ) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const sessionId = req.params.sessionId;
       if (!sessionId) {
         return res.status(400).json({ message: "Session ID is required" });
       }
 
-      const details = await paymentService.getStripeSessionDetails(sessionId);
+      const details = await paymentService.getStripeSessionDetails(sessionId, businessId);
       res.json(details);
     } catch (error) {
       if (error instanceof Error && error.message === "Stripe integration not configured") {

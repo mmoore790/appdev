@@ -4,6 +4,7 @@ import crypto from 'crypto';
 interface TokenData {
   userId: number;
   role: string;
+  businessId: number;
   expiresAt: number;
 }
 
@@ -11,13 +12,13 @@ class TokenStorage {
   private tokens: Map<string, TokenData> = new Map();
   
   // Generate a new token for a user
-  generateToken(userId: number, role: string): string {
+  generateToken(userId: number, role: string, businessId: number): string {
     // Create a random token
     const token = crypto.randomBytes(32).toString('hex');
     
     // Store token data with 24-hour expiration
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000);
-    this.tokens.set(token, { userId, role, expiresAt });
+    this.tokens.set(token, { userId, role, businessId, expiresAt });
     
     return token;
   }

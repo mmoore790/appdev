@@ -14,6 +14,9 @@ export class SchedulerService {
     // Schedule weekly callback report every Monday at 9:00 AM
     this.scheduleWeeklyCallbackReport();
     
+    // Schedule message cleanup (delete messages older than 3 months) - runs daily at 2:00 AM
+    this.scheduleMessageCleanup();
+    
     console.log('Scheduler service started successfully');
   }
 
@@ -65,22 +68,80 @@ export class SchedulerService {
   private async sendWeeklyCallbackReport() {
     try {
       console.log('Sending weekly callback report...');
-      const success = await this.emailService.sendWeeklyCallbackReport();
+      // For scheduled reports, we need to send for all businesses
+      // Get all active businesses and send report for each
+      const { storage } = await import('../storage');
+      const businesses = await storage.getAllBusinesses();
       
-      if (success) {
-        console.log('Weekly callback report sent successfully');
+      let allSuccessful = true;
+      for (const business of businesses.filter((b: { isActive: boolean }) => b.isActive)) {
+        console.log(`Sending callback report for business: ${business.name} (ID: ${business.id})`);
+        const success = await this.emailService.sendWeeklyCallbackReport(business.id);
+        if (!success) {
+          allSuccessful = false;
+        }
+      }
+      
+      if (allSuccessful) {
+        console.log('Weekly callback report sent successfully for all businesses');
       } else {
-        console.error('Failed to send weekly callback report');
+        console.error('Some weekly callback reports failed');
       }
     } catch (error) {
       console.error('Error in weekly callback report scheduler:', error);
     }
   }
 
+  // Manual trigger for testing - requires businessId
+  async triggerWeeklyCallbackReport(businessId: number): Promise<boolean> {
+    console.log(`Manually triggering weekly callback report for business ${businessId}...`);
+    return await this.emailService.sendWeeklyCallbackReport(businessId);
+  }
+
+  private scheduleMessageCleanup() {
+    // Calculate time until next 2:00 AM
+    const now = new Date();
+    const nextCleanup = new Date();
+    nextCleanup.setHours(2, 0, 0, 0);
+    
+    // If it's already past 2 AM today, schedule for tomorrow
+    if (now.getHours() >= 2) {
+      nextCleanup.setDate(nextCleanup.getDate() + 1);
+    }
+    
+    const timeUntilNext = nextCleanup.getTime() - now.getTime();
+    
+    console.log(`Next message cleanup scheduled for: ${nextCleanup.toLocaleString()}`);
+    
+    // Schedule first execution
+    setTimeout(() => {
+      this.cleanupOldMessages();
+      
+      // Then schedule daily recurring execution (every 24 hours)
+      const dailyInterval = setInterval(() => {
+        this.cleanupOldMessages();
+      }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
+      
+      this.intervals.set('messageCleanup', dailyInterval);
+    }, timeUntilNext);
+  }
+
+  private async cleanupOldMessages() {
+    try {
+      console.log('Starting message cleanup (deleting messages older than 3 months)...');
+      const { storage } = await import('../storage');
+      const deletedCount = await storage.deleteOldMessages(3);
+      console.log(`Message cleanup completed. Deleted ${deletedCount} messages older than 3 months.`);
+    } catch (error) {
+      console.error('Error in message cleanup scheduler:', error);
+    }
+  }
+
   // Manual trigger for testing
-  async triggerWeeklyCallbackReport(): Promise<boolean> {
-    console.log('Manually triggering weekly callback report...');
-    return await this.emailService.sendWeeklyCallbackReport();
+  async triggerMessageCleanup(): Promise<number> {
+    console.log('Manually triggering message cleanup...');
+    const { storage } = await import('../storage');
+    return await storage.deleteOldMessages(3);
   }
 }
 

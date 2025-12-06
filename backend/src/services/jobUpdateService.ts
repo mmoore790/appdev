@@ -20,9 +20,9 @@ export async function createJobUpdate(updateData: InsertJobUpdate): Promise<JobU
  * @param jobId The job ID to get updates for
  * @returns Array of job updates
  */
-export async function getJobUpdates(jobId: number): Promise<JobUpdate[]> {
+export async function getJobUpdates(jobId: number, businessId: number): Promise<JobUpdate[]> {
   try {
-    return await jobUpdateRepository.findByJob(jobId);
+    return await jobUpdateRepository.findByJob(jobId, businessId);
   } catch (error) {
     console.error("Error getting job updates:", error);
     return [];
@@ -32,11 +32,12 @@ export async function getJobUpdates(jobId: number): Promise<JobUpdate[]> {
 /**
  * Get only public updates for a specific job (for customer portal)
  * @param jobId The job ID to get updates for
+ * @param businessId The business ID
  * @returns Array of public job updates
  */
-export async function getPublicJobUpdates(jobId: number): Promise<JobUpdate[]> {
+export async function getPublicJobUpdates(jobId: number, businessId: number): Promise<JobUpdate[]> {
   try {
-    return await jobUpdateRepository.findPublicByJob(jobId);
+    return await jobUpdateRepository.findPublicByJob(jobId, businessId);
   } catch (error) {
     console.error("Error getting public job updates:", error);
     return [];
@@ -56,6 +57,7 @@ export async function addStatusChangeUpdate(
   oldStatus: string,
   newStatus: string,
   userId: number,
+  businessId: number,
   isPublic: boolean = true
 ): Promise<JobUpdate | null> {
   try {
@@ -65,6 +67,7 @@ export async function addStatusChangeUpdate(
     const note = `Status changed from "${formattedOldStatus}" to "${formattedNewStatus}"`;
 
     return await jobUpdateRepository.create({
+      businessId,
       jobId,
       note,
       isPublic,
@@ -85,8 +88,6 @@ function formatStatus(status: string): string {
       return "Waiting Assessment";
     case "in_progress":
       return "In Progress";
-    case "parts_ordered":
-      return "Parts Ordered";
     case "completed":
       return "Completed";
     default:

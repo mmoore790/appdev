@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { insertServiceSchema } from "@shared/schema";
 import { serviceRecordService } from "../services/domains/serviceRecordService";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
 
 export class ServiceRecordController {
@@ -14,9 +15,10 @@ export class ServiceRecordController {
     this.router.put("/:id", isAuthenticated, this.updateService);
   }
 
-  private async listServices(_req: Request, res: Response, next: NextFunction) {
+  private async listServices(req: Request, res: Response, next: NextFunction) {
     try {
-      const services = await serviceRecordService.listServices();
+      const businessId = getBusinessIdFromRequest(req);
+      const services = await serviceRecordService.listServices(businessId);
       res.json(services);
     } catch (error) {
       next(error);
@@ -25,8 +27,9 @@ export class ServiceRecordController {
 
   private async getService(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const service = await serviceRecordService.getServiceById(id);
+      const service = await serviceRecordService.getServiceById(id, businessId);
 
       if (!service) {
         return res.status(404).json({ message: "Service not found" });
@@ -40,7 +43,8 @@ export class ServiceRecordController {
 
   private async createService(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = insertServiceSchema.parse(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const data = insertServiceSchema.parse({ ...req.body, businessId });
       const actorId = (req.session as any)?.userId ?? undefined;
       const service = await serviceRecordService.createService(data, actorId);
       res.status(201).json(service);
@@ -57,9 +61,10 @@ export class ServiceRecordController {
 
   private async updateService(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
       const data = insertServiceSchema.parse(req.body);
-      const service = await serviceRecordService.updateService(id, data);
+      const service = await serviceRecordService.updateService(id, data, businessId);
       res.json(service);
     } catch (error) {
       if (error instanceof z.ZodError) {

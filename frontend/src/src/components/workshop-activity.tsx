@@ -1,11 +1,9 @@
 import { Card, CardContent, CardFooter } from "./ui/card"; // Adjusted path
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"; // Adjusted path
-import { Button } from "./ui/button"; // Adjusted path
 import { Skeleton } from "./ui/skeleton"; // Adjusted path
 import { formatTimeAgo } from "../lib/utils"; // Adjusted path
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { X } from "lucide-react";
 
 interface Activity {
   id: number;
@@ -149,16 +147,8 @@ export function WorkshopActivity({ activities, isLoading = false, limit = 3 }: W
       {/* Activity Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
-          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <DialogHeader>
             <DialogTitle className="text-xl font-semibold">All Recent Activity</DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsDialogOpen(false)}
-              className="h-6 w-6 p-0 rounded-full hover:bg-gray-100"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </DialogHeader>
           <div className="overflow-y-auto pr-4">
             {isLoading ? (

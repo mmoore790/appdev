@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { isAuthenticated, isAdmin } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { schedulerService } from "../services/schedulerService";
 
 export class ReportController {
@@ -15,12 +16,13 @@ export class ReportController {
   }
 
   private async triggerWeeklyCallbackReport(
-    _req: Request,
+    req: Request,
     res: Response,
     next: NextFunction
   ) {
     try {
-      const success = await schedulerService.triggerWeeklyCallbackReport();
+      const businessId = getBusinessIdFromRequest(req);
+      const success = await schedulerService.triggerWeeklyCallbackReport(businessId);
       if (success) {
         res.json({
           message: "Weekly callback report sent successfully",

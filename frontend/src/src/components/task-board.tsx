@@ -1557,7 +1557,7 @@ export function TaskBoard({
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:gap-4 p-2 sm:p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 overflow-x-auto">
               {STATUS_CONFIG.map((status) => (
                 <TaskBoardColumn
                   key={status.id}
@@ -1945,7 +1945,7 @@ function TaskBoardColumn({
       )}
       data-column={status.id}
     >
-      <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white/95 px-5 py-4">
+      <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white px-5 py-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
             <status.icon size={18} className={status.accent} />

@@ -13,10 +13,81 @@ export const sessions = pgTable("sessions", {
   };
 });
 
+// Businesses (Multi-tenancy)
+export const businesses = pgTable("businesses", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  // Optional website for branding/contact
+  website: text("website"),
+  // Email "from" settings so emails can be branded per-business
+  emailFromName: text("email_from_name"),
+  emailFromAddress: text("email_from_address"),
+  // Branding / logo
+  logoUrl: text("logo_url"),
+  primaryColor: text("primary_color"),
+  secondaryColor: text("secondary_color"),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertBusinessSchema = createInsertSchema(businesses).pick({
+  name: true,
+  email: true,
+  phone: true,
+  address: true,
+  website: true,
+  emailFromName: true,
+  emailFromAddress: true,
+  logoUrl: true,
+  primaryColor: true,
+  secondaryColor: true,
+});
+
+export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
+export type Business = typeof businesses.$inferSelect;
+
+// Platform Announcements
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  priority: text("priority").notNull().default("info"), // info, success, warning, critical
+  audience: text("audience").notNull().default("login"), // login, dashboard, public
+  ctaText: text("cta_text"),
+  ctaUrl: text("cta_url"),
+  isActive: boolean("is_active").notNull().default(true),
+  displayStart: timestamp("display_start", { mode: 'string' }),
+  displayEnd: timestamp("display_end", { mode: 'string' }),
+  createdBy: integer("created_by"),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
+  title: true,
+  message: true,
+  priority: true,
+  audience: true,
+  ctaText: true,
+  ctaUrl: true,
+  isActive: true,
+  displayStart: true,
+  displayEnd: true,
+  createdBy: true,
+});
+
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
+
 // RegistrationRequests
 export const registrationRequests = pgTable("registration_requests", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  businessId: integer("business_id").notNull(), // Business the user is registering for
+  username: text("username").notNull(), // No longer unique globally, unique per business
   email: text("email").notNull(),
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
@@ -28,9 +99,14 @@ export const registrationRequests = pgTable("registration_requests", {
   reviewedBy: integer("reviewed_by"),
   reviewedAt: timestamp("reviewed_at", { mode: 'string' }),
   notes: text("notes"),
+}, (table) => {
+  return {
+    usernameBusinessIdx: index("IDX_registration_username_business").on(table.username, table.businessId),
+  };
 });
 
 export const insertRegistrationRequestSchema = createInsertSchema(registrationRequests).pick({
+  businessId: true,
   username: true,
   email: true,
   password: true,
@@ -43,9 +119,10 @@ export const insertRegistrationRequestSchema = createInsertSchema(registrationRe
 export type InsertRegistrationRequest = z.infer<typeof insertRegistrationRequestSchema>;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;
 
-// Job Counter for sequential job IDs
+// Job Counter for sequential job IDs (per business)
 export const jobCounter = pgTable("job_counter", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull().unique(), // One counter per business
   currentNumber: integer("current_number").notNull().default(999), // Start at 999 so first job is WS-1000
   updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
 });
@@ -55,7 +132,8 @@ export type JobCounter = typeof jobCounter.$inferSelect;
 // Users
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  businessId: integer("business_id").notNull(), // User belongs to a business
+  username: text("username").notNull(), // No longer unique globally, unique per business
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
   role: text("role").notNull().default("staff"), // admin, staff, mechanic
@@ -68,6 +146,12 @@ export const users = pgTable("users", {
   taskNotifications: boolean("task_notifications").notNull().default(true),
   messageNotifications: boolean("message_notifications").notNull().default(true),
   jobNotifications: boolean("job_notifications").notNull().default(true),
+  // Getting Started dismissal
+  gettingStartedDismissedAt: timestamp("getting_started_dismissed_at", { mode: 'string' }),
+}, (table) => {
+  return {
+    usernameBusinessIdx: index("IDX_user_username_business").on(table.username, table.businessId),
+  };
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -81,6 +165,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   taskNotifications: true,
   messageNotifications: true,
   jobNotifications: true,
+  businessId: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -89,6 +174,7 @@ export type User = typeof users.$inferSelect;
 // Customers
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Customer belongs to a business
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -108,16 +194,46 @@ export const insertCustomerSchema = createInsertSchema(customers, {
   phone: true,
   address: true,
   notes: true,
+  businessId: true,
 });
 
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
+
+// Email History - Track all emails sent to customers
+export const emailHistory = pgTable("email_history", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  emailType: text("email_type").notNull(), // 'system', 'manual', 'job_booked', 'job_accepted', 'payment_request', etc.
+  sentBy: integer("sent_by"), // User ID who sent the email (null for system emails)
+  sentAt: timestamp("sent_at", { mode: 'string' }).notNull().defaultNow(),
+  metadata: json("metadata"), // Additional data like jobId, paymentId, etc.
+});
+
+export const insertEmailHistorySchema = createInsertSchema(emailHistory).pick({
+  businessId: true,
+  customerId: true,
+  customerEmail: true,
+  subject: true,
+  body: true,
+  emailType: true,
+  sentBy: true,
+  metadata: true,
+});
+
+export type InsertEmailHistory = z.infer<typeof insertEmailHistorySchema>;
+export type EmailHistory = typeof emailHistory.$inferSelect;
 
 // Equipment Types table was dropped
 
 // Equipment
 export const equipment = pgTable("equipment", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Equipment belongs to a business
   serialNumber: text("serial_number").notNull(),
   typeId: integer("type_id").notNull(),
   customerId: integer("customer_id").notNull(),
@@ -131,6 +247,7 @@ export const insertEquipmentSchema = createInsertSchema(equipment).pick({
   customerId: true,
   purchaseDate: true,
   notes: true,
+  businessId: true,
 });
 
 export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
@@ -139,14 +256,19 @@ export type Equipment = typeof equipment.$inferSelect;
 // Jobs
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
-  jobId: text("job_id").notNull().unique(),
+  businessId: integer("business_id").notNull(), // Job belongs to a business
+  jobId: text("job_id").notNull(), // No longer unique globally, unique per business
   equipmentId: integer("equipment_id"),
   equipmentDescription: text("equipment_description"),
   customerId: integer("customer_id"),
+  customerName: text("customer_name"), // For custom customer entries (name-only mode)
+  customerEmail: text("customer_email"), // For storing email when customer profile not saved
+  customerPhone: text("customer_phone"), // For storing phone when customer profile not saved
   assignedTo: integer("assigned_to"),
   status: text("status").notNull().default("waiting_assessment"),
   description: text("description").notNull(),
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
   completedAt: timestamp("completed_at", { mode: 'string' }),
   estimatedHours: integer("estimated_hours"),
   actualHours: integer("actual_hours"),
@@ -161,6 +283,10 @@ export const jobs = pgTable("jobs", {
   paidAt: timestamp("paid_at", { mode: 'string' }),
   paymentRecordedBy: integer("payment_recorded_by"), // User who recorded the payment
   linkedPaymentRequestId: integer("linked_payment_request_id"), // Links to payment_requests table
+}, (table) => {
+  return {
+    jobIdBusinessIdx: index("IDX_job_jobid_business").on(table.jobId, table.businessId),
+  };
 });
 
 export const insertJobSchema = createInsertSchema(jobs).pick({
@@ -178,6 +304,7 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   invoiceNumber: true,
   paymentMethod: true,
   paymentNotes: true,
+  businessId: true,
 }).extend({
   customerName: z.string().optional(),
   customerEmail: z.string().optional(),
@@ -209,6 +336,7 @@ export type Job = typeof jobs.$inferSelect;
 // Services
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Service belongs to a business
   jobId: integer("job_id").notNull(),
   serviceType: text("service_type").default("general"),
   details: text("details"), // Changed from description to details
@@ -230,6 +358,7 @@ export const insertServiceSchema = createInsertSchema(services).pick({
   cost: true,
   notes: true,
   laborHours: true,
+  businessId: true,
 });
 
 export type InsertService = z.infer<typeof insertServiceSchema>;
@@ -238,6 +367,7 @@ export type Service = typeof services.$inferSelect;
 // Tasks
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Task belongs to a business
   title: text("title").notNull(),
   description: text("description"),
   priority: text("priority").notNull().default("medium"),
@@ -257,6 +387,7 @@ export const insertTaskSchema = createInsertSchema(tasks).pick({
   assignedTo: true,
   dueDate: true,
   relatedJobId: true,
+  businessId: true,
 });
 
 export type InsertTask = z.infer<typeof insertTaskSchema>;
@@ -269,9 +400,10 @@ export type Task = typeof tasks.$inferSelect;
 // Callback Requests
 export const callbackRequests = pgTable("callback_requests", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Callback belongs to a business
   customerId: integer("customer_id"),
   customerName: text("customer_name").notNull(),
-  assignedTo: integer("assigned_to").notNull(),
+  assignedTo: integer("assigned_to"), // Nullable - allows unassigned callbacks
   relatedTaskId: integer("related_task_id"),
   subject: text("subject").notNull(),
   details: text("details"),
@@ -285,11 +417,17 @@ export const callbackRequests = pgTable("callback_requests", {
   deleteExpiresAt: timestamp("delete_expires_at", { mode: 'string' }),
 });
 
-export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({
-  id: true,
-  relatedTaskId: true,
-  requestedAt: true,
-  completedAt: true
+export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).pick({
+  businessId: true,
+  customerId: true,
+  customerName: true,
+  assignedTo: true,
+  subject: true,
+  details: true,
+  phoneNumber: true,
+  status: true,
+  priority: true,
+  notes: true,
 });
 
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
@@ -298,6 +436,7 @@ export type CallbackRequest = typeof callbackRequests.$inferSelect;
 // Job updates for tracking progress
 export const jobUpdates = pgTable("job_updates", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Job update belongs to a business
   jobId: integer("job_id").notNull(),
   note: text("note").notNull(),
   createdBy: integer("created_by"),
@@ -305,9 +444,12 @@ export const jobUpdates = pgTable("job_updates", {
   isPublic: boolean("is_public").notNull().default(true),
 });
 
-export const insertJobUpdateSchema = createInsertSchema(jobUpdates).omit({
-  id: true,
-  createdAt: true,
+export const insertJobUpdateSchema = createInsertSchema(jobUpdates).pick({
+  businessId: true,
+  jobId: true,
+  note: true,
+  createdBy: true,
+  isPublic: true,
 });
 
 export type InsertJobUpdate = z.infer<typeof insertJobUpdateSchema>;
@@ -316,6 +458,7 @@ export type JobUpdate = typeof jobUpdates.$inferSelect;
 // Workshop Activities
 export const activities = pgTable("activities", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Activity belongs to a business
   userId: integer("user_id").notNull(),
   activityType: text("activity_type").notNull(),
   description: text("description").notNull(),
@@ -336,6 +479,7 @@ export type Activity = typeof activities.$inferSelect;
 // Work Completed Entries
 export const workCompleted = pgTable("work_completed", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Work completed belongs to a business
   jobId: integer("job_id").notNull(),
   workDescription: text("work_description").notNull(),
   category: text("category").notNull(),
@@ -348,10 +492,16 @@ export const workCompleted = pgTable("work_completed", {
   updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
 });
 
-export const insertWorkCompletedSchema = createInsertSchema(workCompleted).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertWorkCompletedSchema = createInsertSchema(workCompleted).pick({
+  businessId: true,
+  jobId: true,
+  workDescription: true,
+  category: true,
+  laborHours: true,
+  partsUsed: true,
+  partsCost: true,
+  notes: true,
+  completedBy: true,
 });
 
 export type InsertWorkCompleted = z.infer<typeof insertWorkCompletedSchema>;
@@ -360,6 +510,7 @@ export type WorkCompleted = typeof workCompleted.$inferSelect;
 // Payment Requests
 export const paymentRequests = pgTable("payment_requests", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Payment request belongs to a business
   jobId: integer("job_id"), // Optional link to a job
   customerEmail: text("customer_email").notNull(),
   amount: integer("amount").notNull(), // Store in pence/cents for precision
@@ -368,7 +519,7 @@ export const paymentRequests = pgTable("payment_requests", {
   
   // Payment provider specific fields
   checkoutId: text("checkout_id"), // Stripe session ID or SumUp checkout ID
-  checkoutReference: text("checkout_reference").notNull().unique(), // Our unique reference
+  checkoutReference: text("checkout_reference").notNull(), // No longer unique globally, unique per business
   paymentLink: text("payment_link"), // Generated payment link
   
   // Status tracking
@@ -387,28 +538,29 @@ export const paymentRequests = pgTable("payment_requests", {
   transactionId: text("transaction_id"),
   transactionCode: text("transaction_code"),
   authCode: text("auth_code"),
+}, (table) => {
+  return {
+    checkoutReferenceBusinessIdx: index("IDX_payment_checkout_business").on(table.checkoutReference, table.businessId),
+  };
 });
 
-export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  checkoutId: true,
-  paymentLink: true,
-  status: true,
-  paidAt: true,
-  expiresAt: true,
-  transactionId: true,
-  transactionCode: true,
-  authCode: true,
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).pick({
+  businessId: true,
+  jobId: true,
+  customerEmail: true,
+  amount: true,
+  currency: true,
+  description: true,
+  createdBy: true,
 }).extend({
   // Allow optional fields that can be set server-side or from frontend
   checkoutReference: z.string().optional(),
-  createdBy: z.number().optional(),
   // Override amount to accept decimal values (will be converted to pence on server)
   amount: z.number().positive(),
   // Ensure customerEmail is required
   customerEmail: z.string().email("Please enter a valid email address"),
+}).partial({
+  jobId: true,
 });
 
 export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
@@ -417,6 +569,7 @@ export type PaymentRequest = typeof paymentRequests.$inferSelect;
 // Parts on Order
 export const partsOnOrder = pgTable("parts_on_order", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Part order belongs to a business
   partName: text("part_name").notNull(),
   partNumber: text("part_number"), // Optional manufacturer part number
   supplier: text("supplier").notNull(),
@@ -454,16 +607,32 @@ export const partsOnOrder = pgTable("parts_on_order", {
   relatedJobId: integer("related_job_id"),
 });
 
-export const insertPartOnOrderSchema = createInsertSchema(partsOnOrder).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  updatedBy: true,
+export const insertPartOnOrderSchema = createInsertSchema(partsOnOrder).pick({
+  businessId: true,
+  partName: true,
+  partNumber: true,
+  supplier: true,
+  customerName: true,
+  customerEmail: true,
+  customerPhone: true,
+  orderDate: true,
+  expectedDeliveryDate: true,
+  status: true,
+  quantity: true,
+  estimatedCost: true,
+  notes: true,
+  createdBy: true,
+  relatedJobId: true,
 }).extend({
   // Allow optional fields
   createdBy: z.number().optional(),
   estimatedCost: z.number().optional(), // Accept decimal values (converted to pence server-side)
   actualCost: z.number().optional(),
+}).partial({
+  partNumber: true,
+  customerEmail: true,
+  expectedDeliveryDate: true,
+  relatedJobId: true,
 });
 
 export type InsertPartOnOrder = z.infer<typeof insertPartOnOrderSchema>;
@@ -472,6 +641,7 @@ export type PartOnOrder = typeof partsOnOrder.$inferSelect;
 // Part Order Status Updates - for detailed tracking of all events
 export const partOrderUpdates = pgTable("part_order_updates", {
   id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Part order update belongs to a business
   partOrderId: integer("part_order_id").notNull(),
   updateType: text("update_type").notNull(), // ordered, status_change, arrived, customer_notified, collected, cancelled
   previousStatus: text("previous_status"),
@@ -481,12 +651,454 @@ export const partOrderUpdates = pgTable("part_order_updates", {
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
 });
 
-export const insertPartOrderUpdateSchema = createInsertSchema(partOrderUpdates).omit({
-  id: true,
-  createdAt: true,
+export const insertPartOrderUpdateSchema = createInsertSchema(partOrderUpdates).pick({
+  businessId: true,
+  partOrderId: true,
+  updateType: true,
+  previousStatus: true,
+  newStatus: true,
+  notes: true,
+  createdBy: true,
 }).extend({
   createdBy: z.number().optional(),
+}).partial({
+  previousStatus: true,
+  newStatus: true,
+  notes: true,
 });
 
 export type InsertPartOrderUpdate = z.infer<typeof insertPartOrderUpdateSchema>;
 export type PartOrderUpdate = typeof partOrderUpdates.$inferSelect;
+
+// Time Entries (Calendar Events)
+export const timeEntries = pgTable("time_entries", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Time entry belongs to a business
+  userId: integer("user_id").notNull(), // Staff member
+  startTime: timestamp("start_time", { mode: 'string' }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull().default(15), // Duration in minutes (default 15)
+  title: text("title").notNull(),
+  description: text("description"),
+  jobId: integer("job_id"), // Optional link to a job
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+  createdBy: integer("created_by"), // User who created the entry (can be different from userId)
+});
+
+export const insertTimeEntrySchema = createInsertSchema(timeEntries).pick({
+  businessId: true,
+  userId: true,
+  startTime: true,
+  durationMinutes: true,
+  title: true,
+  description: true,
+  jobId: true,
+  createdBy: true,
+}).extend({
+  createdBy: z.number().optional(),
+}).partial({
+  description: true,
+  jobId: true,
+});
+
+export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
+export type TimeEntry = typeof timeEntries.$inferSelect;
+
+// Messages - Internal messaging system for business members
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Message belongs to a business
+  senderId: integer("sender_id").notNull(), // User who sent the message
+  recipientId: integer("recipient_id"), // Nullable for group messages (future feature)
+  threadId: integer("thread_id"), // For grouping messages in conversations
+  content: text("content").notNull(), // Message text content
+  isRead: boolean("is_read").notNull().default(false), // Read status
+  readAt: timestamp("read_at", { mode: 'string' }), // When message was read
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
+  deletedAt: timestamp("deleted_at", { mode: 'string' }), // Soft delete
+  // Attachments
+  attachedJobId: integer("attached_job_id"), // Link to a job
+  attachedTaskId: integer("attached_task_id"), // Link to a task
+  attachedImageUrls: json("attached_image_urls").$type<string[] | null>(), // Array of image URLs
+}, (table) => {
+  return {
+    businessIdIdx: index("IDX_message_business_id").on(table.businessId),
+    senderIdIdx: index("IDX_message_sender_id").on(table.senderId),
+    recipientIdIdx: index("IDX_message_recipient_id").on(table.recipientId),
+    threadIdIdx: index("IDX_message_thread_id").on(table.threadId),
+    createdAtIdx: index("IDX_message_created_at").on(table.createdAt),
+  };
+});
+
+export const insertMessageSchema = createInsertSchema(messages).pick({
+  businessId: true,
+  senderId: true,
+  recipientId: true,
+  threadId: true,
+  content: true,
+  attachedJobId: true,
+  attachedTaskId: true,
+  attachedImageUrls: true,
+}).extend({
+  attachedImageUrls: z.array(z.string().url()).optional(),
+}).partial({
+  recipientId: true,
+  threadId: true,
+  attachedJobId: true,
+  attachedTaskId: true,
+  attachedImageUrls: true,
+});
+
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+
+// Message Threads for Group Conversations
+export const messageThreads = pgTable("message_threads", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  name: text("name"), // Optional group name
+  createdBy: integer("created_by").notNull(),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
+}, (table) => {
+  return {
+    businessIdIdx: index("IDX_thread_business_id").on(table.businessId),
+  };
+});
+
+export const messageThreadParticipants = pgTable("message_thread_participants", {
+  id: serial("id").primaryKey(),
+  threadId: integer("thread_id").notNull(),
+  userId: integer("user_id").notNull(),
+  joinedAt: timestamp("joined_at", { mode: 'string' }).notNull().defaultNow(),
+  leftAt: timestamp("left_at", { mode: 'string' }),
+}, (table) => {
+  return {
+    threadIdIdx: index("IDX_thread_participant_thread_id").on(table.threadId),
+    userIdIdx: index("IDX_thread_participant_user_id").on(table.userId),
+    uniqueThreadUser: index("IDX_thread_participant_unique").on(table.threadId, table.userId),
+  };
+});
+
+export const insertMessageThreadSchema = createInsertSchema(messageThreads).pick({
+  businessId: true,
+  name: true,
+  createdBy: true,
+});
+
+export type InsertMessageThread = z.infer<typeof insertMessageThreadSchema>;
+export type MessageThread = typeof messageThreads.$inferSelect;
+
+// Notification Dismissals - Track which notifications users have dismissed
+export const notificationDismissals = pgTable("notification_dismissals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  businessId: integer("business_id").notNull(),
+  notificationId: text("notification_id").notNull(),
+  notificationType: text("notification_type").notNull(),
+  dismissedAt: timestamp("dismissed_at", { mode: 'string' }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    userBusinessIdx: index("IDX_notification_dismissal_user_business").on(table.userId, table.businessId),
+    notificationIdIdx: index("IDX_notification_dismissal_notification_id").on(table.notificationId),
+    uniqueUserNotification: index("IDX_notification_dismissal_unique").on(table.userId, table.businessId, table.notificationId),
+  };
+});
+
+export const insertNotificationDismissalSchema = createInsertSchema(notificationDismissals).pick({
+  userId: true,
+  businessId: true,
+  notificationId: true,
+  notificationType: true,
+});
+
+export type InsertNotificationDismissal = z.infer<typeof insertNotificationDismissalSchema>;
+export type NotificationDismissal = typeof notificationDismissals.$inferSelect;
+
+// Notifications - Actual notification records
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  userId: integer("user_id").notNull(), // The user who should receive this notification
+  type: text("type").notNull(), // job, callback, task, calendar, message
+  title: text("title").notNull(),
+  description: text("description"),
+  entityType: text("entity_type").notNull(), // job, callback, task, time_entry, message
+  entityId: integer("entity_id").notNull(),
+  link: text("link"), // URL to navigate to the entity
+  priority: text("priority").notNull().default("normal"), // normal, high
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at", { mode: 'string' }),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(),
+}, (table) => {
+  return {
+    userIdIdx: index("IDX_notification_user_id").on(table.userId),
+    businessIdIdx: index("IDX_notification_business_id").on(table.businessId),
+    entityIdx: index("IDX_notification_entity").on(table.entityType, table.entityId),
+    unreadIdx: index("IDX_notification_unread").on(table.userId, table.isRead),
+  };
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).pick({
+  businessId: true,
+  userId: true,
+  type: true,
+  title: true,
+  description: true,
+  entityType: true,
+  entityId: true,
+  link: true,
+  priority: true,
+  metadata: true,
+}).partial({
+  description: true,
+  link: true,
+  priority: true,
+  metadata: true,
+});
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+// Universal Order Management System
+// Orders - Main order table (replaces parts_on_order with generic design)
+export const orders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(), // Order belongs to a business
+  
+  // Order reference/number
+  orderNumber: text("order_number").notNull(), // Unique order number per business
+  
+  // Customer information (can be linked to customer table or standalone)
+  customerId: integer("customer_id"), // Optional link to customers table
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone").notNull(),
+  customerAddress: text("customer_address"),
+  customerNotes: text("customer_notes"), // Optional notes about customer
+  
+  // Order metadata
+  orderDate: timestamp("order_date", { mode: 'string' }).notNull().defaultNow(),
+  expectedDeliveryDate: timestamp("expected_delivery_date", { mode: 'string' }),
+  actualDeliveryDate: timestamp("actual_delivery_date", { mode: 'string' }),
+  
+  // Status workflow: not_ordered, ordered, arrived, completed
+  status: text("status").notNull().default("not_ordered"),
+  
+  // Supplier information (optional)
+  supplierName: text("supplier_name"),
+  supplierNotes: text("supplier_notes"),
+  
+  // Lead time and tracking
+  expectedLeadTime: integer("expected_lead_time"), // Days
+  trackingNumber: text("tracking_number"),
+  
+  // Financial information
+  estimatedTotalCost: integer("estimated_total_cost"), // Store in pence for precision
+  actualTotalCost: integer("actual_total_cost"), // Store in pence for precision
+  depositAmount: integer("deposit_amount"), // Store in pence for precision
+  
+  // General notes
+  notes: text("notes"),
+  internalNotes: text("internal_notes"), // Staff-only notes
+  
+  // Notification preferences
+  notifyOnOrderPlaced: boolean("notify_on_order_placed").notNull().default(true),
+  notifyOnStatusChange: boolean("notify_on_status_change").notNull().default(true),
+  notifyOnArrival: boolean("notify_on_arrival").notNull().default(true),
+  notificationMethod: text("notification_method").default("email"), // email, sms, both
+  
+  // Tracking
+  createdBy: integer("created_by").notNull(),
+  updatedBy: integer("updated_by"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { mode: 'string' }),
+  cancelledAt: timestamp("cancelled_at", { mode: 'string' }),
+  
+  // Optional links
+  relatedJobId: integer("related_job_id"), // Link to a job if order is for a specific job
+}, (table) => {
+  return {
+    orderNumberBusinessIdx: index("IDX_order_number_business").on(table.orderNumber, table.businessId),
+    statusIdx: index("IDX_order_status").on(table.status, table.businessId),
+    customerIdx: index("IDX_order_customer").on(table.customerId, table.businessId),
+    jobIdx: index("IDX_order_job").on(table.relatedJobId, table.businessId),
+  };
+});
+
+export const insertOrderSchema = createInsertSchema(orders).pick({
+  businessId: true,
+  orderNumber: true,
+  customerId: true,
+  customerName: true,
+  customerEmail: true,
+  customerPhone: true,
+  customerAddress: true,
+  customerNotes: true,
+  orderDate: true,
+  expectedDeliveryDate: true,
+  status: true,
+  supplierName: true,
+  supplierNotes: true,
+  expectedLeadTime: true,
+  trackingNumber: true,
+  estimatedTotalCost: true,
+  actualTotalCost: true,
+  depositAmount: true,
+  notes: true,
+  internalNotes: true,
+  notifyOnOrderPlaced: true,
+  notifyOnStatusChange: true,
+  notifyOnArrival: true,
+  notificationMethod: true,
+  createdBy: true,
+  relatedJobId: true,
+}).extend({
+  estimatedTotalCost: z.number().optional(), // Accept decimal values (converted to pence server-side)
+  actualTotalCost: z.number().optional(),
+  depositAmount: z.number().optional(),
+  notificationMethod: z.enum(["email", "sms", "both"]).optional(),
+}).partial({
+  orderNumber: true, // Auto-generated if not provided
+  customerId: true,
+  customerEmail: true,
+  customerAddress: true,
+  customerNotes: true,
+  orderDate: true, // Has default value
+  expectedDeliveryDate: true,
+  status: true, // Has default value
+  supplierName: true,
+  supplierNotes: true,
+  expectedLeadTime: true,
+  trackingNumber: true,
+  estimatedTotalCost: true,
+  actualTotalCost: true,
+  depositAmount: true,
+  notes: true,
+  internalNotes: true,
+  relatedJobId: true,
+  notifyOnOrderPlaced: true, // Has default value
+  notifyOnStatusChange: true, // Has default value
+  notifyOnArrival: true, // Has default value
+  createdBy: true, // Added server-side
+});
+
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Order = typeof orders.$inferSelect;
+
+// Order Items - Individual items within an order
+export const orderItems = pgTable("order_items", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  orderId: integer("order_id").notNull(), // Foreign key to orders
+  
+  // Item details
+  itemName: text("item_name").notNull(),
+  itemSku: text("item_sku"), // Optional SKU/manufacturer part number
+  itemType: text("item_type").notNull(), // part, machine, accessory, service, consumable, other
+  isOrdered: boolean("is_ordered").notNull().default(false), // Whether this item has been ordered
+  
+  // Quantity and pricing
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: integer("unit_price"), // Store in pence for precision
+  totalPrice: integer("total_price"), // Store in pence for precision
+  
+  // Supplier information (can override order-level supplier)
+  supplierName: text("supplier_name"),
+  supplierSku: text("supplier_sku"),
+  
+  // Notes
+  notes: text("notes"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    orderIdIdx: index("IDX_order_item_order_id").on(table.orderId),
+    itemTypeIdx: index("IDX_order_item_type").on(table.itemType, table.businessId),
+  };
+});
+
+export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
+  businessId: true,
+  orderId: true,
+  itemName: true,
+  itemSku: true,
+  itemType: true,
+  quantity: true,
+  isOrdered: true,
+  unitPrice: true,
+  totalPrice: true,
+  supplierName: true,
+  supplierSku: true,
+  notes: true,
+}).extend({
+  unitPrice: z.number().optional(), // Accept decimal values (converted to pence server-side)
+  totalPrice: z.number().optional(),
+  itemType: z.enum(["part", "machine", "accessory", "service", "consumable", "other"]),
+}).partial({
+  businessId: true, // Added server-side
+  orderId: true, // Added server-side after order creation
+  itemSku: true,
+  unitPrice: true,
+  isOrdered: true,
+  totalPrice: true,
+  supplierName: true,
+  supplierSku: true,
+  notes: true,
+});
+
+export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type OrderItem = typeof orderItems.$inferSelect;
+
+// Order Status History - Track all status changes
+export const orderStatusHistory = pgTable("order_status_history", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  orderId: integer("order_id").notNull(),
+  
+  // Status change details
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status").notNull(),
+  changeReason: text("change_reason"), // Optional reason for status change
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: json("metadata").$type<Record<string, unknown> | null>(), // Additional data (e.g., tracking number, delivery date)
+  
+  // Who made the change
+  changedBy: integer("changed_by").notNull(),
+  
+  // Timestamp
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    orderIdIdx: index("IDX_order_status_history_order_id").on(table.orderId),
+    createdAtIdx: index("IDX_order_status_history_created_at").on(table.createdAt),
+  };
+});
+
+export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).pick({
+  businessId: true,
+  orderId: true,
+  previousStatus: true,
+  newStatus: true,
+  changeReason: true,
+  notes: true,
+  metadata: true,
+  changedBy: true,
+}).partial({
+  previousStatus: true,
+  changeReason: true,
+  notes: true,
+  metadata: true,
+});
+
+export type InsertOrderStatusHistory = z.infer<typeof insertOrderStatusHistorySchema>;
+export type OrderStatusHistory = typeof orderStatusHistory.$inferSelect;

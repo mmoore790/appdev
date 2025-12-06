@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { apiRequest } from "@/lib/queryClient";
-import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Plus, Search, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Users, Plus, Search, MoreVertical, Pencil, Trash2, Download, Eye, Mail, Phone } from "lucide-react";
+import { useLocation } from "wouter";
 
 type Customer = {
   id: number;
@@ -44,6 +44,7 @@ export default function CustomersPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [customerPendingDelete, setCustomerPendingDelete] = useState<Customer | null>(null);
+  const [, setLocation] = useLocation();
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -113,6 +114,45 @@ export default function CustomersPage() {
     deleteCustomerMutation.mutate(customerPendingDelete.id);
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const searchTerm = search.trim();
+      const url = `/api/customers/export/csv${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ""}`;
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to export customers");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `customers-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast({
+        title: "Export successful",
+        description: "Customer data has been exported to CSV.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Failed to export customers.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewCustomer = (customerId: number) => {
+    setLocation(`/customers/${customerId}/details`);
+  };
+
   const renderInfo = (value?: string | null, fallback: string = "Not provided") => {
     if (!value) {
       return <span className="text-muted-foreground italic">{fallback}</span>;
@@ -129,90 +169,107 @@ export default function CustomersPage() {
   const loadingRows = Array.from({ length: 5 });
 
   return (
-    <div className="container mx-auto py-8">
-      <PageHeader
-        title="Customers"
-        description="View and manage all customers"
-        icon={<Users className="h-6 w-6" />}
-      />
+    <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Customers
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">View and manage all customers</p>
+        </div>
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={handleExportCSV}>
+                <Download className="mr-2 h-4 w-4" />
+                Export to CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-9">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-xl">
+              <CustomerForm onComplete={handleFormComplete} onCancel={handleCreateCancel} />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, email, or phone..."
-                className="pl-10"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape" && search) {
-                    setSearch("");
-                  }
-                }}
-              />
-            </div>
-
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto">
-                  <Plus className="mr-2 h-5 w-5" />
-                  Add Customer
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-xl">
-                <CustomerForm onComplete={handleFormComplete} onCancel={handleCreateCancel} />
-              </DialogContent>
-            </Dialog>
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, email, or phone..."
+              className="pl-9 h-9 text-sm"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && search) {
+                  setSearch("");
+                }
+              }}
+            />
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className="p-0">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="w-[60px] text-right">Actions</TableHead>
+                <TableRow className="border-b">
+                  <TableHead className="h-9 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Name</TableHead>
+                  <TableHead className="h-9 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email</TableHead>
+                  <TableHead className="h-9 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Phone</TableHead>
+                  <TableHead className="h-9 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Address</TableHead>
+                  <TableHead className="h-9 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Notes</TableHead>
+                  <TableHead className="h-9 px-3 w-[50px] text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   loadingRows.map((_, index) => (
-                    <TableRow key={`customer-skeleton-${index}`}>
-                      <TableCell>
-                        <Skeleton className="h-5 w-32" />
+                    <TableRow key={`customer-skeleton-${index}`} className="border-b">
+                      <TableCell className="h-10 px-3 py-2">
+                        <Skeleton className="h-4 w-32" />
                       </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-48" />
+                      <TableCell className="h-10 px-3 py-2">
+                        <Skeleton className="h-4 w-48" />
                       </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-32" />
+                      <TableCell className="h-10 px-3 py-2">
+                        <Skeleton className="h-4 w-32" />
                       </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-64" />
+                      <TableCell className="h-10 px-3 py-2">
+                        <Skeleton className="h-4 w-48" />
                       </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-40" />
+                      <TableCell className="h-10 px-3 py-2">
+                        <Skeleton className="h-4 w-40" />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Skeleton className="ml-auto h-8 w-8 rounded-full" />
+                      <TableCell className="h-10 px-3 py-2 text-right">
+                        <Skeleton className="ml-auto h-6 w-6 rounded" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : isError ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-red-600">
+                  <TableRow className="border-b">
+                    <TableCell colSpan={6} className="h-20 px-3 py-4 text-center text-sm text-red-600">
                       Failed to load customers. {errorMessage}
                     </TableCell>
                   </TableRow>
                 ) : customers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                  <TableRow className="border-b">
+                    <TableCell colSpan={6} className="h-20 px-3 py-4 text-center text-sm text-muted-foreground">
                       {isSearching
                         ? "No customers match your search."
                         : "No customers found. Add your first customer to get started."}
@@ -220,32 +277,47 @@ export default function CustomersPage() {
                   </TableRow>
                 ) : (
                   customers.map((customer) => (
-                    <TableRow key={customer.id}>
-                      <TableCell className="font-medium">{customer.name}</TableCell>
-                      <TableCell>{renderInfo(customer.email, "No email")}</TableCell>
-                      <TableCell>{renderInfo(customer.phone, "No phone number")}</TableCell>
-                      <TableCell className="max-w-sm" title={customer.address ?? undefined}>
-                        <div className="line-clamp-2">
-                          {renderInfo(customer.address, "No address")}
+                    <TableRow 
+                      key={customer.id}
+                      className="border-b cursor-pointer hover:bg-muted/30 transition-colors group"
+                      onClick={() => handleViewCustomer(customer.id)}
+                    >
+                      <TableCell className="h-10 px-3 py-2">
+                        <span className="font-medium text-sm text-foreground">{customer.name}</span>
+                      </TableCell>
+                      <TableCell className="h-10 px-3 py-2">
+                        <span className="text-sm text-muted-foreground">{renderInfo(customer.email, "—")}</span>
+                      </TableCell>
+                      <TableCell className="h-10 px-3 py-2">
+                        <span className="text-sm text-muted-foreground">{renderInfo(customer.phone, "—")}</span>
+                      </TableCell>
+                      <TableCell className="h-10 px-3 py-2 max-w-[200px]" title={customer.address ?? undefined}>
+                        <div className="text-sm text-muted-foreground line-clamp-1 truncate">
+                          {renderInfo(customer.address, "—")}
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-sm" title={customer.notes ?? undefined}>
-                        <div className="line-clamp-2">
-                          {renderInfo(customer.notes, "No notes")}
+                      <TableCell className="h-10 px-3 py-2 max-w-[200px]" title={customer.notes ?? undefined}>
+                        <div className="text-sm text-muted-foreground line-clamp-1 truncate">
+                          {renderInfo(customer.notes, "—")}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="h-10 px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                               aria-label={`Customer actions for ${customer.name}`}
                             >
-                              <MoreVertical className="h-4 w-4" />
+                              <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => handleViewCustomer(customer.id)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View details
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => handleOpenEdit(customer.id)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit details
@@ -265,6 +337,81 @@ export default function CustomersPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-2">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <Card key={`customer-skeleton-mobile-${index}`} className="p-3">
+                  <Skeleton className="h-5 w-3/4 mb-2" />
+                  <Skeleton className="h-3 w-full mb-1" />
+                  <Skeleton className="h-3 w-2/3" />
+                </Card>
+              ))
+            ) : isError ? (
+              <Card className="p-4 text-center text-sm text-red-600">
+                Failed to load customers. {errorMessage}
+              </Card>
+            ) : customers.length === 0 ? (
+              <Card className="p-4 text-center text-sm text-muted-foreground">
+                {isSearching
+                  ? "No customers match your search."
+                  : "No customers found. Add your first customer to get started."}
+              </Card>
+            ) : (
+              customers.map((customer) => (
+                <Card 
+                  key={customer.id} 
+                  className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleViewCustomer(customer.id)}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-sm text-foreground">{customer.name}</h3>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label={`Customer actions for ${customer.name}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => handleViewCustomer(customer.id)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleOpenEdit(customer.id)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => setCustomerPendingDelete(customer)}
+                          className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">{renderInfo(customer.email, "No email")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">{renderInfo(customer.phone, "No phone")}</span>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

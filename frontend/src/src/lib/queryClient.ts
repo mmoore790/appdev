@@ -69,7 +69,17 @@ export const getQueryFn = <T>({
   on401: UnauthorizedBehavior;
 }): QueryFunction<T> => {
   return async ({ queryKey }) => {
-    const endpoint = queryKey[0] as string;
+    // Build endpoint from query key parts
+    // queryKey[0] is the base endpoint, queryKey[1+], etc. are path parameters
+    let endpoint = queryKey[0] as string;
+    
+    // Append additional query key parts as path segments
+    for (let i = 1; i < queryKey.length; i++) {
+      const part = queryKey[i];
+      if (part != null && part !== '') {
+        endpoint = `${endpoint}/${encodeURIComponent(String(part))}`;
+      }
+    }
 
     const authToken = hasWindow ? localStorage.getItem("authToken") : null;
 

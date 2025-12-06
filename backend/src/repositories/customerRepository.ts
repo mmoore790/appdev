@@ -4,24 +4,24 @@ import { IStorage, storage } from "../storage";
 export class CustomerRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findAll(): Promise<Customer[]> {
-    return this.store.getAllCustomers();
+  findAll(businessId: number): Promise<Customer[]> {
+    return this.store.getAllCustomers(businessId);
   }
 
-  findById(id: number): Promise<Customer | undefined> {
-    return this.store.getCustomer(id);
+  findById(id: number, businessId: number): Promise<Customer | undefined> {
+    return this.store.getCustomer(id, businessId);
   }
 
   create(data: InsertCustomer): Promise<Customer> {
     return this.store.createCustomer(data);
   }
 
-  update(id: number, data: Partial<InsertCustomer>): Promise<Customer | undefined> {
-    return this.store.updateCustomer(id, data);
+  update(id: number, data: Partial<InsertCustomer>, businessId: number): Promise<Customer | undefined> {
+    return this.store.updateCustomer(id, data, businessId);
   }
 
-  delete(id: number): Promise<boolean> {
-    return this.store.deleteCustomer(id);
+  delete(id: number, businessId: number): Promise<boolean> {
+    return this.store.deleteCustomer(id, businessId);
   }
 }
 

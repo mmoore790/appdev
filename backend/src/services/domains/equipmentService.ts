@@ -3,12 +3,12 @@ import { equipmentRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 
 class EquipmentService {
-  listEquipment() {
-    return equipmentRepository.findAll();
+  listEquipment(businessId: number) {
+    return equipmentRepository.findAll(businessId);
   }
 
-  getEquipmentById(id: number) {
-    return equipmentRepository.findById(id);
+  getEquipmentById(id: number, businessId: number) {
+    return equipmentRepository.findById(id, businessId);
   }
 
   async createEquipment(data: InsertEquipment, actorUserId?: number) {
@@ -21,6 +21,7 @@ class EquipmentService {
     };
 
     await logActivity({
+      businessId: equipment.businessId,
       userId: actorUserId ?? null,
       activityType: "equipment_created",
       description: getActivityDescription(
@@ -44,8 +45,8 @@ class EquipmentService {
     return equipment;
   }
 
-  updateEquipment(id: number, data: InsertEquipment) {
-    return equipmentRepository.update(id, data);
+  updateEquipment(id: number, data: InsertEquipment, businessId: number) {
+    return equipmentRepository.update(id, data, businessId);
   }
 }
 

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { insertEquipmentSchema } from "@shared/schema";
 import { equipmentService } from "../services/domains/equipmentService";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
 
 export class EquipmentController {
@@ -14,9 +15,10 @@ export class EquipmentController {
     this.router.put("/:id", isAuthenticated, this.updateEquipment);
   }
 
-  private async listEquipment(_req: Request, res: Response, next: NextFunction) {
+  private async listEquipment(req: Request, res: Response, next: NextFunction) {
     try {
-      const equipment = await equipmentService.listEquipment();
+      const businessId = getBusinessIdFromRequest(req);
+      const equipment = await equipmentService.listEquipment(businessId);
       res.json(equipment);
     } catch (error) {
       next(error);
@@ -25,8 +27,9 @@ export class EquipmentController {
 
   private async getEquipment(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const equipment = await equipmentService.getEquipmentById(id);
+      const equipment = await equipmentService.getEquipmentById(id, businessId);
 
       if (!equipment) {
         return res.status(404).json({ message: "Equipment not found" });
@@ -40,7 +43,8 @@ export class EquipmentController {
 
   private async createEquipment(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = insertEquipmentSchema.parse(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const data = insertEquipmentSchema.parse({ ...req.body, businessId });
       const actorId = (req.session as any)?.userId ?? undefined;
       const equipment = await equipmentService.createEquipment(data, actorId);
       res.status(201).json(equipment);
@@ -57,9 +61,10 @@ export class EquipmentController {
 
   private async updateEquipment(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
       const data = insertEquipmentSchema.parse(req.body);
-      const equipment = await equipmentService.updateEquipment(id, data);
+      const equipment = await equipmentService.updateEquipment(id, data, businessId);
       res.json(equipment);
     } catch (error) {
       if (error instanceof z.ZodError) {

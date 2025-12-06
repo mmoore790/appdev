@@ -2,37 +2,64 @@ import { InsertJob, Job } from "@shared/schema";
 import { customerRepository, jobRepository, jobUpdateRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
 import { sendJobBookedEmail, sendJobCompletedEmail } from "../emailService";
+import { notificationService } from "../notificationService";
 
 class JobService {
-  async generateNextJobId() {
-    return jobRepository.generateNextJobId();
+  async generateNextJobId(businessId: number) {
+    return jobRepository.generateNextJobId(businessId);
   }
 
-  async listJobs(filter?: { customerId?: number; assignedTo?: number }) {
-    const jobs = await jobRepository.findAll();
+  /**
+   * Updates the job's updatedAt timestamp
+   * This should be called whenever any related entity (services, work completed, parts, etc.) is modified
+   */
+  async touchJob(jobId: number, businessId: number): Promise<void> {
+    try {
+      await jobRepository.update(jobId, { updatedAt: new Date().toISOString() }, businessId);
+    } catch (error) {
+      // Silently fail - don't break the main operation if this fails
+      console.error(`Failed to update job ${jobId} timestamp:`, error);
+    }
+  }
+
+  /**
+   * List all jobs for a business.
+   * 
+   * IMPORTANT: All users within the same business can see ALL jobs for that business.
+   * This ensures transparency across the business. The assignedTo filter is optional and
+   * only used for UI filtering purposes - it does not restrict data access.
+   * 
+   * @param businessId - The business ID (all jobs for this business are returned)
+   * @param filter - Optional filters for UI purposes (customerId, assignedTo)
+   * @returns All jobs for the business, optionally filtered
+   */
+  async listJobs(businessId: number, filter?: { customerId?: number; assignedTo?: number }) {
+    // Get ALL jobs for the business - all users can see all jobs
+    const jobs = await jobRepository.findAll(businessId);
 
     if (filter?.customerId != null) {
       return jobs.filter((job) => job.customerId === filter.customerId);
     }
 
     if (filter?.assignedTo != null) {
+      // Filter by assignee (still scoped to businessId for security)
       return jobs.filter((job) => job.assignedTo === filter.assignedTo);
     }
 
     return jobs;
   }
 
-  getJobById(id: number) {
-    return jobRepository.findById(id);
+  getJobById(id: number, businessId: number) {
+    return jobRepository.findById(id, businessId);
   }
 
-  async getJobByJobCode(jobCode: string) {
-    const jobs = await jobRepository.findAll();
+  async getJobByJobCode(jobCode: string, businessId: number) {
+    const jobs = await jobRepository.findAll(businessId);
     return jobs.find((job) => job.jobId === jobCode);
   }
 
-  async getPublicJobTracker(jobId: string, email: string) {
-    const jobs = await jobRepository.findAll();
+  async getPublicJobTracker(jobId: string, email: string, businessId: number) {
+    const jobs = await jobRepository.findAll(businessId);
     const job = jobs.find((j) => j.jobId === jobId);
     if (!job) {
       return null;
@@ -42,7 +69,7 @@ class JobService {
       return null;
     }
 
-    const customer = await customerRepository.findById(job.customerId);
+    const customer = await customerRepository.findById(job.customerId, businessId);
     if (!customer) {
       return null;
     }
@@ -51,7 +78,7 @@ class JobService {
       return undefined;
     }
 
-    const updates = await jobUpdateRepository.findPublicByJob(job.id);
+    const updates = await jobUpdateRepository.findPublicByJob(job.id, businessId);
 
     return {
       job: {
@@ -81,7 +108,7 @@ class JobService {
 
     if (job.customerId) {
       try {
-        const customer = await customerRepository.findById(job.customerId);
+        const customer = await customerRepository.findById(job.customerId, job.businessId);
         if (customer) {
           customerName = customer.name;
 
@@ -99,6 +126,7 @@ class JobService {
     }
 
     await logActivity({
+      businessId: job.businessId,
       userId: actorUserId ?? null,
       activityType: "job_created",
       description: getActivityDescription("job_created", "job", job.id, {
@@ -116,24 +144,58 @@ class JobService {
       },
     });
 
+    // Create notification if job is assigned
+    if (job.assignedTo) {
+      try {
+        await notificationService.notifyJobAssignment(
+          job.id,
+          job.jobId,
+          job.assignedTo,
+          job.businessId,
+          job.description
+        );
+      } catch (error) {
+        console.error("Error creating job assignment notification:", error);
+      }
+    }
+
     return job;
   }
 
-  async updateJob(id: number, data: Partial<Job>, actorUserId?: number) {
-    const currentJob = await jobRepository.findById(id);
+  async updateJob(id: number, data: Partial<Job>, businessId: number, actorUserId?: number) {
+    const currentJob = await jobRepository.findById(id, businessId);
     if (!currentJob) {
       return undefined;
     }
 
-    const updatedJob = await jobRepository.update(id, data);
+    // Check if assignment changed
+    const assignmentChanged = data.assignedTo !== undefined && data.assignedTo !== currentJob.assignedTo;
+
+    const updatedJob = await jobRepository.update(id, data, businessId);
     if (!updatedJob) {
       return undefined;
+    }
+
+    // Create notification if assignment changed
+    if (assignmentChanged) {
+      try {
+        await notificationService.notifyJobReassignment(
+          updatedJob.id,
+          updatedJob.jobId,
+          currentJob.assignedTo,
+          updatedJob.assignedTo || null,
+          businessId,
+          updatedJob.description
+        );
+      } catch (error) {
+        console.error("Error creating job reassignment notification:", error);
+      }
     }
 
     let customerName = "Unknown Customer";
     if (updatedJob.customerId) {
       try {
-        const customer = await customerRepository.findById(updatedJob.customerId);
+        const customer = await customerRepository.findById(updatedJob.customerId, businessId);
         if (customer) {
           customerName = customer.name;
         }
@@ -144,6 +206,7 @@ class JobService {
 
     if (currentJob.status !== updatedJob.status) {
       await logActivity({
+        businessId: businessId,
         userId: actorUserId ?? null,
         activityType: "job_status_changed",
         description: getActivityDescription("job_status_changed", "job", updatedJob.id, {
@@ -164,6 +227,7 @@ class JobService {
 
       if (updatedJob.status === "completed") {
         await logActivity({
+          businessId: businessId,
           userId: actorUserId ?? null,
           activityType: "job_completed",
           description: getActivityDescription("job_completed", "job", updatedJob.id, {
@@ -184,7 +248,7 @@ class JobService {
     if (currentJob.status !== "ready_for_pickup" && updatedJob.status === "ready_for_pickup") {
       try {
         if (updatedJob.customerId) {
-          const customer = await customerRepository.findById(updatedJob.customerId);
+          const customer = await customerRepository.findById(updatedJob.customerId, businessId);
           if (customer?.email) {
             await sendJobCompletedEmail(customer.email, updatedJob);
             console.log(`Job ready for pickup email sent for job ${updatedJob.jobId} to ${customer.email}`);
@@ -208,6 +272,7 @@ class JobService {
 
     if (changedFields.length > 0) {
       await logActivity({
+        businessId: businessId,
         userId: actorUserId ?? null,
         activityType: "job_updated",
         description: getActivityDescription("job_updated", "job", updatedJob.id, {
@@ -228,11 +293,11 @@ class JobService {
     return updatedJob;
   }
 
-  async deleteJob(id: number, actorUserId?: number) {
+  async deleteJob(id: number, businessId: number, actorUserId?: number) {
     let jobInfo: { jobId: string; customerName: string } | null = null;
 
     try {
-      const job = await jobRepository.findById(id);
+      const job = await jobRepository.findById(id, businessId);
       if (job) {
         jobInfo = {
           jobId: job.jobId,
@@ -241,7 +306,7 @@ class JobService {
 
         if (job.customerId) {
           try {
-            const customer = await customerRepository.findById(job.customerId);
+            const customer = await customerRepository.findById(job.customerId, businessId);
             if (customer) {
               jobInfo.customerName = customer.name;
             }
@@ -254,13 +319,14 @@ class JobService {
       console.error("Error fetching job for delete activity log:", error);
     }
 
-    const deleted = await jobRepository.delete(id);
+    const deleted = await jobRepository.delete(id, businessId);
     if (!deleted) {
       return false;
     }
 
     if (jobInfo) {
       await logActivity({
+        businessId: businessId,
         userId: actorUserId ?? null,
         activityType: "job_deleted",
         description: getActivityDescription("job_deleted", "job", id, {

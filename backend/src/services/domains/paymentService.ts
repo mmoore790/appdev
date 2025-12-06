@@ -29,16 +29,16 @@ interface RecordPaymentInput {
 }
 
 class PaymentService {
-  listPaymentRequests() {
-    return paymentRepository.findAll();
+  listPaymentRequests(businessId: number) {
+    return paymentRepository.findAll(businessId);
   }
 
-  listPaymentRequestsByJob(jobId: number) {
-    return paymentRepository.findByJob(jobId);
+  listPaymentRequestsByJob(jobId: number, businessId: number) {
+    return paymentRepository.findByJob(jobId, businessId);
   }
 
-  getPaymentRequestById(id: number) {
-    return paymentRepository.findById(id);
+  getPaymentRequestById(id: number, businessId: number) {
+    return paymentRepository.findById(id, businessId);
   }
 
   async createPaymentRequest(
@@ -76,7 +76,7 @@ class PaymentService {
             checkoutId: session.id,
             paymentLink,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          })) ?? paymentRequest;
+          }, paymentRequest.businessId)) ?? paymentRequest;
 
         if (data.customerEmail) {
           try {
@@ -93,6 +93,7 @@ class PaymentService {
         }
 
         await logActivity({
+          businessId: paymentRequest.businessId,
           userId: actorUserId,
           activityType: "job_payment_request_created",
           description: getActivityDescription(
@@ -159,18 +160,18 @@ class PaymentService {
     }
   }
 
-  async updatePaymentRequest(id: number, data: Partial<InsertPaymentRequest>) {
+  async updatePaymentRequest(id: number, data: Partial<InsertPaymentRequest>, businessId: number) {
     const normalisedData = { ...data } as Partial<InsertPaymentRequest>;
 
     if (normalisedData.amount != null) {
       normalisedData.amount = Math.round(normalisedData.amount * 100);
     }
 
-    return paymentRepository.update(id, normalisedData);
+    return paymentRepository.update(id, normalisedData, businessId);
   }
 
-  async getPaymentStatus(id: number) {
-    const paymentRequest = await paymentRepository.findById(id);
+  async getPaymentStatus(id: number, businessId: number) {
+    const paymentRequest = await paymentRepository.findById(id, businessId);
     if (!paymentRequest) {
       return null;
     }
@@ -186,6 +187,7 @@ class PaymentService {
             await paymentRepository.updateStatus(
               id,
               newStatus,
+              businessId,
               session.payment_intent
                 ? {
                     transactionId: session.payment_intent.toString(),
@@ -223,17 +225,18 @@ class PaymentService {
   async createJobPaymentRequest(
     jobId: number,
     data: CreateJobPaymentRequestInput,
+    businessId: number,
     actorUserId: number
   ) {
-    const job = await jobRepository.findById(jobId);
+    const job = await jobRepository.findById(jobId, businessId);
     if (!job) {
       throw new Error("Job not found");
     }
 
-    const payload = { ...data };
+    const payload = { ...data, businessId };
 
     if (!payload.customerEmail && job.customerId) {
-      const customer = await customerRepository.findById(job.customerId);
+      const customer = await customerRepository.findById(job.customerId, businessId);
       if (customer?.email) {
         payload.customerEmail = customer.email;
       }
@@ -263,7 +266,7 @@ class PaymentService {
 
         await paymentRepository.update(paymentRequest.id, {
           checkoutId: session.id,
-        });
+        }, businessId);
 
         await sendPaymentRequestEmail(
           payload.customerEmail,
@@ -311,13 +314,13 @@ class PaymentService {
     };
   }
 
-  async getJobPaymentHistory(jobId: number) {
-    const job = await jobRepository.findById(jobId);
+  async getJobPaymentHistory(jobId: number, businessId: number) {
+    const job = await jobRepository.findById(jobId, businessId);
     if (!job) {
       return null;
     }
 
-    const paymentRequests = await paymentRepository.findByJob(jobId);
+    const paymentRequests = await paymentRepository.findByJob(jobId, businessId);
 
     return {
       job: {
@@ -337,13 +340,13 @@ class PaymentService {
     };
   }
 
-  async refreshJobPaymentStatuses(jobId: number) {
-    const job = await jobRepository.findById(jobId);
+  async refreshJobPaymentStatuses(jobId: number, businessId: number) {
+    const job = await jobRepository.findById(jobId, businessId);
     if (!job) {
       throw new Error("Job not found");
     }
 
-    const paymentRequests = await paymentRepository.findByJob(jobId);
+    const paymentRequests = await paymentRepository.findByJob(jobId, businessId);
     let updatedCount = 0;
     let paidRequests = 0;
 
@@ -366,6 +369,7 @@ class PaymentService {
             await paymentRepository.updateStatus(
               paymentRequest.id,
               newStatus,
+              businessId,
               session.payment_intent
                 ? {
                     transactionId: session.payment_intent.toString(),
@@ -386,7 +390,7 @@ class PaymentService {
                 paymentMethod: "stripe",
                 paymentNotes: `Paid via Stripe - Session: ${session.id}`,
                 paidAt: new Date().toISOString(),
-              });
+              }, businessId);
             }
           }
         } catch (error) {
@@ -404,14 +408,14 @@ class PaymentService {
     };
   }
 
-  async getStripeSessionDetails(sessionId: string) {
+  async getStripeSessionDetails(sessionId: string, businessId: number) {
     const stripeService = StripeService.fromEnvironment();
     if (!stripeService) {
       throw new Error("Stripe integration not configured");
     }
 
     const session = await stripeService.getCheckoutSession(sessionId);
-    const paymentRequests = await paymentRepository.findAll();
+    const paymentRequests = await paymentRepository.findAll(businessId);
     const paymentRequest = paymentRequests.find((pr) => pr.checkoutId === sessionId);
 
     if (paymentRequest) {
@@ -421,6 +425,7 @@ class PaymentService {
         await paymentRepository.updateStatus(
           paymentRequest.id,
           newStatus,
+          businessId,
           session.payment_intent
             ? {
                 transactionId: session.payment_intent.toString(),
@@ -462,12 +467,37 @@ class PaymentService {
           return { received: true, warning: "Session not paid" };
         }
 
-        const paymentRequests = await paymentRepository.findAll();
-        const matchingRequest = paymentRequests.find(
-          (pr) => pr.checkoutId === session.id
-        );
+        // We need to search across all businesses for the matching payment request
+        // This is a webhook so we don't have businessId in context
+        // We'll need to search all businesses or get businessId from the payment request metadata
+        // For now, we'll try to find it by searching - in production you might want to include businessId in webhook metadata
+        let matchingRequest: any = null;
+        let requestBusinessId: number | null = null;
+        
+        // Try to get businessId from metadata if available
+        if (session.metadata?.businessId) {
+          requestBusinessId = parseInt(session.metadata.businessId);
+          const paymentRequests = await paymentRepository.findAll(requestBusinessId);
+          matchingRequest = paymentRequests.find((pr) => pr.checkoutId === session.id);
+        } else {
+          // Fallback: search all businesses (not ideal but works for webhooks)
+          // In production, include businessId in Stripe session metadata
+          for (let bid = 1; bid <= 100; bid++) { // Reasonable limit
+            try {
+              const paymentRequests = await paymentRepository.findAll(bid);
+              const found = paymentRequests.find((pr) => pr.checkoutId === session.id);
+              if (found) {
+                matchingRequest = found;
+                requestBusinessId = bid;
+                break;
+              }
+            } catch {
+              // Business doesn't exist, continue
+            }
+          }
+        }
 
-        if (!matchingRequest) {
+        if (!matchingRequest || !requestBusinessId) {
           return { received: true };
         }
 
@@ -508,7 +538,7 @@ class PaymentService {
         }
 
         const amountInPence = matchingRequest.amount ?? 0;
-        await paymentRepository.updateStatus(matchingRequest.id, "paid", {
+        await paymentRepository.updateStatus(matchingRequest.id, "paid", requestBusinessId, {
           transactionId: session.payment_intent?.toString() || session.id,
           transactionCode: session.id,
           authCode: session.payment_intent?.toString() || session.id,
@@ -519,7 +549,7 @@ class PaymentService {
         });
 
         if (matchingRequest.jobId) {
-          const job = await jobRepository.findById(matchingRequest.jobId);
+          const job = await jobRepository.findById(matchingRequest.jobId, requestBusinessId);
           if (job) {
             const paymentNotesParts = [
               "✅ VERIFIED Stripe Payment",
@@ -558,9 +588,10 @@ class PaymentService {
                 minute: "2-digit",
                 second: "2-digit",
               }),
-            });
+            }, requestBusinessId);
 
             await logActivity({
+              businessId: requestBusinessId,
               userId: 1,
               activityType: "job_payment_completed",
               description: `✅ VERIFIED Stripe Payment: ${job.jobId} - £${(amountInPence / 100).toFixed(
@@ -592,13 +623,21 @@ class PaymentService {
 
       case "payment_intent.payment_failed": {
         const failedIntent = event.data.object;
-        const paymentRequests = await paymentRepository.findAll();
-        const failedRequest = paymentRequests.find(
-          (pr) => pr.checkoutId && pr.checkoutId.includes(failedIntent.id)
-        );
-
-        if (failedRequest) {
-          await paymentRepository.updateStatus(failedRequest.id, "failed");
+        // Similar to checkout.session.completed, we need to find the business
+        // In production, include businessId in webhook metadata
+        let failedRequest: any = null;
+        let requestBusinessId: number | null = null;
+        
+        if (failedIntent.metadata?.businessId) {
+          requestBusinessId = parseInt(failedIntent.metadata.businessId);
+          const paymentRequests = await paymentRepository.findAll(requestBusinessId);
+          failedRequest = paymentRequests.find(
+            (pr) => pr.checkoutId && pr.checkoutId.includes(failedIntent.id)
+          );
+        }
+        
+        if (failedRequest && requestBusinessId) {
+          await paymentRepository.updateStatus(failedRequest.id, "failed", requestBusinessId);
         }
 
         return { received: true };
@@ -609,18 +648,39 @@ class PaymentService {
     }
   }
 
-  async handleLegacyWebhook(payload: { paymentRequestId?: number }) {
+  async handleLegacyWebhook(payload: { paymentRequestId?: number; businessId?: number }) {
     if (!payload.paymentRequestId) {
       throw new Error("Missing paymentRequestId");
     }
 
-    const paymentRequest = await paymentRepository.findById(payload.paymentRequestId);
+    // Try to get businessId from payload or find it
+    let businessId = payload.businessId;
+    if (!businessId) {
+      // Search for the payment request across businesses
+      for (let bid = 1; bid <= 100; bid++) {
+        try {
+          const pr = await paymentRepository.findById(payload.paymentRequestId, bid);
+          if (pr) {
+            businessId = bid;
+            break;
+          }
+        } catch {
+          // Continue searching
+        }
+      }
+    }
+
+    if (!businessId) {
+      throw new Error("Could not determine business for payment request");
+    }
+
+    const paymentRequest = await paymentRepository.findById(payload.paymentRequestId, businessId);
     if (!paymentRequest || !paymentRequest.jobId) {
       throw new Error("Payment request not found or not linked to job");
     }
 
     await paymentRepository.completeJobPaymentFromStripe(payload.paymentRequestId);
-    await paymentRepository.updateStatus(payload.paymentRequestId, "paid");
+    await paymentRepository.updateStatus(payload.paymentRequestId, "paid", businessId);
 
     return { message: "Job payment completed successfully" };
   }

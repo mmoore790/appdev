@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { insertCallbackRequestSchema } from "@shared/schema";
 import { callbackService } from "../services/domains/callbackService";
 import { isAuthenticated } from "../auth";
+import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
 
 export class CallbackController {
@@ -22,6 +23,10 @@ export class CallbackController {
 
   private async listCallbacks(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
+      const userId = (req.session as any)?.userId;
+      console.log(`[CallbackController] listCallbacks - userId: ${userId}, businessId: ${businessId}`);
+      
       const assignedTo = req.query.assignedTo ? Number(req.query.assignedTo) : undefined;
       const customerId = req.query.customerId ? Number(req.query.customerId) : undefined;
       const status =
@@ -32,7 +37,7 @@ export class CallbackController {
       const fromDate = req.query.fromDate ? new Date(String(req.query.fromDate)) : undefined;
       const toDate = req.query.toDate ? new Date(String(req.query.toDate)) : undefined;
 
-      const callbacks = await callbackService.listCallbacks({
+      const callbacks = await callbackService.listCallbacks(businessId, {
         assignedTo,
         customerId,
         status,
@@ -40,15 +45,17 @@ export class CallbackController {
         toDate,
       });
 
+      console.log(`[CallbackController] listCallbacks - Returning ${callbacks.length} callbacks for businessId: ${businessId}`);
       res.json(callbacks);
     } catch (error) {
       next(error);
     }
   }
 
-  private async listDeletedCallbacks(_req: Request, res: Response, next: NextFunction) {
+  private async listDeletedCallbacks(req: Request, res: Response, next: NextFunction) {
     try {
-      const callbacks = await callbackService.listDeletedCallbacks();
+      const businessId = getBusinessIdFromRequest(req);
+      const callbacks = await callbackService.listDeletedCallbacks(businessId);
       res.json(callbacks);
     } catch (error) {
       next(error);
@@ -57,8 +64,9 @@ export class CallbackController {
 
   private async getCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const callback = await callbackService.getCallbackById(id);
+      const callback = await callbackService.getCallbackById(id, businessId);
 
       if (!callback) {
         return res.status(404).json({ message: "Callback request not found" });
@@ -72,7 +80,8 @@ export class CallbackController {
 
   private async createCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = insertCallbackRequestSchema.parse(req.body);
+      const businessId = getBusinessIdFromRequest(req);
+      const data = insertCallbackRequestSchema.parse({ ...req.body, businessId });
       const actorId = (req.session as any)?.userId ?? undefined;
       const callback = await callbackService.createCallback(data, actorId);
       res.status(201).json(callback);
@@ -89,8 +98,9 @@ export class CallbackController {
 
   private async updateCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const callback = await callbackService.updateCallback(id, req.body);
+      const callback = await callbackService.updateCallback(id, req.body, businessId);
 
       if (!callback) {
         return res.status(404).json({ message: "Callback request not found" });
@@ -104,10 +114,11 @@ export class CallbackController {
 
   private async completeCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
       const { notes } = req.body;
       const actorId = (req.session as any)?.userId ?? undefined;
-      const callback = await callbackService.completeCallback(id, notes, actorId);
+      const callback = await callbackService.completeCallback(id, businessId, notes, actorId);
 
       if (!callback) {
         return res.status(404).json({ message: "Callback request not found" });
@@ -121,8 +132,9 @@ export class CallbackController {
 
   private async softDeleteCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const callback = await callbackService.softDeleteCallback(id);
+      const callback = await callbackService.softDeleteCallback(id, businessId);
 
       if (!callback) {
         return res.status(404).json({ message: "Callback request not found" });
@@ -136,8 +148,9 @@ export class CallbackController {
 
   private async restoreCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const callback = await callbackService.restoreCallback(id);
+      const callback = await callbackService.restoreCallback(id, businessId);
 
       if (!callback) {
         return res.status(404).json({ message: "Deleted callback request not found" });
@@ -151,8 +164,9 @@ export class CallbackController {
 
   private async permanentDeleteCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const businessId = getBusinessIdFromRequest(req);
       const id = Number(req.params.id);
-      const deleted = await callbackService.permanentlyDeleteCallback(id);
+      const deleted = await callbackService.permanentlyDeleteCallback(id, businessId);
 
       if (!deleted) {
         return res.status(404).json({ message: "Callback request not found" });
@@ -164,9 +178,10 @@ export class CallbackController {
     }
   }
 
-  private async purgeExpired(_req: Request, res: Response, next: NextFunction) {
+  private async purgeExpired(req: Request, res: Response, next: NextFunction) {
     try {
-      const purgedCount = await callbackService.purgeExpiredDeletedCallbacks();
+      const businessId = getBusinessIdFromRequest(req);
+      const purgedCount = await callbackService.purgeExpiredDeletedCallbacks(businessId);
       res.json({
         success: true,
         purgedCount,

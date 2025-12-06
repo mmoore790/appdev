@@ -4,60 +4,60 @@ import { IStorage, storage } from "../storage";
 export class CallbackRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  findById(id: number): Promise<CallbackRequest | undefined> {
-    return this.store.getCallbackRequest(id);
+  findById(id: number, businessId: number): Promise<CallbackRequest | undefined> {
+    return this.store.getCallbackRequest(id, businessId);
   }
 
-  findByCustomer(customerId: number): Promise<CallbackRequest[]> {
-    return this.store.getCallbackRequestsByCustomer(customerId);
+  findByCustomer(customerId: number, businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getCallbackRequestsByCustomer(customerId, businessId);
   }
 
-  findByAssignee(assigneeId: number): Promise<CallbackRequest[]> {
-    return this.store.getCallbackRequestsByAssignee(assigneeId);
+  findByAssignee(assigneeId: number, businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getCallbackRequestsByAssignee(assigneeId, businessId);
   }
 
-  findPending(): Promise<CallbackRequest[]> {
-    return this.store.getPendingCallbackRequests();
+  findPending(businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getPendingCallbackRequests(businessId);
   }
 
-  findCompleted(): Promise<CallbackRequest[]> {
-    return this.store.getCompletedCallbackRequests();
+  findCompleted(businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getCompletedCallbackRequests(businessId);
   }
 
-  findAll(): Promise<CallbackRequest[]> {
-    return this.store.getAllCallbackRequests();
+  findAll(businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getAllCallbackRequests(businessId);
   }
 
-  findDeleted(): Promise<CallbackRequest[]> {
-    return this.store.getDeletedCallbackRequests();
+  findDeleted(businessId: number): Promise<CallbackRequest[]> {
+    return this.store.getDeletedCallbackRequests(businessId);
   }
 
   create(data: InsertCallbackRequest): Promise<CallbackRequest> {
     return this.store.createCallbackRequest(data);
   }
 
-  update(id: number, data: Partial<CallbackRequest>): Promise<CallbackRequest | undefined> {
-    return this.store.updateCallbackRequest(id, data);
+  update(id: number, data: Partial<CallbackRequest>, businessId: number): Promise<CallbackRequest | undefined> {
+    return this.store.updateCallbackRequest(id, data, businessId);
   }
 
-  complete(id: number, notes?: string): Promise<CallbackRequest | undefined> {
-    return this.store.completeCallbackRequest(id, notes);
+  complete(id: number, businessId: number, notes?: string): Promise<CallbackRequest | undefined> {
+    return this.store.completeCallbackRequest(id, businessId, notes);
   }
 
-  softDelete(id: number): Promise<CallbackRequest | undefined> {
-    return this.store.markCallbackAsDeleted(id);
+  softDelete(id: number, businessId: number): Promise<CallbackRequest | undefined> {
+    return this.store.markCallbackAsDeleted(id, businessId);
   }
 
-  restore(id: number): Promise<CallbackRequest | undefined> {
-    return this.store.restoreDeletedCallback(id);
+  restore(id: number, businessId: number): Promise<CallbackRequest | undefined> {
+    return this.store.restoreDeletedCallback(id, businessId);
   }
 
-  hardDelete(id: number): Promise<boolean> {
-    return this.store.permanentlyDeleteCallback(id);
+  hardDelete(id: number, businessId: number): Promise<boolean> {
+    return this.store.permanentlyDeleteCallback(id, businessId);
   }
 
-  purgeExpired(): Promise<number> {
-    return this.store.purgeExpiredDeletedCallbacks();
+  purgeExpired(businessId: number): Promise<number> {
+    return this.store.purgeExpiredDeletedCallbacks(businessId);
   }
 }
 

@@ -1,6 +1,7 @@
 import { InsertTask, Task } from "@shared/schema";
 import { taskRepository, userRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
+import { notificationService } from "../notificationService";
 
 const TASK_STATUS_VALUES = [
   "pending",
@@ -55,18 +56,31 @@ const normalizeTaskStatus = (status: unknown): BoardTaskStatus => {
 };
 
 export class TaskService {
-  async listTasks(filter?: { assignedTo?: number; pendingOnly?: boolean }) {
+  /**
+   * List all tasks for a business.
+   * 
+   * IMPORTANT: All users within the same business can see ALL tasks for that business.
+   * This ensures transparency across the business. The assignedTo filter is optional and
+   * only used for UI filtering purposes - it does not restrict data access.
+   * 
+   * @param businessId - The business ID (all tasks for this business are returned)
+   * @param filter - Optional filters for UI purposes (assignedTo, pendingOnly)
+   * @returns All tasks for the business, optionally filtered
+   */
+  async listTasks(businessId: number, filter?: { assignedTo?: number; pendingOnly?: boolean }) {
     if (filter?.assignedTo != null) {
-      return taskRepository.findByAssignee(filter.assignedTo);
+      // Filter by assignee (still scoped to businessId for security)
+      return taskRepository.findByAssignee(filter.assignedTo, businessId);
     }
     if (filter?.pendingOnly) {
-      return taskRepository.findPending();
+      return taskRepository.findPending(businessId);
     }
-    return taskRepository.findAll();
+    // Return ALL tasks for the business - all users can see all tasks
+    return taskRepository.findAll(businessId);
   }
 
-  getTaskById(id: number) {
-    return taskRepository.findById(id);
+  getTaskById(id: number, businessId: number) {
+    return taskRepository.findById(id, businessId);
   }
 
   async createTask(data: InsertTask, actorUserId?: number) {
@@ -76,7 +90,7 @@ export class TaskService {
     let assignedToName = "";
     if (task.assignedTo) {
       try {
-        const assignedUser = await userRepository.findById(task.assignedTo);
+        const assignedUser = await userRepository.findById(task.assignedTo, task.businessId);
         if (assignedUser) {
           assignedToName = assignedUser.fullName || assignedUser.username;
         }
@@ -86,6 +100,7 @@ export class TaskService {
     }
 
     await logActivity({
+      businessId: task.businessId,
       userId: actorUserId ?? null,
       activityType: "task_created",
       description: getActivityDescription("task_created", "task", task.id, {
@@ -105,14 +120,33 @@ export class TaskService {
       }
     });
 
+    // Create notification if task is assigned
+    if (task.assignedTo) {
+      try {
+        await notificationService.notifyTaskAssignment(
+          task.id,
+          task.title,
+          task.assignedTo,
+          task.businessId,
+          task.priority,
+          task.dueDate || undefined
+        );
+      } catch (error) {
+        console.error("Error creating task assignment notification:", error);
+      }
+    }
+
     return task;
   }
 
-  async updateTask(id: number, data: Partial<Task>, actorUserId?: number) {
-    const currentTask = await taskRepository.findById(id);
+  async updateTask(id: number, data: Partial<Task>, businessId: number, actorUserId?: number) {
+    const currentTask = await taskRepository.findById(id, businessId);
     if (!currentTask) {
       return undefined;
     }
+
+    // Check if assignment changed
+    const assignmentChanged = data.assignedTo !== undefined && data.assignedTo !== currentTask.assignedTo;
 
     const preparedUpdate = this.prepareTaskUpdate(data, currentTask);
     if (Object.keys(preparedUpdate).length === 0) {
@@ -120,14 +154,32 @@ export class TaskService {
       return currentTask;
     }
 
-    const updatedTask = await taskRepository.update(id, preparedUpdate);
+    const updatedTask = await taskRepository.update(id, preparedUpdate, businessId);
     if (!updatedTask) {
       return undefined;
+    }
+
+    // Create notification if assignment changed
+    if (assignmentChanged) {
+      try {
+        await notificationService.notifyTaskReassignment(
+          updatedTask.id,
+          updatedTask.title,
+          currentTask.assignedTo,
+          updatedTask.assignedTo || null,
+          businessId,
+          updatedTask.priority,
+          updatedTask.dueDate || undefined
+        );
+      } catch (error) {
+        console.error("Error creating task reassignment notification:", error);
+      }
     }
 
     // Log key changes
     if (currentTask.status !== "completed" && updatedTask.status === "completed") {
       await logActivity({
+        businessId: businessId,
         userId: actorUserId ?? null,
         activityType: "task_completed",
         description: getActivityDescription("task_completed", "task", updatedTask.id, {
@@ -145,6 +197,7 @@ export class TaskService {
       currentTask.title !== updatedTask.title
     ) {
       await logActivity({
+        businessId: businessId,
         userId: actorUserId ?? null,
         activityType: "task_updated",
         description: getActivityDescription("task_updated", "task", updatedTask.id, {

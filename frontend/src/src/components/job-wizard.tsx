@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,8 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ChevronRight, ChevronLeft, User, Wrench, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import { api } from "@/lib/api";
+import { ChevronRight, ChevronLeft, User, Wrench, FileText, CheckCircle, AlertCircle, X, Plus, MapPin, Phone, Mail } from "lucide-react";
 
 interface Customer {
   id: number;
@@ -41,6 +42,8 @@ interface WizardData {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  customerAddress?: string;
+  useNameOnly?: boolean; // Flag to use name only without saving customer
   
   // Step 2: Equipment Info
   equipmentMakeModel: string;
@@ -74,12 +77,51 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     priority: "medium"
   });
   
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const customerInputRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
 
-  // Fetch customers for selection
+  // Fetch customers with search
+  const searchTerm = customerSearchQuery.trim();
   const { data: customers = [] } = useQuery<Customer[]>({
-    queryKey: ['/api/customers'],
+    queryKey: ['/api/customers', searchTerm],
+    queryFn: () =>
+      api.get<Customer[]>(`/api/customers${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ""}`),
   });
+
+  // Filter customers based on search query
+  const filteredCustomers = customers.filter((customer) => {
+    if (!searchTerm) return false;
+    const query = searchTerm.toLowerCase();
+    return (
+      customer.name.toLowerCase().includes(query) ||
+      (customer.email && customer.email.toLowerCase().includes(query)) ||
+      (customer.phone && customer.phone.includes(query))
+    );
+  });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        customerDropdownRef.current &&
+        !customerDropdownRef.current.contains(event.target as Node) &&
+        customerInputRef.current &&
+        !customerInputRef.current.contains(event.target as Node)
+      ) {
+        setShowCustomerDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Fetch users for assignment
   const { data: users = [] } = useQuery<User[]>({
@@ -132,6 +174,9 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
       description: "",
       priority: "medium"
     });
+    setCustomerSearchQuery("");
+    setSelectedCustomer(null);
+    setShowCustomerDropdown(false);
   };
 
   const handleNext = () => {
@@ -150,20 +195,56 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     setWizardData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleCustomerSelect = (customerId: string) => {
-    const customer = customers.find(c => c.id === parseInt(customerId));
-    if (customer) {
-      updateWizardData("customerId", customer.id);
-      updateWizardData("customerName", customer.name);
-      updateWizardData("customerEmail", customer.email || "");
-      updateWizardData("customerPhone", customer.phone || "");
-    }
+  const handleCustomerSelect = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setCustomerSearchQuery(customer.name);
+    updateWizardData("customerId", customer.id);
+    updateWizardData("customerName", customer.name);
+    updateWizardData("customerEmail", customer.email || "");
+    updateWizardData("customerPhone", customer.phone || "");
+    updateWizardData("customerAddress", customer.address || "");
+    updateWizardData("useNameOnly", false);
+    setShowCustomerDropdown(false);
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    setCustomerSearchQuery("");
+    updateWizardData("customerId", undefined);
+    updateWizardData("customerName", "");
+    updateWizardData("customerEmail", "");
+    updateWizardData("customerPhone", "");
+    updateWizardData("customerAddress", "");
+    updateWizardData("useNameOnly", false);
+  };
+
+  const handleCreateNewCustomer = () => {
+    // User wants to create a new customer - show email/phone fields
+    updateWizardData("customerId", undefined);
+    updateWizardData("useNameOnly", false);
+    setShowCustomerDropdown(false);
+    // Keep the name they typed
+  };
+
+  const handleUseNameOnly = () => {
+    // User wants to use name only without saving customer
+    // But we still need email/phone for sending emails and keeping on file
+    updateWizardData("customerId", undefined);
+    updateWizardData("customerAddress", "");
+    updateWizardData("useNameOnly", true);
+    setShowCustomerDropdown(false);
+    // Keep email/phone fields visible so user can enter them
   };
 
   const canProceedFromStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return wizardData.customerName.trim() !== "";
+        const hasName = wizardData.customerName.trim() !== "";
+        // If using name-only mode, email and phone are required
+        if (wizardData.useNameOnly) {
+          return hasName && wizardData.customerEmail.trim() !== "" && wizardData.customerPhone.trim() !== "";
+        }
+        return hasName;
       case 2:
         return wizardData.equipmentDescription.trim() !== "";
       case 3:
@@ -185,14 +266,21 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
 
     // Handle customer creation/selection
     if (wizardData.customerId) {
+      // Use existing customer
       jobData.customerId = wizardData.customerId;
+    } else if (wizardData.useNameOnly) {
+      // Use name only without saving customer, but include email/phone for job record
+      jobData.customerName = wizardData.customerName;
+      jobData.customerEmail = wizardData.customerEmail || null;
+      jobData.customerPhone = wizardData.customerPhone || null;
     } else {
-      // Create new customer
+      // Create new customer (recommended)
       try {
-          const newCustomer = await apiRequest<Customer>('POST', '/api/customers', {
+        const newCustomer = await apiRequest<Customer>('POST', '/api/customers', {
           name: wizardData.customerName,
           email: wizardData.customerEmail || null,
-          phone: wizardData.customerPhone || null
+          phone: wizardData.customerPhone || null,
+          address: wizardData.customerAddress || null
         });
         jobData.customerId = newCustomer.id;
       } catch (error) {
@@ -213,56 +301,235 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
       case 1:
         return (
           <div className="space-y-6">
-            <div className="text-center mb-6">
-              <User className="h-12 w-12 mx-auto text-blue-600 mb-2" />
-              <h3 className="text-lg font-semibold">Customer Information</h3>
-              <p className="text-gray-600">Select an existing customer or add a new one</p>
+            <div className="text-center mb-4 sm:mb-6">
+              <User className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-blue-600 mb-2" />
+              <h3 className="text-base sm:text-lg font-semibold">Customer Information</h3>
+              <p className="text-sm sm:text-base text-gray-600">Search for an existing customer or add a new one</p>
             </div>
             
             <div className="space-y-4">
-
-
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <Label htmlFor="customer-name" className="text-base font-medium required">
-                    Customer Name *
-                  </Label>
+              <div>
+                <Label htmlFor="customer-name" className="text-base font-medium required">
+                  Customer Name *
+                </Label>
+                <div className="relative mt-2" ref={customerDropdownRef}>
                   <Input
+                    ref={customerInputRef}
                     id="customer-name"
-                    placeholder="Enter customer's full name"
-                    value={wizardData.customerName}
-                    onChange={(e) => updateWizardData("customerName", e.target.value)}
-                    className="mt-2"
+                    placeholder="Search for customer or enter name..."
+                    value={customerSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCustomerSearchQuery(value);
+                      updateWizardData("customerName", value);
+                      setShowCustomerDropdown(true);
+                      if (!value) {
+                        handleClearCustomer();
+                      } else if (!selectedCustomer) {
+                        updateWizardData("customerId", undefined);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (customerSearchQuery) {
+                        setShowCustomerDropdown(true);
+                      }
+                    }}
                   />
+                  {customerSearchQuery && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={handleClearCustomer}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                  
+                  {/* Customer Search Dropdown */}
+                  {showCustomerDropdown && customerSearchQuery && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredCustomers.length > 0 ? (
+                        <div className="py-1">
+                          {filteredCustomers.map((customer) => (
+                            <div
+                              key={customer.id}
+                              className="px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                              onClick={() => handleCustomerSelect(customer)}
+                            >
+                              <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                {customer.name}
+                              </div>
+                              <div className="mt-1 space-y-1">
+                                {customer.phone && (
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                    <Phone className="h-3 w-3" />
+                                    <span>{customer.phone}</span>
+                                  </div>
+                                )}
+                                {customer.email && (
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                    <Mail className="h-3 w-3" />
+                                    <span>{customer.email}</span>
+                                  </div>
+                                )}
+                                {customer.address && (
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                    <MapPin className="h-3 w-3" />
+                                    <span>{customer.address}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-3">
+                          <div className="text-sm text-gray-500 mb-3">
+                            No customers found matching "{customerSearchQuery}"
+                          </div>
+                          <div className="space-y-2">
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              className="w-full"
+                              onClick={handleCreateNewCustomer}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create New Customer (Recommended)
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={handleUseNameOnly}
+                            >
+                              Use Name Only (Don't Save Customer)
+                            </Button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">
+                            💡 We recommend creating a customer profile to track their history and contact details.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
-                <div>
-                  <Label htmlFor="customer-email" className="text-base font-medium">
-                    Email Address
-                  </Label>
-                  <Input
-                    id="customer-email"
-                    type="email"
-                    placeholder="customer@email.com"
-                    value={wizardData.customerEmail}
-                    onChange={(e) => updateWizardData("customerEmail", e.target.value)}
-                    className="mt-2"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="customer-phone" className="text-base font-medium">
-                    Phone Number
-                  </Label>
-                  <Input
-                    id="customer-phone"
-                    placeholder="07XXX XXXXXX"
-                    value={wizardData.customerPhone}
-                    onChange={(e) => updateWizardData("customerPhone", e.target.value)}
-                    className="mt-2"
-                  />
-                </div>
+                {/* Selected Customer Preview */}
+                {selectedCustomer && (
+                  <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-green-900 dark:text-green-100">
+                          Using saved customer: {selectedCustomer.name}
+                        </div>
+                        <div className="mt-1 space-y-1 text-xs text-green-700 dark:text-green-300">
+                          {selectedCustomer.phone && (
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              <span>{selectedCustomer.phone}</span>
+                            </div>
+                          )}
+                          {selectedCustomer.email && (
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              <span>{selectedCustomer.email}</span>
+                            </div>
+                          )}
+                          {selectedCustomer.address && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              <span>{selectedCustomer.address}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearCustomer}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Name Only Mode Indicator */}
+                {wizardData.useNameOnly && !selectedCustomer && (
+                  <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      ⚠️ Customer profile will not be saved, but email and phone are required for sending updates and keeping contact details on file.
+                    </div>
+                  </div>
+                )}
               </div>
+              
+              {/* Show email/phone fields if creating new customer OR using name-only mode */}
+              {/* Address field only shown when creating new customer (not name-only) */}
+              {(!selectedCustomer) && (
+                <>
+                  <div>
+                    <Label htmlFor="customer-email" className="text-base font-medium">
+                      Email Address {wizardData.useNameOnly && <span className="text-red-500">*</span>}
+                    </Label>
+                    <Input
+                      id="customer-email"
+                      type="email"
+                      placeholder="customer@email.com"
+                      value={wizardData.customerEmail}
+                      onChange={(e) => updateWizardData("customerEmail", e.target.value)}
+                      className="mt-2"
+                    />
+                    {wizardData.useNameOnly && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Required for sending email updates about this job
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="customer-phone" className="text-base font-medium">
+                      Phone Number {wizardData.useNameOnly && <span className="text-red-500">*</span>}
+                    </Label>
+                    <Input
+                      id="customer-phone"
+                      placeholder="07XXX XXXXXX"
+                      value={wizardData.customerPhone}
+                      onChange={(e) => updateWizardData("customerPhone", e.target.value)}
+                      className="mt-2"
+                    />
+                    {wizardData.useNameOnly && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Required for keeping contact details on file
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Address field only shown when creating new customer (not name-only) */}
+                  {!wizardData.useNameOnly && (
+                    <div>
+                      <Label htmlFor="customer-address" className="text-base font-medium">
+                        Address
+                      </Label>
+                      <Textarea
+                        id="customer-address"
+                        placeholder="Customer address (optional)"
+                        value={wizardData.customerAddress || ""}
+                        onChange={(e) => updateWizardData("customerAddress", e.target.value)}
+                        className="mt-2"
+                        rows={2}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         );
@@ -393,8 +660,25 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                 <CardContent>
                   <div className="space-y-2">
                     <p className="font-medium">{wizardData.customerName}</p>
-                    {wizardData.customerEmail && <p className="text-sm text-gray-600">{wizardData.customerEmail}</p>}
-                    {wizardData.customerPhone && <p className="text-sm text-gray-600">{wizardData.customerPhone}</p>}
+                    {selectedCustomer ? (
+                      <>
+                        {selectedCustomer.phone && <p className="text-sm text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3" /> {selectedCustomer.phone}</p>}
+                        {selectedCustomer.email && <p className="text-sm text-gray-600 flex items-center gap-1"><Mail className="h-3 w-3" /> {selectedCustomer.email}</p>}
+                        {selectedCustomer.address && <p className="text-sm text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3" /> {selectedCustomer.address}</p>}
+                      </>
+                    ) : wizardData.useNameOnly ? (
+                      <>
+                        <p className="text-sm text-amber-600 mb-2">⚠️ Customer profile not saved (name only mode)</p>
+                        {wizardData.customerPhone && <p className="text-sm text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3" /> {wizardData.customerPhone}</p>}
+                        {wizardData.customerEmail && <p className="text-sm text-gray-600 flex items-center gap-1"><Mail className="h-3 w-3" /> {wizardData.customerEmail}</p>}
+                      </>
+                    ) : (
+                      <>
+                        {wizardData.customerEmail && <p className="text-sm text-gray-600 flex items-center gap-1"><Mail className="h-3 w-3" /> {wizardData.customerEmail}</p>}
+                        {wizardData.customerPhone && <p className="text-sm text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3" /> {wizardData.customerPhone}</p>}
+                        {wizardData.customerAddress && <p className="text-sm text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3" /> {wizardData.customerAddress}</p>}
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -459,31 +743,31 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="text-xl">
+          <DialogTitle className="text-lg sm:text-xl">
             {mode === "create" ? "Create New Job" : "Edit Job"}
           </DialogTitle>
         </DialogHeader>
         
         {/* Progress indicator */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 sm:mb-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4 overflow-x-auto pb-2">
             {STEPS.map((step, index) => (
-              <div key={step.id} className="flex items-center">
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+              <div key={step.id} className="flex items-center flex-shrink-0">
+                <div className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs sm:text-sm font-medium ${
                   currentStep >= step.id 
                     ? 'bg-blue-600 text-white' 
                     : 'bg-gray-200 text-gray-600'
                 }`}>
                   {currentStep > step.id ? (
-                    <CheckCircle className="h-5 w-5" />
+                    <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                   ) : (
                     step.id
                   )}
                 </div>
                 {index < STEPS.length - 1 && (
-                  <div className={`w-12 h-0.5 mx-2 ${
+                  <div className={`w-8 sm:w-12 h-0.5 mx-1 sm:mx-2 flex-shrink-0 ${
                     currentStep > step.id ? 'bg-blue-600' : 'bg-gray-200'
                   }`} />
                 )}
@@ -502,28 +786,28 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
         </div>
 
         {/* Step content */}
-        <div className="min-h-[400px]">
+        <div className="min-h-[300px] sm:min-h-[400px]">
           {renderStepContent()}
         </div>
 
         {/* Navigation buttons */}
-        <div className="flex items-center justify-between pt-6 border-t">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-2 pt-4 sm:pt-6 border-t">
           <Button
             variant="outline"
             onClick={handlePrevious}
             disabled={currentStep === 1}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 min-h-[44px] sm:min-h-0 order-2 sm:order-1"
           >
             <ChevronLeft className="h-4 w-4" />
             Previous
           </Button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 order-1 sm:order-2">
             {currentStep < STEPS.length ? (
               <Button
                 onClick={handleNext}
                 disabled={!canProceedFromStep(currentStep)}
-                className="flex items-center gap-2"
+                className="flex items-center justify-center gap-2 min-h-[44px] sm:min-h-0 w-full sm:w-auto"
               >
                 Next
                 <ChevronRight className="h-4 w-4" />
@@ -532,7 +816,7 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
               <Button
                 onClick={handleSubmit}
                 disabled={createJobMutation.isPending}
-                className="flex items-center gap-2"
+                className="flex items-center justify-center gap-2 min-h-[44px] sm:min-h-0 w-full sm:w-auto"
               >
                 {createJobMutation.isPending ? "Creating..." : 
                  mode === "create" ? "Create Job" : "Update Job"}

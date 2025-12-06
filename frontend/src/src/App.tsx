@@ -4,7 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Sidebar } from "@/components/ui/sidebar";
+import { HorizontalNav } from "@/components/ui/horizontal-nav";
 import { Spinner } from "@/components/ui/spinner";
 import Dashboard from "@/pages/dashboard";
 import Tasks from "@/pages/tasks";
@@ -17,16 +17,29 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Account from "@/pages/account";
 import Customers from "@/pages/customers";
+import CustomerDetail from "@/pages/customer-detail";
 import PaymentSuccess from "@/pages/payment-success";
 import PaymentCancel from "@/pages/payment-cancel";
 import Callbacks from "@/pages/callbacks";
 import JobTracker from "@/pages/job-tracker";
-import PartsOnOrder from "@/pages/parts-on-order";
+import Orders from "@/pages/orders";
+import OrderTracker from "@/pages/order-tracker";
+import Activities from "@/pages/activities";
+import CalendarPage from "@/pages/calendar";
+import MasterDashboard from "@/pages/master-dashboard";
+import Messages from "@/pages/messages";
+import GettingStarted from "@/pages/getting-started";
 import { useAuth } from "./hooks/useAuth";
 
 // Protected route component
-function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>, [key: string]: any }) {
-  const { isAuthenticated, isLoading, error } = useAuth();
+interface ProtectedRouteProps {
+  component: React.ComponentType<any>;
+  allowedRoles?: string[];
+  [key: string]: any;
+}
+
+function ProtectedRoute({ component: Component, allowedRoles, ...rest }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, error, user } = useAuth();
   const [, navigate] = useLocation();
   
   useEffect(() => {
@@ -42,65 +55,107 @@ function ProtectedRoute({ component: Component, ...rest }: { component: React.Co
       navigate("/login");
     }
   }, [isAuthenticated, isLoading, navigate, error]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && allowedRoles && user && !allowedRoles.includes(user.role)) {
+      const fallback = user.role === "master" ? "/master" : "/dashboard";
+      navigate(fallback);
+    }
+  }, [allowedRoles, user, isAuthenticated, isLoading, navigate]);
   
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gradient-to-r from-green-50 to-blue-50">
+      <div className="flex justify-center items-center h-screen bg-gradient-to-r from-slate-50 to-blue-50/50">
         <Spinner size="lg" text="Loading your dashboard..." />
       </div>
     );
   }
   
   // Only render the component if the user is authenticated
-  return isAuthenticated ? <Component {...rest} /> : null;
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return null;
+  }
+
+  return <Component {...rest} />;
 }
+
+const operationalRoles = ["admin", "staff", "mechanic"];
 
 function Router() {
   return (
     <Switch>
       {/* Public routes */}
       <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
+      {/* Registration is now master-only - removed public route */}
       <Route path="/job-tracker" component={JobTracker} />
       <Route path="/track" component={JobTracker} /> {/* Alternative URL for job tracking */}
+      <Route path="/order-tracker" component={OrderTracker} />
+      <Route path="/track-order" component={OrderTracker} /> {/* Alternative URL for order tracking */}
       
-        {/* Protected routes */}
-        <Route path="/">
-          {() => <ProtectedRoute component={Dashboard} />}
-        </Route>
-        <Route path="/dashboard">
-          {() => <ProtectedRoute component={Dashboard} />}
-        </Route>
-        <Route path="/tasks">
-          {() => <ProtectedRoute component={Tasks} />}
-        </Route>
-        <Route path="/workshop/jobs/:jobId">
-          {() => <ProtectedRoute component={WorkshopJobDetail} />}
-        </Route>
-        <Route path="/workshop">
-          {() => <ProtectedRoute component={Workshop} />}
-        </Route>
+      {/* Master-only routes */}
+      <Route path="/master">
+        {() => <ProtectedRoute component={MasterDashboard} allowedRoles={["master"]} />}
+      </Route>
+      
+      {/* Protected routes */}
+      <Route path="/dashboard">
+        {() => <ProtectedRoute component={Dashboard} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/getting-started">
+        {() => <ProtectedRoute component={GettingStarted} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/tasks">
+        {() => <ProtectedRoute component={Tasks} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/workshop/jobs/:jobId">
+        {() => <ProtectedRoute component={WorkshopJobDetail} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/workshop">
+        {() => <ProtectedRoute component={Workshop} allowedRoles={operationalRoles} />}
+      </Route>
       <Route path="/analytics">
-        {() => <ProtectedRoute component={Analytics} />}
+        {() => <ProtectedRoute component={Analytics} allowedRoles={["admin"]} />}
       </Route>
       <Route path="/customers">
-        {() => <ProtectedRoute component={Customers} />}
+        {() => <ProtectedRoute component={Customers} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/customers/:id/details">
+        {() => <ProtectedRoute component={CustomerDetail} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/customers/:id">
+        {() => <ProtectedRoute component={CustomerDetail} allowedRoles={operationalRoles} />}
       </Route>
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
+        {() => <ProtectedRoute component={Settings} allowedRoles={["admin"]} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={Account} />}
       </Route>
 
       <Route path="/callbacks">
-        {() => <ProtectedRoute component={Callbacks} />}
+        {() => <ProtectedRoute component={Callbacks} allowedRoles={operationalRoles} />}
       </Route>
       <Route path="/payments/success" component={PaymentSuccess} />
       <Route path="/payments/cancel" component={PaymentCancel} />
-      <Route path="/parts-on-order">
-        {() => <ProtectedRoute component={PartsOnOrder} />}
+      <Route path="/orders">
+        {() => <ProtectedRoute component={Orders} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/activities">
+        {() => <ProtectedRoute component={Activities} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/calendar">
+        {() => <ProtectedRoute component={CalendarPage} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/messages">
+        {() => <ProtectedRoute component={Messages} allowedRoles={operationalRoles} />}
+      </Route>
+      <Route path="/">
+        {() => <ProtectedRoute component={DefaultLanding} />}
       </Route>
       
       {/* Not found route */}
@@ -109,11 +164,28 @@ function Router() {
   );
 }
 
+function DefaultLanding() {
+  const { user, isLoading } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      navigate(user.role === "master" ? "/master" : "/dashboard", { replace: true });
+    }
+  }, [isLoading, user, navigate]);
+
+  return (
+    <div className="flex justify-center items-center h-screen bg-gradient-to-r from-slate-50 to-blue-50/50">
+      <Spinner size="lg" text="Loading your workspace..." />
+    </div>
+  );
+}
+
 function AuthAwareLayout() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
-  const publicRoutes = ['/login', '/register'];
-  const customerPortalRoutes = ['/job-tracker', '/payments/success', '/payments/cancel']; // Customer-facing pages
+  const publicRoutes = ['/login']; // Registration removed - now master-only
+  const customerPortalRoutes = ['/job-tracker', '/order-tracker', '/track-order', '/payments/success', '/payments/cancel']; // Customer-facing pages
   
   const isPublicRoute = publicRoutes.includes(location);
   const isCustomerPortalRoute = customerPortalRoutes.includes(location);
@@ -121,22 +193,24 @@ function AuthAwareLayout() {
   // For login, registration, job tracker, and payment pages, don't show the sidebar/header
   if (!isAuthenticated || isPublicRoute || isCustomerPortalRoute) {
     return (
-      <div className="bg-neutral-100 min-h-screen">
+      <div className="bg-slate-50 min-h-screen">
         <Router />
       </div>
     );
   }
   
-  // For protected routes, show the full app layout with sidebar
+  // For protected routes, show the full app layout with horizontal navigation
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-neutral-100">
-      <Sidebar />
-      <div className="flex-1 focus:outline-none mt-12 md:mt-0 overflow-y-auto flex flex-col">
-        <main className="flex-1 relative pb-8 z-0">
-          <Router />
+    <div className="flex flex-col h-screen bg-white">
+      <HorizontalNav />
+      <div className="flex-1 overflow-y-auto flex flex-col bg-slate-50">
+        <main className="flex-1 relative pb-4 sm:pb-8 z-0">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6">
+            <Router />
+          </div>
         </main>
-        <footer className="bg-white border-t border-neutral-200 py-3 px-6 text-center text-xs text-neutral-500 flex-shrink-0">
-          Designed and developed in house by Matthew Moore
+        <footer className="bg-white border-t border-slate-200 py-3 px-4 sm:py-4 sm:px-6 text-center text-xs text-slate-600 flex-shrink-0">
+          <p className="text-slate-700">BoltDown UK Copyright 2025</p>
         </footer>
       </div>
     </div>

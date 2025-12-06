@@ -9,40 +9,110 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle2, XCircle, Clock, Mail, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { formatDistanceToNow } from "date-fns";
+
+type Business = {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+};
 
 export default function Settings() {
-  // Company information
-  const [companyInfo, setCompanyInfo] = useState({
-    name: "Moore Horticulture Equipment",
-    address: "9 Drumalig Road, BT27 6UD",
-    phone: "02897510804",
-    email: "info@mooresmowers.co.uk",
-    website: "www.mooresmowers.co.uk"
-  });
+  // Company information (per business, from backend)
+  const [companyInfo, setCompanyInfo] = useState<Business | null>(null);
   
   // Other settings
   const [theme, setTheme] = useState("light");
-  
-  // Job backup countdown
-  const [timeUntilBackup, setTimeUntilBackup] = useState("");
 
-  // Load company info from localStorage if available
+  // Load company info from backend
+  const { data: businessData } = useQuery<Business>({
+    queryKey: ["/api/business/me"],
+  });
+
   useEffect(() => {
-    const savedCompanyInfo = localStorage.getItem('companyInfo');
-    if (savedCompanyInfo) {
-      try {
-        setCompanyInfo(JSON.parse(savedCompanyInfo));
-      } catch (error) {
-        console.error('Error parsing saved company info:', error);
-      }
+    if (businessData) {
+      setCompanyInfo(businessData);
     }
-  }, []);
+  }, [businessData]);
+
+  const updateBusinessMutation = useMutation({
+    mutationFn: async (updates: Partial<Business>) => {
+      return await apiRequest<Business>("/api/business/me", {
+        method: "PUT",
+        data: updates,
+      });
+    },
+    onSuccess: (updated) => {
+      setCompanyInfo(updated);
+      toast({
+        title: "Settings saved",
+        description: "Company information has been updated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/business/me"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Failed to update company information: ${error.message || "Please try again."}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const logoUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("logo", file);
+      
+      // Use the apiRequest helper but with FormData (which needs special handling)
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+      const url = apiBaseUrl ? `${apiBaseUrl}/api/business/logo` : "/api/business/logo";
+      
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        let errorMessage = "Failed to upload logo";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          // If response isn't JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      return (await response.json()) as { logoUrl: string };
+    },
+    onSuccess: ({ logoUrl }) => {
+      setCompanyInfo((prev) => (prev ? { ...prev, logoUrl } : prev));
+      toast({
+        title: "Logo updated",
+        description: "Company logo has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/business/me"] });
+    },
+    onError: (error: any) => {
+      console.error("Logo upload error:", error);
+      toast({
+        title: "Error uploading logo",
+        description: error.message || "Failed to upload logo. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Define basic types
   type User = {
@@ -78,53 +148,6 @@ export default function Settings() {
   const { data: registrationRequests, isLoading: loadingRequests } = useQuery<RegistrationRequest[]>({
     queryKey: ["/api/auth/registration-requests"],
   });
-
-  // Query for next backup date
-  const { data: nextBackupData } = useQuery<{ nextBackupDate: string }>({
-    queryKey: ["/api/backup/next-backup-date"],
-    refetchInterval: 60000, // Update every minute
-  });
-
-  // Mutation for sending manual backup email
-  const sendBackupMutation = useMutation({
-    mutationFn: async () => {
-      console.log("Starting backup email send...");
-      const response = await apiRequest("/api/backup/send-job-backup", { method: "POST" });
-      console.log("Backup email response:", response);
-      return response;
-    },
-    onSuccess: (data) => {
-      console.log("Backup email success:", data);
-      toast({
-        title: "Backup email sent",
-        description: "Weekly job backup email has been sent successfully to both recipients.",
-      });
-    },
-    onError: (error) => {
-      console.error("Backup email error:", error);
-      toast({
-        title: "Error",
-        description: `Failed to send backup email: ${error?.message || 'Please try again.'}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Update countdown timer
-  useEffect(() => {
-    if (nextBackupData?.nextBackupDate) {
-      const updateCountdown = () => {
-        const nextDate = new Date(nextBackupData.nextBackupDate);
-        const timeLeft = formatDistanceToNow(nextDate, { addSuffix: true });
-        setTimeUntilBackup(timeLeft);
-      };
-
-      updateCountdown();
-      const interval = setInterval(updateCountdown, 60000); // Update every minute
-
-      return () => clearInterval(interval);
-    }
-  }, [nextBackupData]);
 
   const [selectedRequest, setSelectedRequest] = useState<RegistrationRequest | null>(null);
   const [approvalNotes, setApprovalNotes] = useState("");
@@ -197,11 +220,9 @@ export default function Settings() {
 
   // Save company information
   const saveCompanyInfo = () => {
-    localStorage.setItem('companyInfo', JSON.stringify(companyInfo));
-    toast({
-      title: "Settings saved",
-      description: "Company information has been updated.",
-    });
+    if (!companyInfo) return;
+    const { id, ...updates } = companyInfo;
+    updateBusinessMutation.mutate(updates);
   };
 
   return (
@@ -232,8 +253,8 @@ export default function Settings() {
                   <Label htmlFor="company-name">Company Name</Label>
                   <Input 
                     id="company-name" 
-                    value={companyInfo.name} 
-                    onChange={(e) => setCompanyInfo({...companyInfo, name: e.target.value})}
+                    value={companyInfo?.name || ""} 
+                    onChange={(e) => setCompanyInfo(prev => prev ? { ...prev, name: e.target.value } : prev)}
                   />
                 </div>
                 
@@ -241,8 +262,8 @@ export default function Settings() {
                   <Label htmlFor="company-address">Address</Label>
                   <Input 
                     id="company-address" 
-                    value={companyInfo.address} 
-                    onChange={(e) => setCompanyInfo({...companyInfo, address: e.target.value})}
+                    value={companyInfo?.address || ""} 
+                    onChange={(e) => setCompanyInfo(prev => prev ? { ...prev, address: e.target.value } : prev)}
                   />
                 </div>
                 
@@ -250,8 +271,8 @@ export default function Settings() {
                   <Label htmlFor="company-phone">Phone Number</Label>
                   <Input 
                     id="company-phone" 
-                    value={companyInfo.phone} 
-                    onChange={(e) => setCompanyInfo({...companyInfo, phone: e.target.value})}
+                    value={companyInfo?.phone || ""} 
+                    onChange={(e) => setCompanyInfo(prev => prev ? { ...prev, phone: e.target.value } : prev)}
                   />
                 </div>
                 
@@ -259,8 +280,8 @@ export default function Settings() {
                   <Label htmlFor="company-email">Email Address</Label>
                   <Input 
                     id="company-email" 
-                    value={companyInfo.email} 
-                    onChange={(e) => setCompanyInfo({...companyInfo, email: e.target.value})}
+                    value={companyInfo?.email || ""} 
+                    onChange={(e) => setCompanyInfo(prev => prev ? { ...prev, email: e.target.value } : prev)}
                   />
                 </div>
                 
@@ -268,9 +289,43 @@ export default function Settings() {
                   <Label htmlFor="company-website">Website</Label>
                   <Input 
                     id="company-website" 
-                    value={companyInfo.website}
-                    onChange={(e) => setCompanyInfo({...companyInfo, website: e.target.value})}
+                    value={companyInfo?.website || ""}
+                    onChange={(e) => setCompanyInfo(prev => prev ? { ...prev, website: e.target.value } : prev)}
                   />
+                </div>
+
+                <div className="space-y-4">
+                  <Label>Company Logo</Label>
+                  <div className="flex items-center gap-4">
+                    {companyInfo?.logoUrl && (
+                      <img
+                        src={companyInfo.logoUrl}
+                        alt="Company logo"
+                        className="h-12 w-12 rounded-md border object-contain bg-white"
+                        onError={(e) => {
+                          console.error("Failed to load logo image:", companyInfo.logoUrl);
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        disabled={logoUploadMutation.isPending}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            console.log("Uploading logo file:", file.name, file.size, file.type);
+                            logoUploadMutation.mutate(file);
+                          }
+                        }}
+                      />
+                      {logoUploadMutation.isPending && (
+                        <p className="text-sm text-gray-500">Uploading logo...</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="mt-6 flex justify-end">
@@ -299,35 +354,6 @@ export default function Settings() {
                 </div>
                 
                 <Separator className="my-4" />
-                
-                {/* Job Backup Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Download className="h-5 w-5 text-blue-600" />
-                    <h3 className="text-lg font-semibold">Job Backup System</h3>
-                  </div>
-                  
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Clock className="h-4 w-4 text-blue-600" />
-                      <span className="font-medium">Next backup email:</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-3">
-                      {timeUntilBackup ? `${timeUntilBackup}` : 'Loading...'}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Weekly job backup emails are automatically sent to matthew1111moore@gmail.com every Monday at 9 AM.
-                    </p>
-                    <Button 
-                      onClick={() => sendBackupMutation.mutate()}
-                      disabled={sendBackupMutation.isPending}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Mail className="h-4 w-4 mr-2" />
-                      {sendBackupMutation.isPending ? 'Sending...' : 'Send Backup Now'}
-                    </Button>
-                  </div>
-                </div>
                 
                 <div className="pt-4 flex justify-end">
                   <Button className="bg-green-700 hover:bg-green-800">

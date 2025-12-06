@@ -2,6 +2,7 @@
 import { activityRepository } from "../repositories";
 
 export interface ActivityData {
+  businessId: number;
   userId?: number | null;
   activityType: string;
   description: string;
@@ -10,16 +11,16 @@ export interface ActivityData {
   metadata?: any;
 }
 
-export function getRecentActivities(limit?: number) {
-  return activityRepository.findAll(limit);
+export function getRecentActivities(businessId: number, limit?: number) {
+  return activityRepository.findAll(businessId, limit);
 }
 
-export function getActivitiesForUser(userId: number, limit?: number) {
-  return activityRepository.findByUser(userId, limit);
+export function getActivitiesForUser(userId: number, businessId: number, limit?: number) {
+  return activityRepository.findByUser(userId, businessId, limit);
 }
 
-export function getActivitiesForEntity(entityType: string, entityId: number) {
-  return activityRepository.findByEntity(entityType, entityId);
+export function getActivitiesForEntity(entityType: string, entityId: number, businessId: number) {
+  return activityRepository.findByEntity(entityType, entityId, businessId);
 }
 
 export function cleanupOldActivities(limit: number) {
@@ -36,6 +37,7 @@ export async function logActivity(data: ActivityData): Promise<void> {
     const entityId = data.entityId ?? 0;
 
     await activityRepository.create({
+      businessId: data.businessId,
       userId,
       activityType: data.activityType,
       description: data.description,

@@ -33,7 +33,7 @@ export function PageHeader({ title, description, icon, actions, className }: Pag
             </div>
           </div>
           {actions && (
-            <div className="flex flex-wrap gap-3 md:mt-0 md:ml-4">
+            <div className="flex flex-wrap items-end gap-3 md:mt-0 md:ml-4">
               {actions}
             </div>
           )}

@@ -42,8 +42,6 @@ export const JobReceipt = forwardRef<HTMLDivElement, JobReceiptProps>(
           return "Waiting Assessment";
         case "in_progress":
           return "In Progress";
-        case "parts_ordered":
-          return "Parts Ordered";
         case "completed":
           return "Completed";
         default:

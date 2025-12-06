@@ -280,8 +280,6 @@ export default function JobTracker() {
         return "Waiting Assessment";
       case "in_progress":
         return "In Progress";
-      case "parts_ordered":
-        return "Parts Ordered";
       case "completed":
         return "Completed";
       default:
@@ -296,8 +294,6 @@ export default function JobTracker() {
         return <Clock className="h-6 w-6 text-amber-500" />;
       case "in_progress":
         return <Wrench className="h-6 w-6 text-blue-500" />;
-      case "parts_ordered":
-        return <Package className="h-6 w-6 text-purple-500" />;
       case "completed":
         return <CheckCircle className="h-6 w-6 text-green-500" />;
       default:

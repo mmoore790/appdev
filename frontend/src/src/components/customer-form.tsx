@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer } from "@shared/schema";
 import { Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Define the customer schema for form validation
 const customerSchema = z.object({
@@ -41,6 +51,7 @@ type CustomerPayload = {
 interface CustomerFormProps {
   customerId?: number;
   editMode?: boolean;
+  initialName?: string;
   onComplete?: () => void;
   onCancel?: () => void;
 }
@@ -48,6 +59,7 @@ interface CustomerFormProps {
 export function CustomerForm({
   customerId,
   editMode = false,
+  initialName = "",
   onComplete,
   onCancel,
 }: CustomerFormProps) {
@@ -58,7 +70,7 @@ export function CustomerForm({
   const form = useForm<CustomerFormValues>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
-      name: "",
+      name: initialName,
       email: "",
       phone: "",
       address: "",
@@ -112,6 +124,20 @@ export function CustomerForm({
     }
   }, [customer, form]);
 
+  const [duplicateEmailCheck, setDuplicateEmailCheck] = useState<{ exists: boolean; customer?: { id: number; name: string } } | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<CustomerPayload | null>(null);
+
+  // Check for duplicate email
+  const checkEmailMutation = useMutation({
+    mutationFn: async (email: string) => {
+      return apiRequest<{ exists: boolean; customer?: { id: number; name: string } }>(
+        "GET",
+        `/api/customers/check-email?email=${encodeURIComponent(email)}`
+      );
+    },
+  });
+
   // Create customer mutation
   const createCustomer = useMutation({
     mutationFn: async (payload: CustomerPayload) => {
@@ -130,6 +156,8 @@ export function CustomerForm({
         address: "",
         notes: "",
       });
+      setDuplicateEmailCheck(null);
+      setPendingSubmit(null);
       onComplete?.();
     },
     onError: (error) => {
@@ -167,14 +195,36 @@ export function CustomerForm({
   });
 
   // Form submission handler
-  function onSubmit(values: CustomerFormValues) {
+  async function onSubmit(values: CustomerFormValues) {
     const payload = normalizePayload(values);
     if (editMode && customerId) {
       updateCustomer.mutate(payload);
     } else {
+      // Check for duplicate email if email is provided
+      if (payload.email) {
+        try {
+          const result = await checkEmailMutation.mutateAsync(payload.email);
+          if (result.exists && result.customer) {
+            setDuplicateEmailCheck(result);
+            setPendingSubmit(payload);
+            setShowDuplicateDialog(true);
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking email:", error);
+          // Continue with creation if check fails
+        }
+      }
       createCustomer.mutate(payload);
     }
   }
+
+  const handleConfirmDuplicate = () => {
+    if (pendingSubmit) {
+      createCustomer.mutate(pendingSubmit);
+      setShowDuplicateDialog(false);
+    }
+  };
 
   const isSubmitting = createCustomer.isPending || updateCustomer.isPending;
 
@@ -328,6 +378,24 @@ export function CustomerForm({
           </CardFooter>
         </form>
       </Form>
+
+      <AlertDialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Email Already Exists</AlertDialogTitle>
+            <AlertDialogDescription>
+              This email is already associated with a customer named{" "}
+              <strong>{duplicateEmailCheck?.customer?.name}</strong>. Are you sure you want to create another customer with this email?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDuplicate}>
+              Create Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

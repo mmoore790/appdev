@@ -4,32 +4,32 @@ import { IStorage, storage } from "../storage";
 export class JobRepository {
   constructor(private readonly store: IStorage = storage) {}
 
-  generateNextJobId(): Promise<string> {
-    return this.store.generateNextJobId();
+  generateNextJobId(businessId: number): Promise<string> {
+    return this.store.generateNextJobId(businessId);
   }
 
-  findById(id: number): Promise<Job | undefined> {
-    return this.store.getJob(id);
+  findById(id: number, businessId: number): Promise<Job | undefined> {
+    return this.store.getJob(id, businessId);
   }
 
-  findAll(): Promise<Job[]> {
-    return this.store.getAllJobs();
+  findAll(businessId: number): Promise<Job[]> {
+    return this.store.getAllJobs(businessId);
   }
 
-  findActive(): Promise<Job[]> {
-    return this.store.getActiveJobs();
+  findActive(businessId: number): Promise<Job[]> {
+    return this.store.getActiveJobs(businessId);
   }
 
   create(data: InsertJob): Promise<Job> {
     return this.store.createJob(data);
   }
 
-  update(id: number, data: Partial<Job>): Promise<Job | undefined> {
-    return this.store.updateJob(id, data);
+  update(id: number, data: Partial<Job>, businessId: number): Promise<Job | undefined> {
+    return this.store.updateJob(id, data, businessId);
   }
 
-  delete(id: number): Promise<boolean> {
-    return this.store.deleteJob(id);
+  delete(id: number, businessId: number): Promise<boolean> {
+    return this.store.deleteJob(id, businessId);
   }
 }
 
