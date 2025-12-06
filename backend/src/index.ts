@@ -77,11 +77,11 @@ app.use(session({
   saveUninitialized: false, // Don't create session until something is stored (reduces DB connections)
   rolling: true, // Reset expiration on activity
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: true, // Required for cross-origin cookies with sameSite: 'none'
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     path: '/',
-    sameSite: 'lax'
+    sameSite: 'none' // Required for cross-origin requests (Vercel frontend -> Render backend)
   }
 }));
 

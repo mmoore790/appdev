@@ -92,6 +92,7 @@ export const getQueryFn = <T>({
       return await sendApiRequest<T>(endpoint, {
         method: "GET",
         headers: Object.keys(headers).length ? headers : undefined,
+        credentials: "include", // Ensure cookies are sent cross-origin
       });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401 && unauthorizedBehavior === "returnNull") {
