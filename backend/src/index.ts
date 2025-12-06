@@ -49,6 +49,8 @@ app.use(cors({
     }
   },
   credentials: true, // Allows session cookies
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['X-Auth-Token', 'X-Auth-Success'],
 }));
 
 app.use(express.json());

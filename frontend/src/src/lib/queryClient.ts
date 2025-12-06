@@ -86,12 +86,12 @@ export const getQueryFn = <T>({
     const headers: Record<string, string> = {};
     if (authToken) {
       headers["Authorization"] = `Bearer ${authToken}`;
-      if (typeof window !== "undefined" && endpoint === "/api/auth/me") {
-        console.log("[Auth] Sending token in Authorization header for /api/auth/me");
+      if (typeof window !== "undefined") {
+        console.log(`[Auth] Sending token in Authorization header for ${endpoint}`);
       }
     } else {
-      if (typeof window !== "undefined" && endpoint === "/api/auth/me") {
-        console.log("[Auth] No token found in localStorage for /api/auth/me");
+      if (typeof window !== "undefined") {
+        console.warn(`[Auth] No token found in localStorage for ${endpoint}`);
       }
     }
 

@@ -143,6 +143,17 @@ export async function request<T>(path: string, options: ApiRequestOptions = {}):
   const url = resolveApiUrl(path);
   const headersInit = new Headers(headers);
 
+  // Always include auth token from localStorage if available
+  if (typeof window !== "undefined") {
+    const authToken = localStorage.getItem("authToken");
+    if (authToken && !headersInit.has("Authorization")) {
+      headersInit.set("Authorization", `Bearer ${authToken}`);
+      if (import.meta.env.DEV) {
+        console.log(`[api] Added Authorization header for ${path}`);
+      }
+    }
+  }
+
   const init: RequestInit = {
     method,
     credentials: credentials ?? "include",

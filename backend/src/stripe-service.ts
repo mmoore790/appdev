@@ -47,8 +47,8 @@ export class StripeService {
       ],
       mode: 'payment',
       customer_email: data.customerEmail,
-      success_url: `https://${process.env.REPLIT_DOMAINS || 'localhost:5000'}/payments/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `https://${process.env.REPLIT_DOMAINS || 'localhost:5000'}/payments/cancel`,
+      success_url: `https://${process.env.FRONTEND_DOMAIN || process.env.FRONTEND_URL?.replace(/^https?:\/\//, '') || process.env.REPLIT_DOMAINS || 'localhost:5000'}/payments/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `https://${process.env.FRONTEND_DOMAIN || process.env.FRONTEND_URL?.replace(/^https?:\/\//, '') || process.env.REPLIT_DOMAINS || 'localhost:5000'}/payments/cancel`,
       metadata: {
         checkoutReference: data.checkoutReference,
       },

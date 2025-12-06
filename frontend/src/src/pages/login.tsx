@@ -73,7 +73,9 @@ export default function LoginPage() {
 
       if (authToken) {
         localStorage.setItem("authToken", authToken);
-        console.log("[Login] Auth token stored in localStorage");
+        console.log("[Login] Auth token stored in localStorage:", authToken.substring(0, 20) + "...");
+      } else {
+        console.warn("[Login] No X-Auth-Token header received from server");
       }
 
       // Set the user data in the query cache immediately so useAuth() knows we're authenticated
