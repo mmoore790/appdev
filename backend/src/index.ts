@@ -28,8 +28,26 @@ const allowedOrigins = Array.from(
   ),
 );
 
+// Log allowed origins for debugging (but not in production to avoid exposing config)
+if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_CORS === 'true') {
+  console.log('[CORS] Allowed origins:', allowedOrigins);
+}
+
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked request from origin: ${origin}`);
+      console.warn(`[CORS] Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true, // Allows session cookies
 }));
 

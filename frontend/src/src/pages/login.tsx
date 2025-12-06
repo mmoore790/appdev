@@ -41,6 +41,8 @@ export default function LoginPage() {
     try {
       const loginUrl = resolveApiUrl("/api/auth/login");
       console.log("[Login] API URL:", loginUrl);
+      console.log("[Login] Origin:", window.location.origin);
+      
       const response = await fetch(loginUrl, {
         method: "POST",
         headers: {
@@ -49,11 +51,13 @@ export default function LoginPage() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      const result = await response.json();
 
       if (!response.ok) {
+        const result = await response.json().catch(() => ({ message: `HTTP ${response.status}: ${response.statusText}` }));
         throw new Error(result?.message || "Login failed");
       }
+      
+      const result = await response.json();
 
       const authToken = response.headers.get("X-Auth-Token");
       const userRole = result?.user?.role;
@@ -78,7 +82,15 @@ export default function LoginPage() {
       }, 400);
     } catch (err) {
       console.error("Login error:", err);
-      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      let errorMessage = "An unexpected error occurred";
+      
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        errorMessage = "Cannot connect to server. Please check your connection and ensure the backend is running. If this persists, it may be a CORS configuration issue.";
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
