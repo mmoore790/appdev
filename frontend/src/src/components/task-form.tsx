@@ -314,7 +314,7 @@ export function TaskForm({ taskId, editMode = false, defaultStatus = "pending", 
                 name="dueDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Due Date</FormLabel>
+                    <FormLabel className="mb-2">Due Date</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -350,8 +350,8 @@ export function TaskForm({ taskId, editMode = false, defaultStatus = "pending", 
                 control={form.control}
                 name="relatedJobId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Related Job</FormLabel>
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="mb-2">Related Job</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>

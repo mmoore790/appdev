@@ -3,3 +3,5 @@
 
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "getting_started_dismissed_at" timestamp;
 
+
+

@@ -138,25 +138,42 @@ const COLUMN_GAP: Record<BoardDensity, string> = {
 
 const CARD_DENSITY_STYLES: Record<
   BoardDensity,
-  { padding: string; gap: string; metaText: string; descriptionText: string }
+  { 
+    padding: string; 
+    gap: string; 
+    metaText: string; 
+    descriptionText: string;
+    titleText: string;
+    avatarSize: string;
+    iconSize: number;
+  }
 > = {
   comfortable: {
-    padding: "p-4",
-    gap: "gap-4",
+    padding: "p-3.5",
+    gap: "gap-2.5",
     metaText: "text-xs",
     descriptionText: "text-xs",
+    titleText: "text-sm",
+    avatarSize: "h-5 w-5",
+    iconSize: 12,
   },
   cozy: {
-    padding: "p-3.5",
-    gap: "gap-3",
+    padding: "p-3",
+    gap: "gap-2",
     metaText: "text-[11px]",
     descriptionText: "text-[11px]",
+    titleText: "text-[13px]",
+    avatarSize: "h-5 w-5",
+    iconSize: 11,
   },
   compact: {
-    padding: "p-3",
-    gap: "gap-2.5",
+    padding: "p-2.5",
+    gap: "gap-1.5",
     metaText: "text-[10px]",
-    descriptionText: "text-[10px]",
+    descriptionText: "text-[10px] line-clamp-1",
+    titleText: "text-[12px]",
+    avatarSize: "h-4 w-4",
+    iconSize: 10,
   },
 };
 
@@ -1384,20 +1401,20 @@ export function TaskBoard({
     <TooltipProvider delayDuration={120}>
       <>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
             <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
-              <AlertCircle size={18} />
+              <Loader2 size={18} />
             </div>
             <CardHeader className="pb-3 text-white/90">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-                Overdue
+                In Progress
               </p>
               <CardTitle className="text-3xl font-semibold text-white">
-                {totalCounts.overdue}
+                {columns.in_progress.length}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-white/80">
-              <p className="text-sm">Tasks past their due date</p>
+              <p className="text-sm">Active tasks currently underway</p>
             </CardContent>
           </Card>
 
@@ -1418,20 +1435,20 @@ export function TaskBoard({
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
+          <Card className="relative overflow-hidden cursor-default select-none border-0 bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
             <div className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white">
-              <Loader2 size={18} />
+              <AlertCircle size={18} />
             </div>
             <CardHeader className="pb-3 text-white/90">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-                In Progress
+                Overdue
               </p>
               <CardTitle className="text-3xl font-semibold text-white">
-                {columns.in_progress.length}
+                {totalCounts.overdue}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-white/80">
-              <p className="text-sm">Active tasks currently underway</p>
+              <p className="text-sm">Tasks past their due date</p>
             </CardContent>
           </Card>
 
@@ -1480,31 +1497,6 @@ export function TaskBoard({
               </div>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
-                  <ToggleGroup
-                    type="single"
-                    value={viewDensity}
-                    onValueChange={handleDensityChange}
-                    className="flex rounded-full border border-neutral-200 bg-white p-0.5 text-xs shadow-sm"
-                  >
-                    <ToggleGroupItem
-                      value="compact"
-                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
-                    >
-                      Compact
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="cozy"
-                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
-                    >
-                      Cozy
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="comfortable"
-                      className="rounded-full px-3 py-1 font-medium text-neutral-500 transition data-[state=on]:bg-neutral-900 data-[state=on]:text-white"
-                    >
-                      Comfort
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                   <ToggleGroup
                     type="single"
                     value={focusMode}
@@ -1557,7 +1549,7 @@ export function TaskBoard({
                 </div>
               </div>
             </div>
-            <div className="grid gap-3 sm:gap-4 p-2 sm:p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 overflow-x-auto">
+            <div className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
               {STATUS_CONFIG.map((status) => (
                 <TaskBoardColumn
                   key={status.id}
@@ -1945,7 +1937,7 @@ function TaskBoardColumn({
       )}
       data-column={status.id}
     >
-      <div className="flex items-start justify-between gap-4 rounded-t-2xl border-b border-neutral-200/70 bg-white px-5 py-4">
+      <div className="flex items-start justify-between gap-4 rounded-t-2xl bg-white/95 px-5 py-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
             <status.icon size={18} className={status.accent} />
@@ -1966,19 +1958,6 @@ function TaskBoardColumn({
             <p className="max-w-xs text-xs leading-relaxed text-neutral-500">
               {status.description}
             </p>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-medium text-neutral-400">
-                  <span
-                    className={cn(
-                      "text-neutral-500",
-                    )}
-                  >
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-                </div>
-              
-              </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -2166,7 +2145,6 @@ function TaskBoardCard({
 
   const dueMeta = getDueDateMeta(task.dueDate);
   const dueToneClass = DUE_TONE_CLASSES[dueMeta.tone] ?? DUE_TONE_CLASSES.muted;
-  const priorityColors = getTaskPriorityColor(task.priority);
   const priorityAccent = {
     high: "before:bg-red-500/90",
     medium: "before:bg-amber-400/90",
@@ -2202,7 +2180,8 @@ function TaskBoardCard({
   const content = (
     <Card
       className={cn(
-        "group relative cursor-grab overflow-hidden rounded-xl border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md before:absolute before:left-0 before:top-0 before:h-1 before:w-full before:bg-neutral-200 before:transition-colors",
+        "group relative cursor-grab overflow-hidden border border-neutral-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-md before:absolute before:left-0 before:top-0 before:h-0.5 before:w-full before:bg-neutral-200 before:transition-colors",
+        density === "compact" ? "rounded-lg" : "rounded-xl",
         priorityAccentClass,
         (isDragging || isActiveDrag || isOverlay) &&
           "border-green-300 bg-green-50/40 shadow-lg before:bg-green-500/70",
@@ -2219,16 +2198,17 @@ function TaskBoardCard({
       <CardContent
         className={cn("flex flex-col", densityStyles.gap, densityStyles.padding)}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-1.5 min-w-0 flex-1">
             <GripVertical
-              size={14}
-              className="mt-1 text-neutral-300 opacity-0 transition group-hover:opacity-100"
+              size={12}
+              className="mt-0.5 text-neutral-300 opacity-0 transition group-hover:opacity-100 flex-shrink-0"
             />
-            <div className="min-w-0 space-y-1">
+            <div className="min-w-0 flex-1 space-y-0.5 text-left w-full">
               <p
                 className={cn(
-                  "truncate text-sm font-semibold text-neutral-800",
+                  "font-semibold text-neutral-800 text-left break-words break-all leading-tight w-full",
+                  densityStyles.titleText,
                   task.status === "completed" &&
                     "line-through text-neutral-400",
                 )}
@@ -2238,7 +2218,7 @@ function TaskBoardCard({
               {task.description && (
                 <p
                   className={cn(
-                    "line-clamp-2 text-neutral-500",
+                    "text-neutral-500 text-left",
                     densityStyles.descriptionText,
                   )}
                 >
@@ -2247,79 +2227,74 @@ function TaskBoardCard({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              className={cn(
-                "rounded-full px-2.5 py-1 text-[11px] uppercase tracking-wide",
-                priorityColors.bgColor,
-                priorityColors.textColor,
-              )}
-            >
-              {task.priority === "high"
-                ? "High"
-                : task.priority === "low"
-                  ? "Low"
-                  : "Medium"}
-            </Badge>
-            {showActions && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full text-neutral-400 transition hover:text-neutral-700"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <MoreVertical size={16} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-44"
+          {showActions && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "rounded-full text-neutral-400 transition hover:text-neutral-700 flex-shrink-0",
+                    density === "compact" ? "h-6 w-6" : "h-7 w-7"
+                  )}
                   onClick={(event) => event.stopPropagation()}
                 >
-                  {onArchiveRequest && (
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        onArchiveRequest();
-                      }}
-                    >
-                      <Archive size={14} className="mr-2" />
-                      Archive task
-                    </DropdownMenuItem>
-                  )}
-                  {onDeleteRequest && (
-                    <DropdownMenuItem
-                      className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                      onSelect={() => {
-                        onDeleteRequest();
-                      }}
-                    >
-                      <Trash2 size={14} className="mr-2" />
-                      Delete task
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+                  <MoreVertical size={density === "compact" ? 12 : 14} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-44"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {onArchiveRequest && (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onArchiveRequest();
+                    }}
+                  >
+                    <Archive size={14} className="mr-2" />
+                    Archive task
+                  </DropdownMenuItem>
+                )}
+                {onDeleteRequest && (
+                  <DropdownMenuItem
+                    className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                    onSelect={() => {
+                      onDeleteRequest();
+                    }}
+                  >
+                    <Trash2 size={14} className="mr-2" />
+                    Delete task
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <div
           className={cn(
-            "flex flex-wrap items-center gap-3 text-neutral-500",
+            "flex items-center gap-2 text-neutral-500",
             densityStyles.metaText,
           )}
         >
           <span
-            className={cn("flex items-center gap-1 font-medium", dueToneClass)}
+            className={cn(
+              "flex items-center gap-1 font-medium flex-shrink-0",
+              dueToneClass,
+            )}
           >
-            <Clock size={12} />
-            {dueMeta.label}
+            <Clock size={densityStyles.iconSize} />
+            <span className="truncate">{dueMeta.label}</span>
           </span>
-          <span className="flex min-w-0 items-center gap-2 rounded-full border border-neutral-200 bg-white px-2 py-1">
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-[11px]">
+          <span className="h-3 w-px bg-neutral-200 flex-shrink-0" />
+          <span className="flex items-center gap-1.5 min-w-0 flex-1">
+            <Avatar className={cn("flex-shrink-0", densityStyles.avatarSize)}>
+              <AvatarFallback className={cn(
+                densityStyles.metaText,
+                density === "compact" ? "text-[9px]" : "text-[10px]"
+              )}>
                 {user?.fullName?.slice(0, 2)?.toUpperCase() ?? "UN"}
               </AvatarFallback>
             </Avatar>

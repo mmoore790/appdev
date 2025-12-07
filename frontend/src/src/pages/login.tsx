@@ -207,7 +207,7 @@ export default function LoginPage() {
               <CardFooter className="flex flex-col gap-2 sm:gap-3 text-center text-xs sm:text-sm text-gray-600 p-4 sm:p-6 pt-0">
                 <p>
                   Need to register an account?{" "}
-                  <a href="/register" className="font-medium text-emerald-600 hover:text-emerald-700 underline-offset-2">
+                  <a href="mailto:support@boltdown.co.uk" className="font-medium text-emerald-600 hover:text-emerald-700 underline-offset-2">
                     Request access
                   </a>
                 </p>
