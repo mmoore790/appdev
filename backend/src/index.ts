@@ -203,9 +203,10 @@ app.use((req, res, next) => {
   
   // The port should be 3001 to match your frontend .env file
   // Port 5000 was from Replit.
-  const port = 3001;
+  // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
+  const port = process.env.PORT || 3001;
   server.listen({
-    port,
+    port: Number(port),
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
