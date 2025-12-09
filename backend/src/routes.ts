@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
 import { initAuthRoutes, isAuthenticated } from "./auth";
 import { userController } from "./controllers/userController";
 import { customerController } from "./controllers/customerController";
@@ -21,7 +20,7 @@ import { businessController } from "./controllers/businessController";
 import { messageController } from "./controllers/messageController";
 import { notificationController } from "./controllers/notificationController";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<void> {
   console.log("[Routes] Initializing auth routes...");
   await initAuthRoutes(app);
   console.log("[Routes] Auth routes initialized");
@@ -96,6 +95,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     `);
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  // Server is created in index.ts, we just register routes here
+  // No need to return server anymore
 }
