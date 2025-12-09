@@ -87,7 +87,12 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   });
 
   // Get attachments
-  const { data: attachments = [], isLoading: attachmentsLoading } = useQuery({
+  const { data: attachments = [], isLoading: attachmentsLoading } = useQuery<Array<{
+    id: number;
+    fileName: string;
+    fileUrl: string;
+    fileType?: string;
+  }>>({
     queryKey: [`/api/job-sheet/${jobId}/attachments`],
     enabled: !!jobId,
   });
@@ -1367,7 +1372,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             </div>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-2">
-              {attachments.map((attachment: any) => (
+              {attachments.map((attachment) => (
                 <div key={attachment.id} className="relative flex-shrink-0 group">
                   {attachment.fileType?.startsWith("image/") ? (
                     <div className="relative">

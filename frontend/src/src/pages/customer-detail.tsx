@@ -456,7 +456,7 @@ export default function CustomerDetailPage() {
                         <div>
                           <div className="flex items-start justify-between mb-1">
                             <h4 className="font-semibold text-sm">
-                              {asset.makeModel || "Equipment"}
+                              {asset.make && asset.model ? `${asset.make} ${asset.model}` : asset.make || asset.model || "Equipment"}
                             </h4>
                             <div className="flex items-center gap-2">
                               {warrantyExpiryDate && (
@@ -479,7 +479,7 @@ export default function CustomerDetailPage() {
                                   setEquipmentPendingDelete({
                                     id: asset.id,
                                     serialNumber: asset.serialNumber,
-                                    makeModel: asset.makeModel,
+                                    makeModel: asset.make && asset.model ? `${asset.make} ${asset.model}` : asset.make || asset.model || "Equipment",
                                   });
                                 }}
                                 aria-label={`Delete equipment ${asset.serialNumber}`}

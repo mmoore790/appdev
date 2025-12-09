@@ -10,6 +10,29 @@ interface PrintJobSheetProps {
   jobData?: any;
 }
 
+interface Business {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+  hourlyLabourFee?: number | null;
+}
+
+interface User {
+  id: number;
+  fullName: string;
+}
+
+interface JobNote {
+  workSummary?: string | null;
+  internalNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // UK VAT rate (20%)
 const VAT_RATE = 0.20;
 
@@ -39,18 +62,18 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
   });
 
   // Get job notes
-  const { data: jobNote } = useQuery({
+  const { data: jobNote } = useQuery<JobNote>({
     queryKey: [`/api/job-sheet/${jobId}/notes`],
     enabled: !!jobId,
   });
 
   // Get users for technician names
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
 
   // Get business data for company details and hourly labour fee
-  const { data: business } = useQuery({
+  const { data: business } = useQuery<Business>({
     queryKey: ["/api/business/me"],
   });
 
@@ -83,7 +106,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
   });
 
   const getUserName = (userId: number) => {
-    const user = users.find((u: any) => u.id === userId);
+    const user = users.find((u) => u.id === userId);
     return user ? user.fullName : "Unknown";
   };
 

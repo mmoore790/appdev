@@ -59,7 +59,8 @@ export function StatusTimeline({ job, jobUpdates = [], isLoading = false }: Stat
 
     // If we found an initial status, add it as the first entry
     if (initialStatusLabel) {
-      const firstChangeTime = statusChanges[0].createdAt || statusChanges[0].created_at;
+      const firstChange = statusChanges[0] as any;
+      const firstChangeTime = firstChange?.createdAt || firstChange?.created_at;
       if (firstChangeTime) {
         const initialStatus = getStatusFromLabel(initialStatusLabel);
         const duration = calculateDuration(job.createdAt, firstChangeTime);
