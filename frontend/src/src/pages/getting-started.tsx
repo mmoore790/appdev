@@ -74,7 +74,7 @@ export default function GettingStarted() {
     // Open email client to book a demo
     const subject = encodeURIComponent("Request for System Demonstration");
     const body = encodeURIComponent(
-      `Hello,\n\nI would like to book a 20-30 minute live demonstration of the workshop management system.\n\nPlease let me know your availability.\n\nThank you!`
+      `Hello,\n\nI would like to book a 20-30 minute live demonstration of the workshop operations system.\n\nPlease let me know your availability.\n\nThank you!`
     );
     window.location.href = `mailto:support@example.com?subject=${subject}&body=${body}`;
   };
@@ -82,7 +82,7 @@ export default function GettingStarted() {
   const features = [
     {
       icon: <Wrench className="h-6 w-6" />,
-      title: "Workshop Management",
+      title: "Workshop Operations",
       description:
         "Create and track workshop jobs with sequential job IDs. Manage equipment, update job statuses, and track work completion.",
       link: "/workshop",
@@ -144,10 +144,10 @@ export default function GettingStarted() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Welcome to Your Workshop Management System
+            Welcome to Your Workshop Operations System
           </h1>
           <p className="text-slate-600 mt-2">
-            Get started with your comprehensive workshop management solution
+            Get started with your comprehensive workshop operations solution
           </p>
         </div>
         <Button
@@ -174,7 +174,7 @@ export default function GettingStarted() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-slate-700 leading-relaxed">
-            This workshop management system is designed to streamline your entire
+            This workshop operations system is designed to streamline your entire
             operation. From job creation and tracking to customer management and
             payment processing, everything you need is right at your fingertips.
           </p>

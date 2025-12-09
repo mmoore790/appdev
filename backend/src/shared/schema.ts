@@ -29,6 +29,10 @@ export const businesses = pgTable("businesses", {
   logoUrl: text("logo_url"),
   primaryColor: text("primary_color"),
   secondaryColor: text("secondary_color"),
+  // Feature flags
+  jobTrackerEnabled: boolean("job_tracker_enabled").notNull().default(true),
+  // Hourly labour fee in pence (e.g., 5000 = £50.00 per hour)
+  hourlyLabourFee: integer("hourly_labour_fee"),
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: 'string' }),
   isActive: boolean("is_active").notNull().default(true),
@@ -44,7 +48,9 @@ export const insertBusinessSchema = createInsertSchema(businesses).pick({
   emailFromAddress: true,
   logoUrl: true,
   primaryColor: true,
+  jobTrackerEnabled: true,
   secondaryColor: true,
+  hourlyLabourFee: true,
 });
 
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
@@ -231,24 +237,42 @@ export type EmailHistory = typeof emailHistory.$inferSelect;
 
 // Equipment Types table was dropped
 
-// Equipment
+// Equipment (Assets)
 export const equipment = pgTable("equipment", {
   id: serial("id").primaryKey(),
   businessId: integer("business_id").notNull(), // Equipment belongs to a business
   serialNumber: text("serial_number").notNull(),
-  typeId: integer("type_id").notNull(),
+  typeId: integer("type_id"), // Nullable since equipment types table was dropped
   customerId: integer("customer_id").notNull(),
+  makeModel: text("make_model"), // Make and model combined (e.g., "Husqvarna 235", "Stihl MS 271")
   purchaseDate: timestamp("purchase_date", { mode: 'string' }),
+  warrantyDurationMonths: integer("warranty_duration_months"), // Warranty duration in months
+  warrantyExpiryDate: timestamp("warranty_expiry_date", { mode: 'string' }), // Calculated expiry date
   notes: text("notes"),
+}, (table) => {
+  return {
+    serialNumberBusinessIdx: index("IDX_equipment_serial_business").on(table.serialNumber, table.businessId),
+  };
 });
 
 export const insertEquipmentSchema = createInsertSchema(equipment).pick({
   serialNumber: true,
-  typeId: true,
   customerId: true,
+  makeModel: true,
   purchaseDate: true,
+  warrantyDurationMonths: true,
+  warrantyExpiryDate: true,
   notes: true,
   businessId: true,
+}).extend({
+  // Allow warranty duration to be specified as years or months
+  warrantyDurationMonths: z.number().int().positive().optional(),
+}).partial({
+  makeModel: true,
+  purchaseDate: true,
+  warrantyDurationMonths: true,
+  warrantyExpiryDate: true,
+  notes: true,
 });
 
 export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
@@ -312,6 +336,17 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   customerPhone: z.string().optional(),
 }).partial({
   customerId: true,
+  jobId: true, // Make jobId optional - backend will generate it if not provided
+  equipmentId: true,
+  equipmentDescription: true,
+  assignedTo: true,
+  taskDetails: true,
+  estimatedHours: true,
+  paymentStatus: true,
+  paymentAmount: true,
+  invoiceNumber: true,
+  paymentMethod: true,
+  paymentNotes: true,
 });
 
 // Schema for manual payment recording
@@ -507,6 +542,113 @@ export const insertWorkCompletedSchema = createInsertSchema(workCompleted).pick(
 
 export type InsertWorkCompleted = z.infer<typeof insertWorkCompletedSchema>;
 export type WorkCompleted = typeof workCompleted.$inferSelect;
+
+// Labour Entries (Job Sheet)
+export const labourEntries = pgTable("labour_entries", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull(),
+  technicianId: integer("technician_id").notNull(), // Staff member who did the work
+  description: text("description").notNull(), // Description of work performed
+  timeSpent: integer("time_spent").notNull(), // Duration in minutes
+  cost: integer("cost"), // Cost excluding VAT in pence (deprecated, use costExcludingVat)
+  costExcludingVat: integer("cost_excluding_vat"), // Cost excluding VAT in pence
+  costIncludingVat: integer("cost_including_vat"), // Cost including VAT in pence
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+export const insertLabourEntrySchema = createInsertSchema(labourEntries).pick({
+  businessId: true,
+  jobId: true,
+  technicianId: true,
+  description: true,
+  timeSpent: true,
+  cost: true,
+  costExcludingVat: true,
+  costIncludingVat: true,
+});
+
+export type InsertLabourEntry = z.infer<typeof insertLabourEntrySchema>;
+export type LabourEntry = typeof labourEntries.$inferSelect;
+
+// Parts Used (Job Sheet) - separate from parts ordered
+export const partsUsed = pgTable("parts_used", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull(),
+  partName: text("part_name").notNull(),
+  sku: text("sku"), // Optional SKU
+  quantity: integer("quantity").notNull().default(1),
+  cost: integer("cost"), // Cost excluding VAT in pence (deprecated, use costExcludingVat)
+  costExcludingVat: integer("cost_excluding_vat"), // Cost excluding VAT in pence
+  costIncludingVat: integer("cost_including_vat"), // Cost including VAT in pence
+  notes: text("notes"), // Optional notes
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+export const insertPartUsedSchema = createInsertSchema(partsUsed).pick({
+  businessId: true,
+  jobId: true,
+  partName: true,
+  sku: true,
+  quantity: true,
+  cost: true,
+  costExcludingVat: true,
+  costIncludingVat: true,
+  notes: true,
+});
+
+export type InsertPartUsed = z.infer<typeof insertPartUsedSchema>;
+export type PartUsed = typeof partsUsed.$inferSelect;
+
+// Job Notes (Job Sheet)
+export const jobNotes = pgTable("job_notes", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull().unique(), // One note record per job
+  workSummary: text("work_summary"), // Technician notes - shown to customer
+  internalNotes: text("internal_notes"), // Internal notes - not shown to customer
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+export const insertJobNoteSchema = createInsertSchema(jobNotes).pick({
+  businessId: true,
+  jobId: true,
+  workSummary: true,
+  internalNotes: true,
+});
+
+export type InsertJobNote = z.infer<typeof insertJobNoteSchema>;
+export type JobNote = typeof jobNotes.$inferSelect;
+
+// Job Attachments (Job Sheet)
+export const jobAttachments = pgTable("job_attachments", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(), // URL/path to the file
+  fileType: text("file_type"), // MIME type or extension
+  fileSize: integer("file_size"), // Size in bytes
+  uploadedBy: integer("uploaded_by").notNull(), // User who uploaded
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+export const insertJobAttachmentSchema = createInsertSchema(jobAttachments).pick({
+  businessId: true,
+  jobId: true,
+  fileName: true,
+  fileUrl: true,
+  fileType: true,
+  fileSize: true,
+  uploadedBy: true,
+});
+
+export type InsertJobAttachment = z.infer<typeof insertJobAttachmentSchema>;
+export type JobAttachment = typeof jobAttachments.$inferSelect;
 
 // Payment Requests
 export const paymentRequests = pgTable("payment_requests", {

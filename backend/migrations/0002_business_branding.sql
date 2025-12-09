@@ -8,3 +8,5 @@ ALTER TABLE businesses
   ADD COLUMN IF NOT EXISTS secondary_color TEXT;
 
 
+
+

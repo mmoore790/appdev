@@ -2,19 +2,24 @@ import { forwardRef } from "react";
 import { formatDate } from "@/lib/utils";
 import logoPath from "@assets/logo-m.png";
 
+type Business = {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+  jobTrackerEnabled?: boolean | null;
+};
+
 interface JobReceiptProps {
   job: any;
   customerName: string;
   customerEmail?: string;
   equipmentName: string;
   assigneeName: string;
-  companyInfo?: {
-    name: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-  };
+  companyInfo?: Business | null;
 }
 
 export const JobReceipt = forwardRef<HTMLDivElement, JobReceiptProps>(
@@ -25,16 +30,17 @@ export const JobReceipt = forwardRef<HTMLDivElement, JobReceiptProps>(
       customerEmail,
       equipmentName,
       assigneeName,
-      companyInfo = {
-        name: "Moore Horticulture Equipment",
-        address: "9 Drumalig Road, BT27 6UD",
-        phone: "02897510804",
-        email: "info@mooresmowers.co.uk",
-        website: "www.mooresmowers.co.uk",
-      },
+      companyInfo,
     },
     ref
   ) => {
+    // Use company settings if available, otherwise use fallback values
+    const companyName = companyInfo?.name || "Company Name";
+    const companyAddress = companyInfo?.address || "";
+    const companyPhone = companyInfo?.phone || "";
+    const companyEmail = companyInfo?.email || "";
+    const companyWebsite = companyInfo?.website || "";
+    const companyLogoUrl = companyInfo?.logoUrl || logoPath;
     // Format status for display
     const formatStatus = (status: string) => {
       switch (status) {
@@ -76,10 +82,21 @@ export const JobReceipt = forwardRef<HTMLDivElement, JobReceiptProps>(
         {/* Header - Logo and Title */}
         <div className="flex justify-between items-center border-b border-gray-200 pb-6">
           <div className="flex items-center">
-            <img src={logoPath} alt="Moore Horticulture Equipment Logo" className="h-16 w-auto mr-4" />
+            <img 
+              src={companyLogoUrl} 
+              alt={`${companyName} Logo`} 
+              className="h-16 w-auto mr-4" 
+              onError={(e) => {
+                // Fallback to default logo if company logo fails to load
+                const target = e.target as HTMLImageElement;
+                if (target.src !== logoPath) {
+                  target.src = logoPath;
+                }
+              }}
+            />
             <div>
-              <h1 className="text-2xl font-bold text-green-800">{companyInfo.name}</h1>
-              <p className="text-sm text-gray-600">{companyInfo.address}</p>
+              <h1 className="text-2xl font-bold text-green-800">{companyName}</h1>
+              {companyAddress && <p className="text-sm text-gray-600">{companyAddress}</p>}
             </div>
           </div>
           <div className="text-right">
@@ -154,28 +171,42 @@ export const JobReceipt = forwardRef<HTMLDivElement, JobReceiptProps>(
           </div>
         </div>
 
-        {/* Online Tracking Information */}
-        <div className="mt-5 p-4 bg-green-50 rounded-md border border-green-100">
-          <h3 className="text-sm font-semibold text-green-800 mb-2">Track Your Repair Online</h3>
-          <p className="text-xs text-gray-700 mb-3">
-            Visit our online tracker to check the status of your repair anytime:
-          </p>
-          <div className="bg-white p-3 rounded border border-gray-200 text-center">
-            <p className="text-xs mb-1">Visit this link:</p>
-            <p className="text-sm font-medium text-green-700 break-all">
-              {`${window.location.origin}/job-tracker?jobId=${job.jobId}&email=${encodeURIComponent(customerEmail || '')}`}
+        {/* Online Tracking Information - Only show if enabled */}
+        {companyInfo?.jobTrackerEnabled !== false && (
+          <div className="mt-5 p-4 bg-green-50 rounded-md border border-green-100">
+            <h3 className="text-sm font-semibold text-green-800 mb-2">Track Your Repair Online</h3>
+            <p className="text-xs text-gray-700 mb-3">
+              Visit our online tracker to check the status of your repair anytime:
             </p>
-            <p className="text-xs mt-2 text-gray-500">
-              You'll need your email address and the job ID ({job.jobId}) shown above
-            </p>
+            <div className="bg-white p-3 rounded border border-gray-200 text-center">
+              <p className="text-xs mb-1">Visit this link:</p>
+              <p className="text-sm font-medium text-green-700 break-all">
+                {`${window.location.origin}/job-tracker?jobId=${job.jobId}&email=${encodeURIComponent(customerEmail || '')}`}
+              </p>
+              <p className="text-xs mt-2 text-gray-500">
+                You'll need your email address and the job ID ({job.jobId}) shown above
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-gray-500">
-          <p className="font-medium">{companyInfo.name}</p>
-          <p>{companyInfo.address} | Phone: {companyInfo.phone}</p>
-          <p>Email: {companyInfo.email} | Website: {companyInfo.website}</p>
+          <p className="font-medium">{companyName}</p>
+          {(companyAddress || companyPhone) && (
+            <p>
+              {companyAddress && companyAddress}
+              {companyAddress && companyPhone && " | "}
+              {companyPhone && `Phone: ${companyPhone}`}
+            </p>
+          )}
+          {(companyEmail || companyWebsite) && (
+            <p>
+              {companyEmail && `Email: ${companyEmail}`}
+              {companyEmail && companyWebsite && " | "}
+              {companyWebsite && `Website: ${companyWebsite}`}
+            </p>
+          )}
         </div>
       </div>
     );

@@ -396,7 +396,7 @@ class PDFService {
   </div>
 
   <div class="footer">
-    This report was generated automatically by the Workshop Management System
+    This report was generated automatically by the Workshop Operations System
   </div>
 </body>
 </html>

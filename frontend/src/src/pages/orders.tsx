@@ -413,20 +413,24 @@ export default function Orders() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
+    <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-3">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-800">Order Management</h1>
-          <p className="text-neutral-600 mt-1">Manage orders for any type of item</p>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Order Management
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage orders for any type of item</p>
         </div>
-        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-green-700 hover:bg-green-800">
-              <Plus className="h-4 w-4 mr-2" />
-              New Order
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-9 bg-green-700 hover:bg-green-800">
+                <Plus className="h-4 w-4 mr-2" />
+                New Order
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Order</DialogTitle>
@@ -443,6 +447,7 @@ export default function Orders() {
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Tabs for Open/Completed Orders */}

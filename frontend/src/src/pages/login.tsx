@@ -127,7 +127,7 @@ export default function LoginPage() {
               <img
                 src={logoPath}
                 alt="Moore Horticulture Equipment Logo"
-                className="mx-auto h-28 sm:h-36 w-auto drop-shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
+                className="mx-auto h-20 sm:h-24 w-auto drop-shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
               />
             </div>
 
@@ -207,7 +207,7 @@ export default function LoginPage() {
               <CardFooter className="flex flex-col gap-2 sm:gap-3 text-center text-xs sm:text-sm text-gray-600 p-4 sm:p-6 pt-0">
                 <p>
                   Need to register an account?{" "}
-                  <a href="/register" className="font-medium text-emerald-600 hover:text-emerald-700 underline-offset-2">
+                  <a href="mailto:support@boltdown.co.uk" className="font-medium text-emerald-600 hover:text-emerald-700 underline-offset-2">
                     Request access
                   </a>
                 </p>

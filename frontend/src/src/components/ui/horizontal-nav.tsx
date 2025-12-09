@@ -28,6 +28,7 @@ import { resolveApiUrl } from "@/lib/api";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { MessagesIcon } from "@/components/messages-icon";
 import { HelpDialog } from "@/components/help-dialog";
+import { useQuery } from "@tanstack/react-query";
 import { 
   Sheet, 
   SheetContent, 
@@ -72,6 +73,20 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const operationalRoles: UserRole[] = ["admin", "staff", "mechanic"];
 
+  // Fetch business information
+  const { data: businessData } = useQuery<{
+    id: number;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    website?: string | null;
+    logoUrl?: string | null;
+    jobTrackerEnabled?: boolean | null;
+  }>({
+    queryKey: ["/api/business/me"],
+  });
+
   // Check if Getting Started should be shown (first 14 days and not dismissed)
   const shouldShowGettingStarted = (() => {
     if (!user?.createdAt) return false;
@@ -104,12 +119,12 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
   const primaryNavItems: NavItem[] = [
     { path: "/master", label: "Master", icon: <Shield size={16} />, allowedRoles: ["master"] },
     { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} />, allowedRoles: operationalRoles },
-    { path: "/tasks", label: "Tasks", icon: <CheckSquare size={16} />, allowedRoles: operationalRoles },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={16} />, allowedRoles: operationalRoles },
-    { path: "/customers", label: "Customers", icon: <Users size={16} />, allowedRoles: operationalRoles },
-    { path: "/calendar", label: "Calendar", icon: <Calendar size={16} />, allowedRoles: operationalRoles },
-    { path: "/orders", label: "Orders", icon: <Package size={16} />, allowedRoles: operationalRoles },
+    { path: "/tasks", label: "Tasks", icon: <CheckSquare size={16} />, allowedRoles: operationalRoles },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={16} />, allowedRoles: operationalRoles },
+    { path: "/customers", label: "Customers", icon: <Users size={16} />, allowedRoles: operationalRoles },
+    { path: "/orders", label: "Orders", icon: <Package size={16} />, allowedRoles: operationalRoles },
+    { path: "/calendar", label: "Calendar", icon: <Calendar size={16} />, allowedRoles: operationalRoles },
   ];
 
   // Add Getting Started to navigation if it should be shown (after Dashboard)
@@ -186,7 +201,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
           <img 
             src={logoPath}
             alt="Moore Horticulture Equipment Logo" 
-            className="h-9 w-auto drop-shadow-sm"
+            className="h-7 w-auto drop-shadow-sm"
           />
         </Link>
 
@@ -301,6 +316,11 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                 <p className="text-xs font-medium text-slate-900">
                   {user?.fullName || user?.username || 'User'}
                 </p>
+                {businessData?.name ? (
+                  <p className="text-[10px] text-slate-700 font-medium mt-0.5">
+                    {businessData.name}
+                  </p>
+                ) : null}
                 <p className="text-[10px] text-slate-600 capitalize">
                   {user?.role || 'User'}
                 </p>
@@ -379,6 +399,11 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                   <p className="text-sm font-semibold text-slate-900 leading-tight">
                     {user?.fullName || user?.username || 'User'}
                   </p>
+                  {businessData?.name ? (
+                    <p className="text-[10px] text-slate-700 font-medium mt-0.5">
+                      {businessData.name}
+                    </p>
+                  ) : null}
                   <p className="text-[10px] text-slate-600 capitalize mt-0.5">
                     {user?.role || 'User'}
                   </p>

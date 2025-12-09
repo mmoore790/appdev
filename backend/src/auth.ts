@@ -27,15 +27,18 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    console.log(`[Auth] Attempting token authentication for ${req.path}, token length: ${token.length}`);
     const tokenData = tokenStorage.validateToken(token);
 
     if (tokenData) {
       // Valid token - use it to set session data for this request
-      console.log(`User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
+      console.log(`[Auth] User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
       req.session.userId = tokenData.userId;
       req.session.role = tokenData.role;
       req.session.businessId = tokenData.businessId;
       return next();
+    } else {
+      console.log(`[Auth] Token validation failed for ${req.path}. Token may be expired or invalid.`);
     }
   }
 
@@ -58,11 +61,14 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
   const hasAuthHeader = req.headers.authorization ? 'Yes' : 'No';
   const hasQueryToken = req.query.token ? 'Yes' : 'No';
   const hasSessionData = req.session ? 'Yes' : 'No';
+  const sessionUserId = req.session?.userId || 'None';
 
-  console.log(`Authentication failed: No valid session or token found.
+  console.log(`[Auth] Authentication failed for ${req.path}: No valid session or token found.
     Auth header present: ${hasAuthHeader}
     Query token present: ${hasQueryToken}
     Session exists: ${hasSessionData}
+    Session userId: ${sessionUserId}
+    Request method: ${req.method}
   `);
 
   return res.status(401).json({ message: "Unauthorized" });
@@ -93,24 +99,68 @@ export const isAdmin = async (req: Request, res: Response, next: NextFunction) =
 
 // Middleware to check if user is a master
 export const isMaster = async (req: Request, res: Response, next: NextFunction) => {
-  if (!req.session || !req.session.userId) {
-    return res.status(401).json({ message: "Unauthorized" });
+  // First, try to authenticate using session
+  if (req.session && req.session.userId) {
+    const userId = req.session.userId as number;
+    const businessId = req.session.businessId as number;
+    
+    if (!businessId) {
+      return res.status(401).json({ message: "Business context not found" });
+    }
+    
+    const user = await storage.getUser(userId, businessId);
+
+    if (!user || user.role !== "master") {
+      return res.status(403).json({ message: "Forbidden: Master access required" });
+    }
+
+    return next();
   }
 
-  const userId = req.session.userId as number;
-  const businessId = req.session.businessId as number;
-  
-  if (!businessId) {
-    return res.status(401).json({ message: "Business context not found" });
-  }
-  
-  const user = await storage.getUser(userId, businessId);
+  // If session auth fails, try token-based auth (from Authorization header)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const tokenData = tokenStorage.validateToken(token);
 
-  if (!user || user.role !== "master") {
-    return res.status(403).json({ message: "Forbidden: Master access required" });
+    if (tokenData) {
+      // Valid token - verify the user is a master
+      const user = await storage.getUser(tokenData.userId, tokenData.businessId);
+
+      if (!user || user.role !== "master") {
+        return res.status(403).json({ message: "Forbidden: Master access required" });
+      }
+
+      // Set session data for this request
+      req.session.userId = tokenData.userId;
+      req.session.role = tokenData.role;
+      req.session.businessId = tokenData.businessId;
+      return next();
+    }
   }
 
-  return next();
+  // Check for token in query param (backup method)
+  const queryToken = req.query.token as string;
+  if (queryToken) {
+    const tokenData = tokenStorage.validateToken(queryToken);
+
+    if (tokenData) {
+      // Valid token - verify the user is a master
+      const user = await storage.getUser(tokenData.userId, tokenData.businessId);
+
+      if (!user || user.role !== "master") {
+        return res.status(403).json({ message: "Forbidden: Master access required" });
+      }
+
+      // Set session data for this request
+      req.session.userId = tokenData.userId;
+      req.session.role = tokenData.role;
+      req.session.businessId = tokenData.businessId;
+      return next();
+    }
+  }
+
+  return res.status(401).json({ message: "Unauthorized" });
 };
 
 // Hash password

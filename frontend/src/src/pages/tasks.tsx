@@ -2,9 +2,9 @@
 // This is the updated code for:
 // frontend/src/src/pages/tasks.tsx
 //
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { Search, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,9 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { TaskBoard } from "@/components/task-board"; // This component now handles ALL DnD logic
+import { TaskListTable } from "@/components/task-list-table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getDueDateMeta } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 //
 // All dnd-kit imports have been REMOVED from this file.
 // All mutation logic has been REMOVED from this file.
@@ -24,11 +29,35 @@ import { getDueDateMeta } from "@/lib/utils";
 //
 
 type QuickFilter = "all" | "overdue" | "dueSoon" | "completed";
+type ViewMode = "list" | "kanban";
+
+const TASK_VIEW_PREFERENCE_KEY = "tasks:defaultView";
+const TASK_STAFF_FILTER_KEY = "tasks:staffFilter";
 
 export default function Tasks() {
-  const [assignedToFilter, setAssignedToFilter] = useState("all");
+  const { toast } = useToast();
+  const [assignedToFilter, setAssignedToFilter] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(TASK_STAFF_FILTER_KEY);
+      return saved || "all";
+    }
+    return "all";
+  });
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [showArchived, setShowArchived] = useState(false);
+  
+  // Load default view from localStorage on mount
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(TASK_VIEW_PREFERENCE_KEY);
+      return (saved === "list" || saved === "kanban") ? saved : "kanban";
+    }
+    return "kanban";
+  });
+  
+  const previousViewMode = useRef<ViewMode>(viewMode);
+  const isInitialMount = useRef(true);
 
   const { data: allTasks = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/tasks"],
@@ -68,7 +97,13 @@ export default function Tasks() {
   const filteredTasks = useMemo(() => {
     const tasksArray = Array.isArray(allTasks) ? (allTasks as any[]) : [];
     return tasksArray.filter((task: any) => {
+      // Always exclude deleted tasks
       if (task.status === "deleted") {
+        return false;
+      }
+
+      // Exclude archived tasks unless showArchived is true
+      if (task.status === "archived" && !showArchived) {
         return false;
       }
 
@@ -114,7 +149,7 @@ export default function Tasks() {
 
       return true;
     });
-  }, [allTasks, assignedToFilter, quickFilter, search]);
+  }, [allTasks, assignedToFilter, quickFilter, search, showArchived]);
 
   const handleQuickFilterChange = (value: string) => {
     if (!value) {
@@ -123,6 +158,55 @@ export default function Tasks() {
       setQuickFilter(value as QuickFilter);
     }
   };
+
+  // Persist staff filter to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(TASK_STAFF_FILTER_KEY, assignedToFilter);
+    }
+  }, [assignedToFilter]);
+
+  // Show toast notification when view mode changes
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      previousViewMode.current = viewMode;
+      return;
+    }
+
+    // Only show toast if view actually changed
+    if (previousViewMode.current !== viewMode) {
+      const viewLabel = viewMode === "list" ? "List" : "Kanban";
+      const currentDefault = localStorage.getItem(TASK_VIEW_PREFERENCE_KEY);
+      const isCurrentDefault = currentDefault === viewMode;
+
+      // Only show toast if this isn't already the default
+      if (!isCurrentDefault) {
+        toast({
+          title: `Switched to ${viewLabel} view`,
+          description: "Make this your default view?",
+          action: (
+            <ToastAction
+              altText="Set as default"
+              onClick={() => {
+                localStorage.setItem(TASK_VIEW_PREFERENCE_KEY, viewMode);
+                toast({
+                  title: "Default view updated",
+                  description: `${viewLabel} view is now your default.`,
+                });
+              }}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              Set as default
+            </ToastAction>
+          ),
+        });
+      }
+
+      previousViewMode.current = viewMode;
+    }
+  }, [viewMode, toast]);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 mt-4 sm:mt-6 md:mt-8">
@@ -168,16 +252,64 @@ export default function Tasks() {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-neutral-200 bg-white">
+                <Checkbox
+                  id="show-archived"
+                  checked={showArchived}
+                  onCheckedChange={(checked) => setShowArchived(checked === true)}
+                />
+                <Label
+                  htmlFor="show-archived"
+                  className="text-sm font-medium text-neutral-700 cursor-pointer"
+                >
+                  Show archived
+                </Label>
+              </div>
             </div>
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(value) => {
+                if (value && value !== viewMode) {
+                  setViewMode(value as ViewMode);
+                }
+              }}
+              className="border border-neutral-200 rounded-lg p-1"
+            >
+              <ToggleGroupItem
+                value="kanban"
+                aria-label="Kanban view"
+                className="data-[state=on]:bg-green-600 data-[state=on]:text-white"
+              >
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Kanban</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="list"
+                aria-label="List view"
+                className="data-[state=on]:bg-green-600 data-[state=on]:text-white"
+              >
+                <List className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">List</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </CardHeader>
         <CardContent>
           <div className="mt-6">
-            <TaskBoard
-              tasks={filteredTasks}
-              users={users}
-              isLoading={isLoading}
-            />
+            {viewMode === "kanban" ? (
+              <TaskBoard
+                tasks={filteredTasks}
+                users={users}
+                isLoading={isLoading}
+              />
+            ) : (
+              <TaskListTable
+                tasks={filteredTasks}
+                users={users}
+                isLoading={isLoading}
+              />
+            )}
           </div>
         </CardContent>
       </Card>

@@ -15,7 +15,8 @@ import { Link, useLocation } from "wouter";
     Mail,
     PhoneCall,
     Bug,
-    Package
+    Package,
+    Calendar
   } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolveApiUrl } from "@/lib/api";
@@ -69,12 +70,13 @@ export function Sidebar({ className }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} />, allowedRoles: ["admin"] },
-    { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
-    { path: "/orders", label: "Orders", icon: <Package size={20} /> },
-    { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
-    { path: "/customers", label: "Customers", icon: <Users size={20} /> },
+    { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
     { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
+    { path: "/customers", label: "Customers", icon: <Users size={20} /> },
+    { path: "/orders", label: "Orders", icon: <Package size={20} /> },
+    { path: "/calendar", label: "Calendar", icon: <Calendar size={20} /> },
+    { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} />, allowedRoles: ["admin"] },
     { path: "/settings", label: "Settings", icon: <Settings size={20} />, allowedRoles: ["admin"] },
     { path: "/account", label: "Account", icon: <User size={20} /> },
   ];
@@ -221,7 +223,7 @@ export function Sidebar({ className }: SidebarProps) {
               <img 
                 src={logoPath}
                 alt="Moore Horticulture Equipment Logo" 
-                className="h-14 w-auto cursor-pointer"
+                className="h-10 w-auto cursor-pointer"
               />
             </Link>
           </div>
@@ -252,7 +254,7 @@ export function Sidebar({ className }: SidebarProps) {
           <img 
             src={logoPath}
             alt="Moore Horticulture Equipment Logo" 
-            className="h-8 w-auto cursor-pointer"
+            className="h-6 w-auto cursor-pointer"
           />
         </Link>
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

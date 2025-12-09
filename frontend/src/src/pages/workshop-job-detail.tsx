@@ -13,6 +13,7 @@ import {
   User,
   UserCheck,
   Wrench,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -20,16 +21,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { JobForm } from "@/components/job-form";
-import { WorkCompletedForm } from "@/components/work-completed-form";
-import { WorkDetailsSummary } from "@/components/work-details-summary";
+import { JobSheet } from "@/components/job-sheet";
 import { WorkshopActivity } from "@/components/workshop-activity";
+import { StatusTimeline } from "@/components/status-timeline";
 import { OrderForm } from "@/components/order-form";
+import { CustomerActions } from "@/components/customer-actions";
 import { formatDate, getStatusColor, cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +54,8 @@ interface JobEntity {
   customerEmail?: string | null;
   customerPhone?: string | null;
   customerAddress?: string | null;
+  estimatedHours?: number | null;
+  customerNotified?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -75,10 +79,18 @@ export default function WorkshopJobDetail() {
   const [, params] = useRoute<{ jobId: string }>("/workshop/jobs/:jobId");
   const [, navigate] = useLocation();
   const numericJobId = params?.jobId ? Number(params.jobId) : NaN;
+  const [activeTab, setActiveTab] = useState<"overview" | "job-sheet">("overview");
 
-  const [activeTab, setActiveTab] = useState<"overview" | "work" | "summary">("overview");
   const [partsDialogOpen, setPartsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const [editingJob, setEditingJob] = useState(false);
+  const [jobFormData, setJobFormData] = useState({
+    description: "",
+    equipmentDescription: "",
+    estimatedHours: "",
+    taskDetails: "",
+    customerNotified: false,
+  });
   const [customerFormData, setCustomerFormData] = useState({
     name: "",
     email: "",
@@ -91,6 +103,7 @@ export default function WorkshopJobDetail() {
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<OrderEntity | null>(null);
   const [orderDetailsDialogOpen, setOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<OrderEntity | null>(null);
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -131,6 +144,14 @@ export default function WorkshopJobDetail() {
     isLoading: activitiesLoading,
   } = useQuery<any[]>({
     queryKey: ["/api/activities"],
+  });
+
+  const {
+    data: jobUpdates = [],
+    isLoading: jobUpdatesLoading,
+  } = useQuery<any[]>({
+    queryKey: Number.isFinite(numericJobId) ? [`/api/jobs/${numericJobId}/updates`] : ["job-updates/disabled"],
+    enabled: Number.isFinite(numericJobId),
   });
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ["/api/users"],
@@ -189,6 +210,55 @@ export default function WorkshopJobDetail() {
 
     assignJobMutation.mutate({ jobId: job.id, assignedTo: newAssignee });
   };
+
+  // Status update mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ jobId, status }: { jobId: number; status: string }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}`, { status });
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: "Status updated",
+        description: `Job status changed to ${formatStatusLabel(variables.status)}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${variables.jobId}`] });
+      void refetchJob();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update status",
+        description: error?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStatusChange = (value: string, job: JobEntity) => {
+    if (!job?.id || job.status === value) return;
+    updateStatusMutation.mutate({ jobId: job.id, status: value });
+  };
+
+  // Format status label for display
+  const formatStatusLabel = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      waiting_assessment: "Waiting Assessment",
+      in_progress: "In Progress",
+      on_hold: "On Hold",
+      ready_for_pickup: "Ready for Pickup",
+      completed: "Completed",
+    };
+    return statusMap[status] || status.replace(/_/g, " ");
+  };
+
+  // Status options
+  const statusOptions = [
+    { value: "waiting_assessment", label: "Waiting Assessment" },
+    { value: "in_progress", label: "In Progress" },
+    { value: "on_hold", label: "On Hold" },
+    { value: "ready_for_pickup", label: "Ready for Pickup" },
+    { value: "completed", label: "Completed" },
+  ];
 
   const handleCreateOrder = () => {
     setOrderDialogOpen(true);
@@ -320,6 +390,87 @@ export default function WorkshopJobDetail() {
     updateCustomerMutation.mutate(customerFormData);
   };
 
+  // Update job details mutation
+  const updateJobMutation = useMutation({
+    mutationFn: async (data: { description?: string; equipmentDescription?: string; estimatedHours?: number | null; taskDetails?: string; customerNotified?: boolean }) => {
+      if (!job) throw new Error("No job loaded");
+      return apiRequest("PUT", `/api/jobs/${job.id}`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Job details updated",
+        description: "Job information has been successfully updated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${numericJobId}`] });
+      void refetchJob();
+      setEditingJob(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update job details",
+        description: error?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStartEditJob = () => {
+    if (job) {
+      setJobFormData({
+        description: job.description || "",
+        equipmentDescription: job.equipmentDescription || "",
+        estimatedHours: job.estimatedHours?.toString() || "",
+        taskDetails: job.taskDetails || "",
+        customerNotified: !!(job as any).customerNotified,
+      });
+      setEditingJob(true);
+    }
+  };
+
+  const handleCancelEditJob = () => {
+    setEditingJob(false);
+    setJobFormData({ description: "", equipmentDescription: "", estimatedHours: "", taskDetails: "", customerNotified: false });
+  };
+
+  const handleSaveJob = () => {
+    updateJobMutation.mutate({
+      description: jobFormData.description,
+      equipmentDescription: jobFormData.equipmentDescription,
+      estimatedHours: jobFormData.estimatedHours ? parseInt(jobFormData.estimatedHours) : null,
+      taskDetails: jobFormData.taskDetails,
+      customerNotified: jobFormData.customerNotified,
+    });
+  };
+
+  // Delete job mutation
+  const deleteJobMutation = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) throw new Error("No job ID provided");
+      return apiRequest("DELETE", `/api/jobs/${job.id}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Job deleted",
+        description: "The job has been successfully deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      navigate("/workshop");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete job",
+        description: error?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteJob = () => {
+    deleteJobMutation.mutate();
+    setShowDeleteConfirmDialog(false);
+  };
+
 
   if (!Number.isFinite(numericJobId)) {
     return (
@@ -412,22 +563,12 @@ export default function WorkshopJobDetail() {
     return (
       <Card className="border-green-100 shadow-sm">
         <CardHeader className="pb-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-4">
+            {/* Job ID */}
             <CardTitle className="text-2xl font-semibold text-neutral-900">{job?.jobId || "Unknown"}</CardTitle>
-            <div className="flex w-full flex-col items-start gap-3 md:w-auto md:items-end">
-              <div className="flex items-center gap-3">
-                <span className={statusBadgeClass}>{(job?.status || "unknown").replace(/_/g, " ")}</span>
-                {assignedUserName ? (
-                  <Badge variant="outline" className="border-blue-200 text-blue-600">
-                    <UserCheck size={14} className="mr-1" />
-                    {assignedUserName}
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                    Awaiting assignment
-                  </Badge>
-                )}
-              </div>
+            
+            {/* Three Fields Row */}
+            <div className="flex flex-col gap-3 md:flex-row md:gap-4">
               <div className="w-full md:w-56">
                 <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                   Assign technician
@@ -450,9 +591,40 @@ export default function WorkshopJobDetail() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="w-full md:w-56">
+                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Created
+                </span>
+                <div className="mt-1 flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm text-neutral-700">
+                  {job?.createdAt ? formatDate(job.createdAt) : "No date"}
+                </div>
+              </div>
+              <div className="w-full md:w-56">
+                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Job stage
+                </span>
+                <Select
+                  value={job?.status || "waiting_assessment"}
+                  onValueChange={(value) => job && handleStatusChange(value, job)}
+                  disabled={updateStatusMutation.isPending}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select stage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            
+            {/* Description */}
+            {job.description && <p className="text-sm text-neutral-600">{job.description}</p>}
           </div>
-          {job.description && <p className="text-sm text-neutral-600">{job.description}</p>}
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Customer Details Section */}
@@ -573,25 +745,153 @@ export default function WorkshopJobDetail() {
             )}
           </div>
 
-          {/* Other Job Details */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <MetaItem
-              icon={<Calendar size={16} />}
-              label="Created"
-              value={job?.createdAt ? formatDate(job.createdAt) : "No date"}
-            />
-            <MetaItem
-              icon={<Clock size={16} />}
-              label="Last updated"
-              value={job?.updatedAt ? formatDate(job.updatedAt) : "Never updated"}
-            />
-            <MetaItem
-              icon={<Wrench size={16} />}
-              label="Equipment"
-              value={job?.equipmentDescription || "No equipment details"}
-              className="sm:col-span-2 lg:col-span-1"
-            />
+          {/* Job Information Section */}
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Wrench size={16} className="text-neutral-500" />
+                <h3 className="text-sm font-semibold text-neutral-800">Job Information</h3>
+              </div>
+              {!editingJob && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleStartEditJob}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Edit2 size={14} className="mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
+            
+            {editingJob ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                    Job Summary*
+                  </label>
+                  <Textarea
+                    value={jobFormData.description}
+                    onChange={(e) => setJobFormData({ ...jobFormData, description: e.target.value })}
+                    placeholder="Describe the problem or service required"
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                    Brand & Model
+                  </label>
+                  <Textarea
+                    value={jobFormData.equipmentDescription}
+                    onChange={(e) => setJobFormData({ ...jobFormData, equipmentDescription: e.target.value })}
+                    placeholder="Enter brand, model, and serial number"
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+                
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                      Estimated Hours
+                    </label>
+                    <Input
+                      type="number"
+                      value={jobFormData.estimatedHours}
+                      onChange={(e) => setJobFormData({ ...jobFormData, estimatedHours: e.target.value })}
+                      placeholder="Estimated repair time in hours"
+                      className="h-9"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                      Customer Notified
+                    </label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Switch
+                        checked={jobFormData.customerNotified}
+                        onCheckedChange={(checked) => setJobFormData({ ...jobFormData, customerNotified: checked })}
+                      />
+                      <span className="text-sm text-neutral-600">
+                        {jobFormData.customerNotified ? "Yes" : "No"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                    Internal Notes
+                  </label>
+                  <Input
+                    value={jobFormData.taskDetails}
+                    onChange={(e) => setJobFormData({ ...jobFormData, taskDetails: e.target.value })}
+                    placeholder="Specific tasks or follow-ups for the team"
+                    className="h-9"
+                  />
+                </div>
+                
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelEditJob}
+                    disabled={updateJobMutation.isPending}
+                  >
+                    <X size={14} className="mr-1" />
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveJob}
+                    disabled={updateJobMutation.isPending}
+                    className="bg-green-700 hover:bg-green-800"
+                  >
+                    <Check size={14} className="mr-1" />
+                    {updateJobMutation.isPending ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <MetaItem
+                  icon={<Wrench size={16} />}
+                  label="Job Summary"
+                  value={job?.description || "No description"}
+                  className="sm:col-span-2"
+                />
+                <MetaItem
+                  icon={<Wrench size={16} />}
+                  label="Brand & Model"
+                  value={job?.equipmentDescription || "No equipment details"}
+                  className="sm:col-span-2"
+                />
+                <MetaItem
+                  icon={<Clock size={16} />}
+                  label="Estimated Hours"
+                  value={job?.estimatedHours ? `${job.estimatedHours} hours` : "Not estimated"}
+                />
+                <MetaItem
+                  icon={<User size={16} />}
+                  label="Customer Notified"
+                  value={(job as any)?.customerNotified ? "Yes" : "No"}
+                />
+                {job?.taskDetails && (
+                  <MetaItem
+                    icon={<Wrench size={16} />}
+                    label="Internal Notes"
+                    value={job.taskDetails}
+                    className="sm:col-span-2"
+                  />
+                )}
+              </div>
+            )}
           </div>
+
         </CardContent>
       </Card>
     );
@@ -605,71 +905,148 @@ export default function WorkshopJobDetail() {
         actions={renderHeaderActions()}
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-            {renderMetaCard()}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-6">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="mt-2">
+          <TabsList>
+            <TabsTrigger value="overview">Job Overview</TabsTrigger>
+            <TabsTrigger value="job-sheet">Job Sheet</TabsTrigger>
+          </TabsList>
 
-            <Card>
-              <CardHeader className="pb-0">
-                <CardTitle className="text-lg font-semibold text-neutral-800">Job workspace</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-                  <TabsList>
-                    <TabsTrigger value="overview">Job details</TabsTrigger>
-                    <TabsTrigger value="work">Work completed</TabsTrigger>
-                    <TabsTrigger value="summary">Summary & printouts</TabsTrigger>
-                  </TabsList>
+          <TabsContent value="overview" className="mt-4">
+            <div className="grid gap-6 lg:grid-cols-[2fr_1fr] mt-4">
+              <div className="space-y-6">
+                {renderMetaCard()}
+              </div>
 
-                  <TabsContent value="overview" className="space-y-4">
-                    {job && (
-                      <JobForm
-                        jobId={job.id}
-                        editMode
-                        onComplete={() => {
-                          refetchJob();
-                        }}
-                      />
-                    )}
-                  </TabsContent>
+              <aside className="space-y-6">
+                <OrdersPanel
+                  isLoading={ordersLoading}
+                  orders={orders}
+                  onCreate={handleCreateOrder}
+                  jobId={numericJobId}
+                  onOrderClick={handleOrderClick}
+                  onViewDetails={handleViewDetails}
+                />
+                {job && (
+                  <CustomerActions
+                    jobId={job.id}
+                    customerEmail={
+                      orders.length > 0 && orders[0].customerEmail
+                        ? orders[0].customerEmail
+                        : job.customerEmail
+                    }
+                    customerName={job.customerName}
+                    equipmentDescription={job.equipmentDescription}
+                  />
+                )}
+                <StatusTimeline
+                  job={job ? {
+                    id: job.id,
+                    status: job.status,
+                    createdAt: job.createdAt,
+                  } : null}
+                  jobUpdates={jobUpdates}
+                  isLoading={jobUpdatesLoading}
+                />
+                <WorkshopActivity 
+                  activities={jobActivities} 
+                  isLoading={activitiesLoading} 
+                  limit={5}
+                  job={job ? {
+                    id: job.id,
+                    status: job.status,
+                    createdAt: job.createdAt,
+                    timeInStatusDays: (job as any).timeInStatusDays,
+                  } : null}
+                  jobUpdates={jobUpdates}
+                />
+                {job && !editingJob && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteConfirmDialog(true)}
+                    disabled={deleteJobMutation.isPending}
+                    className="w-full flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} />
+                    {deleteJobMutation.isPending ? "Deleting..." : "Delete Job"}
+                  </Button>
+                )}
+              </aside>
+            </div>
+          </TabsContent>
 
-                  <TabsContent value="work" className="space-y-4">
-                    {job && (
-                      <WorkCompletedForm
-                        jobId={job.id}
-                        onWorkAdded={() => {
-                          refetchJob();
-                        }}
-                      />
-                    )}
-                  </TabsContent>
+          <TabsContent value="job-sheet" className="mt-4">
+            <div className="grid gap-6 lg:grid-cols-[2fr_1fr] mt-4">
+              <div className="space-y-6">
+                {job && (
+                  <JobSheet
+                    jobId={job.id}
+                    onWorkAdded={() => {
+                      refetchJob();
+                    }}
+                  />
+                )}
+              </div>
 
-                  <TabsContent value="summary" className="space-y-4">
-                    {job && (
-                      <WorkDetailsSummary
-                        jobId={job.id}
-                        services={Array.isArray(services) ? services : []}
-                      />
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-
-          <aside className="space-y-6">
-            <OrdersPanel
-              isLoading={ordersLoading}
-              orders={orders}
-              onCreate={handleCreateOrder}
-              jobId={numericJobId}
-              onOrderClick={handleOrderClick}
-              onViewDetails={handleViewDetails}
-            />
-            <WorkshopActivity activities={jobActivities} isLoading={activitiesLoading} limit={5} />
-          </aside>
-        </div>
+              <aside className="space-y-6">
+                <OrdersPanel
+                  isLoading={ordersLoading}
+                  orders={orders}
+                  onCreate={handleCreateOrder}
+                  jobId={numericJobId}
+                  onOrderClick={handleOrderClick}
+                  onViewDetails={handleViewDetails}
+                />
+                {job && (
+                  <CustomerActions
+                    jobId={job.id}
+                    customerEmail={
+                      orders.length > 0 && orders[0].customerEmail
+                        ? orders[0].customerEmail
+                        : job.customerEmail
+                    }
+                    customerName={job.customerName}
+                    equipmentDescription={job.equipmentDescription}
+                  />
+                )}
+                <StatusTimeline
+                  job={job ? {
+                    id: job.id,
+                    status: job.status,
+                    createdAt: job.createdAt,
+                  } : null}
+                  jobUpdates={jobUpdates}
+                  isLoading={jobUpdatesLoading}
+                />
+                <WorkshopActivity 
+                  activities={jobActivities} 
+                  isLoading={activitiesLoading} 
+                  limit={5}
+                  job={job ? {
+                    id: job.id,
+                    status: job.status,
+                    createdAt: job.createdAt,
+                    timeInStatusDays: (job as any).timeInStatusDays,
+                  } : null}
+                  jobUpdates={jobUpdates}
+                />
+                {job && !editingJob && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteConfirmDialog(true)}
+                    disabled={deleteJobMutation.isPending}
+                    className="w-full flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} />
+                    {deleteJobMutation.isPending ? "Deleting..." : "Delete Job"}
+                  </Button>
+                )}
+              </aside>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {job && job.id && job.jobId && (
@@ -785,6 +1162,30 @@ export default function WorkshopJobDetail() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Job Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
+        <AlertDialogContent className="z-[60]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Job</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this job? This action cannot be undone. 
+              All related services, payment requests, and work records will also be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteConfirmDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteJob}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, Delete Job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -804,7 +1205,7 @@ function MetaItem({ icon, label, value, subValue, className }: MetaItemProps) {
         {icon}
         {label}
       </div>
-      <div className="mt-2 text-sm font-medium text-neutral-800 break-words">{value || "—"}</div>
+      <div className="mt-2 text-sm font-medium text-neutral-600 break-words">{value || "—"}</div>
       {subValue && <div className="mt-1 text-xs text-neutral-500 break-words">{subValue}</div>}
     </div>
   );
@@ -841,16 +1242,21 @@ function OrdersPanel({ orders, isLoading, onCreate, jobId, onOrderClick, onViewD
             No orders have been created for this job yet.
           </div>
         ) : (
-          <div className="space-y-4">
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onOrderClick={onOrderClick}
-                onViewDetails={onViewDetails}
-              />
-            ))}
-          </div>
+          <>
+            <div className="space-y-4">
+              {orders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onOrderClick={onOrderClick}
+                  onViewDetails={onViewDetails}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-neutral-500 mt-4 pt-4 border-t border-neutral-100">
+              Add an order that you've made for something related to this job
+            </p>
+          </>
         )}
       </CardContent>
     </Card>

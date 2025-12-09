@@ -23,6 +23,10 @@ export class EquipmentRepository {
   update(id: number, data: InsertEquipment, businessId: number): Promise<Equipment> {
     return this.store.updateEquipment(id, data, businessId);
   }
+
+  delete(id: number, businessId: number): Promise<boolean> {
+    return this.store.deleteEquipment(id, businessId);
+  }
 }
 
 export const equipmentRepository = new EquipmentRepository();

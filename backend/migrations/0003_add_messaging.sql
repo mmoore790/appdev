@@ -29,3 +29,5 @@ CREATE INDEX IF NOT EXISTS "IDX_message_created_at" ON "messages" ("created_at")
 -- Note: We're not adding foreign keys to jobs/tasks to allow flexibility
 -- but we ensure business_id matches for all related entities
 
+
+

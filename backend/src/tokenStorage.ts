@@ -27,15 +27,20 @@ class TokenStorage {
   validateToken(token: string): TokenData | null {
     const tokenData = this.tokens.get(token);
     
-    // Check if token exists and is not expired
-    if (!tokenData || tokenData.expiresAt < Date.now()) {
-      if (tokenData) {
-        // Clean up expired token
-        this.tokens.delete(token);
-      }
+    if (!tokenData) {
+      console.log(`[TokenStorage] Token not found in storage. Total tokens: ${this.tokens.size}`);
       return null;
     }
     
+    // Check if token is expired
+    if (tokenData.expiresAt < Date.now()) {
+      console.log(`[TokenStorage] Token expired. Expired at: ${new Date(tokenData.expiresAt).toISOString()}, Current time: ${new Date().toISOString()}`);
+      // Clean up expired token
+      this.tokens.delete(token);
+      return null;
+    }
+    
+    console.log(`[TokenStorage] Token validated successfully for userId: ${tokenData.userId}`);
     return tokenData;
   }
   

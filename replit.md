@@ -1,7 +1,7 @@
 # Moore Horticulture Equipment Management System
 
 ## Overview
-This project is a comprehensive workshop management system for Moore Horticulture Equipment. Its main purpose is to streamline operations for managing workshop jobs, customer data, equipment tracking, task assignments, and service history. The system aims to enhance efficiency in workshop management, improve customer interaction through a dedicated portal, and provide robust tools for internal communication and tracking.
+This project is a comprehensive workshop operations system for Moore Horticulture Equipment. Its main purpose is to streamline operations for managing workshop jobs, customer data, equipment tracking, task assignments, and service history. The system aims to enhance efficiency in workshop operations, improve customer interaction through a dedicated portal, and provide robust tools for internal communication and tracking.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -24,7 +24,7 @@ Dashboard layout: Industry-standard design with exceptional clarity, removed tot
 - **Backend**: Express.js with TypeScript, Drizzle ORM for PostgreSQL.
 - **Authentication**: Session-based with `express-session` and `connect-pg-simple` for PostgreSQL session storage; role-based access control (admin, staff, mechanic); registration request approval workflow; `bcryptjs` for password hashing.
 - **Core Functionality**:
-    - **Workshop Management**: Job creation, tracking (sequential IDs), status updates (including "Ready for Pickup" status triggering customer emails), equipment management, service history, work order generation.
+    - **Workshop Operations**: Job creation, tracking (sequential IDs), status updates (including "Ready for Pickup" status triggering customer emails), equipment management, service history, work order generation.
     - **Task Management**: Creation, priority, status tracking, assignment to staff.
     - **Customer Interaction**: Public job tracking (requires job ID and email), customer notification system, callback requests, automated job receipt emails.
     - **Internal Communication**: Messaging, email notifications for job assignments, activity logging.

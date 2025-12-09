@@ -128,12 +128,6 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     queryKey: ['/api/users'],
   });
 
-  // Get next job ID
-  const { data: jobIdData } = useQuery({
-    queryKey: ['/api/generate-job-id'],
-    enabled: mode === "create"
-  });
-
   // Create job mutation
   const createJobMutation = useMutation({
     mutationFn: async (jobData: any) => {
@@ -143,12 +137,13 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
         return await apiRequest('PUT', `/api/jobs/${initialData?.id}`, jobData);
       }
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+      const jobId = data?.jobId || (initialData as any)?.jobId || 'unknown';
       toast({
         title: mode === "create" ? "Job created successfully" : "Job updated successfully",
-        description: `Job ${(jobIdData as any)?.jobId || (initialData as any)?.jobId} has been ${mode === "create" ? "created" : "updated"}`
+        description: `Job ${jobId} has been ${mode === "create" ? "created" : "updated"}`
       });
       onOpenChange(false);
       resetWizard();
@@ -256,13 +251,22 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
 
   const handleSubmit = async () => {
     // Prepare job data
+    // Don't include jobId - let the backend generate it sequentially
+    const equipmentDesc = `${wizardData.equipmentMakeModel} ${wizardData.equipmentSerial}`.trim();
     const jobData: any = {
-      jobId: (jobIdData as any)?.jobId || "",
-      equipmentDescription: `${wizardData.equipmentMakeModel} ${wizardData.equipmentSerial}`.trim(),
       description: wizardData.description,
-      assignedTo: wizardData.assignedTo || null,
       status: "waiting_assessment"
     };
+    
+    // Only include equipmentDescription if it's not empty
+    if (equipmentDesc) {
+      jobData.equipmentDescription = equipmentDesc;
+    }
+    
+    // Only include assignedTo if it's set
+    if (wizardData.assignedTo) {
+      jobData.assignedTo = wizardData.assignedTo;
+    }
 
     // Handle customer creation/selection
     if (wizardData.customerId) {
@@ -350,12 +354,12 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                   {/* Customer Search Dropdown */}
                   {showCustomerDropdown && customerSearchQuery && (
                     <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
-                      {filteredCustomers.length > 0 ? (
+                      {filteredCustomers.length > 0 && (
                         <div className="py-1">
                           {filteredCustomers.map((customer) => (
                             <div
                               key={customer.id}
-                              className="px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                              className="px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700"
                               onClick={() => handleCustomerSelect(customer)}
                             >
                               <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
@@ -384,37 +388,47 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <div className="px-4 py-3">
+                      )}
+                      
+                      {/* Always show create options, even when matches exist */}
+                      <div className={`px-4 py-3 ${filteredCustomers.length > 0 ? 'border-t border-gray-200 dark:border-gray-700' : ''}`}>
+                        {filteredCustomers.length === 0 && (
                           <div className="text-sm text-gray-500 mb-3">
                             No customers found matching "{customerSearchQuery}"
                           </div>
-                          <div className="space-y-2">
-                            <Button
-                              type="button"
-                              variant="default"
-                              size="sm"
-                              className="w-full"
-                              onClick={handleCreateNewCustomer}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Create New Customer (Recommended)
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={handleUseNameOnly}
-                            >
-                              Use Name Only (Don't Save Customer)
-                            </Button>
+                        )}
+                        {filteredCustomers.length > 0 && (
+                          <div className="text-xs text-gray-500 mb-3">
+                            Found {filteredCustomers.length} matching customer{filteredCustomers.length !== 1 ? 's' : ''}. You can still create a new one:
                           </div>
+                        )}
+                        <div className="space-y-2">
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            onClick={handleCreateNewCustomer}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create New Customer {filteredCustomers.length > 0 ? '(Even with same name)' : '(Recommended)'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={handleUseNameOnly}
+                          >
+                            Use Name Only (Don't Save Customer)
+                          </Button>
+                        </div>
+                        {filteredCustomers.length === 0 && (
                           <p className="text-xs text-gray-500 mt-2">
                             💡 We recommend creating a customer profile to track their history and contact details.
                           </p>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -621,17 +635,18 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
               
               <div>
                 <Label htmlFor="assigned-to" className="text-base font-medium">
-                  Assign to Mechanic
+                  Assign to Staff Member
                 </Label>
                 <Select 
-                  value={wizardData.assignedTo?.toString() || ""} 
-                  onValueChange={(value) => updateWizardData("assignedTo", value ? parseInt(value) : undefined)}
+                  value={wizardData.assignedTo?.toString() || "unassigned"} 
+                  onValueChange={(value) => updateWizardData("assignedTo", value === "unassigned" ? undefined : parseInt(value))}
                 >
                   <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Choose a mechanic (optional)" />
+                    <SelectValue placeholder="Choose a staff member (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {users.filter(user => user.role === 'mechanic' || user.role === 'admin').map((user) => (
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {users.map((user) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
                         {user.fullName || user.username}
                       </SelectItem>
@@ -721,13 +736,13 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                 </CardContent>
               </Card>
 
-              {mode === "create" && jobIdData && (
+              {mode === "create" && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-5 w-5 text-blue-600" />
                     <div>
-                      <p className="font-medium text-blue-900">Job ID: {(jobIdData as any).jobId}</p>
-                      <p className="text-sm text-blue-700">This job will be created with the above ID</p>
+                      <p className="font-medium text-blue-900">Job ID will be assigned automatically</p>
+                      <p className="text-sm text-blue-700">A sequential job ID will be generated when you create this job</p>
                     </div>
                   </div>
                 </div>

@@ -126,6 +126,18 @@ export class NotificationRepository {
       );
     return result.length;
   }
+
+  async deleteAll(userId: number, businessId: number): Promise<number> {
+    const result = await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.businessId, businessId)
+        )
+      );
+    return result.rowCount || 0;
+  }
 }
 
 export const notificationRepository = new NotificationRepository();

@@ -10,11 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Mail, Phone, MapPin, FileText, Send, Calendar, User, MessageSquare, Pencil, ExternalLink, Briefcase, PhoneCall } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MapPin, FileText, Send, Calendar, User, MessageSquare, Pencil, ExternalLink, Briefcase, PhoneCall, Package, Plus, Shield, ShieldCheck, ShieldX, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerForm } from "@/components/customer-form";
+import { AssetForm } from "@/components/asset-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
@@ -92,6 +103,12 @@ export default function CustomerDetailPage() {
   const [selectedCallback, setSelectedCallback] = useState<any>(null);
   const [isCallbackDetailOpen, setIsCallbackDetailOpen] = useState(false);
   const [isCreateCallbackDialogOpen, setIsCreateCallbackDialogOpen] = useState(false);
+  const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false);
+  const [equipmentPendingDelete, setEquipmentPendingDelete] = useState<{
+    id: number;
+    serialNumber: string;
+    makeModel?: string | null;
+  } | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -135,6 +152,50 @@ export default function CustomerDetailPage() {
     queryFn: () => apiRequest<CustomerDetails>("GET", `/api/customers/${customerId}/details`),
     enabled: !!customerId,
   });
+
+  // Fetch equipment/assets for this customer
+  const { data: equipment = [], isLoading: isLoadingEquipment } = useQuery<Array<{
+    id: number;
+    serialNumber: string;
+    make?: string | null;
+    model?: string | null;
+    purchaseDate?: string | null;
+    warrantyDurationMonths?: number | null;
+    warrantyExpiryDate?: string | null;
+    notes?: string | null;
+  }>>({
+    queryKey: ["/api/equipment/customer", customerId],
+    queryFn: () => apiRequest("GET", `/api/equipment/customer/${customerId}`),
+    enabled: !!customerId,
+  });
+
+  // Delete equipment mutation
+  const deleteEquipmentMutation = useMutation({
+    mutationFn: async (equipmentId: number) => {
+      await apiRequest("DELETE", `/api/equipment/${equipmentId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Equipment deleted",
+        description: "The equipment has been successfully removed.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment/customer", customerId] });
+      setEquipmentPendingDelete(null);
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "Failed to delete equipment.";
+      toast({
+        title: "Failed to delete equipment",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmDeleteEquipment = () => {
+    if (!equipmentPendingDelete) return;
+    deleteEquipmentMutation.mutate(equipmentPendingDelete.id);
+  };
 
   // Fetch users for assignee dropdown
   const { data: usersData } = useQuery({
@@ -330,6 +391,147 @@ export default function CustomerDetailPage() {
         description="Customer details and contact history"
         icon={<User className="h-6 w-6" />}
       />
+
+      {/* Equipment/Assets Section */}
+      <Card className="mt-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Registered Equipment
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Register new machinery/equipment for this customer, and automatically track its warranty status
+              </p>
+            </div>
+            <Dialog open={isAssetDialogOpen} onOpenChange={setIsAssetDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="h-9">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Register New Equipment
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-xl">
+                {customerId != null && (
+                  <AssetForm
+                    customerId={customerId}
+                    onComplete={() => {
+                      setIsAssetDialogOpen(false);
+                      queryClient.invalidateQueries({ queryKey: ["/api/equipment/customer", customerId] });
+                    }}
+                    onCancel={() => setIsAssetDialogOpen(false)}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingEquipment ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : equipment.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No equipment registered for this customer yet.</p>
+              <p className="text-sm mt-2">Click "Register New Equipment" to add equipment.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {equipment.map((asset) => {
+                const warrantyExpiryDate = asset.warrantyExpiryDate ? new Date(asset.warrantyExpiryDate) : null;
+                const isWarrantyExpired = warrantyExpiryDate ? warrantyExpiryDate < new Date() : null;
+                const isWarrantyExpiringSoon = warrantyExpiryDate 
+                  ? warrantyExpiryDate >= new Date() && warrantyExpiryDate <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                  : false;
+
+                return (
+                  <Card key={asset.id} className="border-l-4 border-l-blue-500 relative group">
+                    <CardContent className="pt-4">
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-semibold text-sm">
+                              {asset.make && asset.model ? `${asset.make} ${asset.model}` : asset.make || asset.model || "Equipment"}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                              {warrantyExpiryDate && (
+                                <div className="flex items-center gap-1">
+                                  {isWarrantyExpired ? (
+                                    <ShieldX className="h-4 w-4 text-red-500" />
+                                  ) : isWarrantyExpiringSoon ? (
+                                    <Shield className="h-4 w-4 text-yellow-500" />
+                                  ) : (
+                                    <ShieldCheck className="h-4 w-4 text-green-500" />
+                                  )}
+                                </div>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEquipmentPendingDelete({
+                                    id: asset.id,
+                                    serialNumber: asset.serialNumber,
+                                    makeModel: asset.make && asset.model ? `${asset.make} ${asset.model}` : asset.make || asset.model || "Equipment",
+                                  });
+                                }}
+                                aria-label={`Delete equipment ${asset.serialNumber}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Serial: {asset.serialNumber}
+                          </p>
+                        </div>
+
+                        {asset.purchaseDate && (
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Purchased: </span>
+                            <span>{format(new Date(asset.purchaseDate), "MMM d, yyyy")}</span>
+                          </div>
+                        )}
+
+                        {warrantyExpiryDate && (
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Warranty: </span>
+                            <span className={
+                              isWarrantyExpired 
+                                ? "text-red-600 font-medium"
+                                : isWarrantyExpiringSoon
+                                ? "text-yellow-600 font-medium"
+                                : "text-green-600 font-medium"
+                            }>
+                              {isWarrantyExpired 
+                                ? `Expired ${format(warrantyExpiryDate, "MMM d, yyyy")}`
+                                : `Expires ${format(warrantyExpiryDate, "MMM d, yyyy")}`
+                              }
+                            </span>
+                          </div>
+                        )}
+
+                        {asset.notes && (
+                          <div className="text-xs text-muted-foreground line-clamp-2">
+                            {asset.notes}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         {/* Customer Info Card */}
@@ -580,7 +782,7 @@ export default function CustomerDetailPage() {
                       <Card 
                         key={job.id} 
                         className="border-l-4 border-l-blue-500 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => setLocation(`/workshop/jobs/${job.jobId}`)}
+                        onClick={() => setLocation(`/workshop/jobs/${job.id}`)}
                       >
                         <CardContent className="pt-4">
                           <div className="flex justify-between items-start mb-2">
@@ -964,6 +1166,45 @@ export default function CustomerDetailPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Equipment Confirmation Dialog */}
+      <AlertDialog
+        open={equipmentPendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleteEquipmentMutation.isPending) {
+            setEquipmentPendingDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Equipment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this equipment? This will permanently remove{" "}
+              <strong>
+                {equipmentPendingDelete?.makeModel
+                  ? equipmentPendingDelete.makeModel
+                  : equipmentPendingDelete?.serialNumber
+                  ? `Serial ${equipmentPendingDelete.serialNumber}`
+                  : "this equipment"}
+              </strong>{" "}
+              from the system. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteEquipmentMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteEquipment}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              disabled={deleteEquipmentMutation.isPending}
+            >
+              {deleteEquipmentMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

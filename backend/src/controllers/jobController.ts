@@ -1,18 +1,25 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { insertJobSchema } from "@shared/schema";
 import { jobService } from "../services/domains/jobService";
+import { orderService } from "../services/domains/orderService";
 import { isAuthenticated } from "../auth";
 import { getBusinessIdFromRequest } from "../utils/requestHelpers";
+import { getJobUpdates } from "../services/jobUpdateService";
+import { EmailService } from "../services/emailService";
 import { z } from "zod";
+
+const emailServiceInstance = new EmailService();
 
 export class JobController {
   public readonly router = Router();
 
   constructor() {
     this.router.get("/", isAuthenticated, this.listJobs);
+    this.router.get("/:id/updates", isAuthenticated, this.getJobUpdates);
     this.router.get("/:id", isAuthenticated, this.getJob);
     this.router.post("/", isAuthenticated, this.createJob);
     this.router.put("/:id", isAuthenticated, this.updateJob);
+    this.router.post("/:id/send-email", isAuthenticated, this.sendEmail);
     this.router.delete("/:id", isAuthenticated, this.deleteJob);
   }
 
@@ -57,6 +64,22 @@ export class JobController {
     }
   }
 
+  private async getJobUpdates(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const id = Number(req.params.id);
+
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
+
+      const updates = await getJobUpdates(id, businessId);
+      res.json(updates);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   private async createJob(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getBusinessIdFromRequest(req);
@@ -92,6 +115,67 @@ export class JobController {
       }
 
       res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async sendEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const id = Number(req.params.id);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
+
+      const { subject, body } = req.body;
+      if (!subject || !body) {
+        return res.status(400).json({ message: "Subject and body are required" });
+      }
+
+      const job = await jobService.getJobById(id, businessId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Try to get email from job first
+      let customerEmail = (job as any).customerEmail;
+      
+      // If not found, try to get from first order associated with this job
+      if (!customerEmail) {
+        const orders = await orderService.listOrdersByJob(id, businessId);
+        if (orders.length > 0 && orders[0].customerEmail) {
+          customerEmail = orders[0].customerEmail;
+        }
+      }
+      
+      // If still not found, try to get email from customer record
+      if (!customerEmail && (job as any).customerId) {
+        const { storage } = await import("../storage");
+        const customer = await storage.getCustomer((job as any).customerId);
+        if (customer?.email) {
+          customerEmail = customer.email;
+        }
+      }
+
+      if (!customerEmail) {
+        return res.status(400).json({ message: "Customer email address not found for this job" });
+      }
+
+      // Send email
+      const emailSent = await emailServiceInstance.sendGenericEmail({
+        from: emailServiceInstance.getFromAddress(),
+        to: customerEmail,
+        subject,
+        text: body,
+        html: body.replace(/\n/g, "<br>"),
+      });
+
+      if (!emailSent) {
+        return res.status(500).json({ message: "Failed to send email" });
+      }
+
+      res.json({ message: "Email sent successfully", to: customerEmail });
     } catch (error) {
       next(error);
     }

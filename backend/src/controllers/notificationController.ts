@@ -12,6 +12,7 @@ export class NotificationController {
     this.router.get("/", this.getNotifications);
     this.router.post("/:id/read", this.markAsRead);
     this.router.post("/read-all", this.markAllAsRead);
+    this.router.delete("/", this.deleteAll); // Must come before /:id route
     this.router.delete("/:id", this.deleteNotification);
   }
 
@@ -121,6 +122,19 @@ export class NotificationController {
       }
 
       res.json({ success: true, message: "Notification deleted" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async deleteAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const userId = getUserIdFromRequest(req);
+
+      const count = await notificationRepository.deleteAll(userId, businessId);
+
+      res.json({ success: true, message: "All notifications deleted", count });
     } catch (error) {
       next(error);
     }

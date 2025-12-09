@@ -13,7 +13,7 @@ interface PageHeaderProps {
 export function PageHeader({ title, description, icon, actions, className }: PageHeaderProps) {
   return (
     <div className={cn("bg-white shadow", className)}>
-      <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="px-2 py-6 sm:px-3 lg:px-4">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-3">

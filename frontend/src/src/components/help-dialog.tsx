@@ -43,7 +43,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
   const handleBookDemo = () => {
     const subject = encodeURIComponent("Request for System Demonstration");
     const body = encodeURIComponent(
-      `Hello,\n\nI would like to book a 20-30 minute live demonstration of the workshop management system.\n\nPlease let me know your availability.\n\nThank you!`
+      `Hello,\n\nI would like to book a 20-30 minute live demonstration of the workshop operations system.\n\nPlease let me know your availability.\n\nThank you!`
     );
     window.location.href = `mailto:support@example.com?subject=${subject}&body=${body}`;
   };
@@ -51,7 +51,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
   const features = [
     {
       icon: <Wrench className="h-5 w-5" />,
-      title: "Workshop Management",
+      title: "Workshop Operations",
       description:
         "Create and track workshop jobs with sequential job IDs. Manage equipment, update job statuses, and track work completion.",
       link: "/workshop",
@@ -128,7 +128,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-slate-700 text-sm leading-relaxed">
-                This workshop management system is designed to streamline your entire
+                This workshop operations system is designed to streamline your entire
                 operation. From job creation and tracking to customer management and
                 payment processing, everything you need is right at your fingertips.
               </p>

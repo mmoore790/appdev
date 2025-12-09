@@ -1,9 +1,20 @@
 import { useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 import { Printer } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { JobReceipt } from "./job-receipt";
+
+type Business = {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+};
 
 interface PrintJobDialogProps {
   job: any;
@@ -24,6 +35,11 @@ export function PrintJobDialog({
 }: PrintJobDialogProps) {
   const componentRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+
+  // Fetch company info from settings
+  const { data: companyInfo } = useQuery<Business>({
+    queryKey: ["/api/business/me"],
+  });
 
   const handlePrint = useReactToPrint({
     documentTitle: `Workshop Job Receipt - ${job.jobId}`,
@@ -94,6 +110,7 @@ export function PrintJobDialog({
             customerEmail={customerEmail}
             equipmentName={equipmentName}
             assigneeName={assigneeName}
+            companyInfo={companyInfo}
           />
         </div>
         

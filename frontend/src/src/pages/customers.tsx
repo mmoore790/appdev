@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { CustomerForm } from "@/components/customer-form";
+import { AssetForm } from "@/components/asset-form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Plus, Search, MoreVertical, Pencil, Trash2, Download, Eye, Mail, Phone } from "lucide-react";
+import { Users, Plus, Search, MoreVertical, Trash2, Download, Mail, Phone, Package } from "lucide-react";
 import { useLocation } from "wouter";
 
 type Customer = {
@@ -36,13 +37,16 @@ type Customer = {
   phone?: string | null;
   address?: string | null;
   notes?: string | null;
+  matchReason?: string | null;
 };
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [customerForEquipment, setCustomerForEquipment] = useState<number | null>(null);
   const [customerPendingDelete, setCustomerPendingDelete] = useState<Customer | null>(null);
   const [, setLocation] = useLocation();
 
@@ -60,7 +64,9 @@ export default function CustomersPage() {
   const closeDialogs = () => {
     setIsCreateDialogOpen(false);
     setIsEditDialogOpen(false);
+    setIsEquipmentDialogOpen(false);
     setSelectedCustomerId(null);
+    setCustomerForEquipment(null);
   };
 
   const handleFormComplete = () => {
@@ -153,6 +159,11 @@ export default function CustomersPage() {
     setLocation(`/customers/${customerId}/details`);
   };
 
+  const handleAddEquipment = (customerId: number) => {
+    setCustomerForEquipment(customerId);
+    setIsEquipmentDialogOpen(true);
+  };
+
   const renderInfo = (value?: string | null, fallback: string = "Not provided") => {
     if (!value) {
       return <span className="text-muted-foreground italic">{fallback}</span>;
@@ -176,7 +187,7 @@ export default function CustomersPage() {
             <Users className="h-5 w-5" />
             Customers
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">View and manage all customers</p>
+          <p className="text-sm text-muted-foreground mt-1">View and manage all customers and equipment</p>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
@@ -211,7 +222,7 @@ export default function CustomersPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name, email, or phone..."
+              placeholder="Search by name, email, phone, make/model, or serial number..."
               className="pl-9 h-9 text-sm"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -282,8 +293,13 @@ export default function CustomersPage() {
                       className="border-b cursor-pointer hover:bg-muted/30 transition-colors group"
                       onClick={() => handleViewCustomer(customer.id)}
                     >
-                      <TableCell className="h-10 px-3 py-2">
-                        <span className="font-medium text-sm text-foreground">{customer.name}</span>
+                      <TableCell className="px-3 py-2">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-sm text-foreground">{customer.name}</span>
+                          {customer.matchReason && (
+                            <span className="text-xs text-muted-foreground italic mt-0.5">{customer.matchReason}</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="h-10 px-3 py-2">
                         <span className="text-sm text-muted-foreground">{renderInfo(customer.email, "—")}</span>
@@ -302,35 +318,26 @@ export default function CustomersPage() {
                         </div>
                       </TableCell>
                       <TableCell className="h-10 px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                              aria-label={`Customer actions for ${customer.name}`}
-                            >
-                              <MoreVertical className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => handleViewCustomer(customer.id)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => handleOpenEdit(customer.id)}>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setCustomerPendingDelete(customer)}
-                              className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label={`Add equipment for ${customer.name}`}
+                            onClick={() => handleAddEquipment(customer.id)}
+                          >
+                            <Package className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
+                            aria-label={`Delete ${customer.name}`}
+                            onClick={() => setCustomerPendingDelete(customer)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -367,37 +374,38 @@ export default function CustomersPage() {
                   onClick={() => handleViewCustomer(customer.id)}
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-sm text-foreground">{customer.name}</h3>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          aria-label={`Customer actions for ${customer.name}`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => handleViewCustomer(customer.id)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => handleOpenEdit(customer.id)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setCustomerPendingDelete(customer)}
-                          className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex flex-col">
+                      <h3 className="font-semibold text-sm text-foreground">{customer.name}</h3>
+                      {customer.matchReason && (
+                        <span className="text-xs text-muted-foreground italic mt-0.5">{customer.matchReason}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label={`Add equipment for ${customer.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddEquipment(customer.id);
+                        }}
+                      >
+                        <Package className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        aria-label={`Delete ${customer.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCustomerPendingDelete(customer);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-1 text-xs">
                     <div className="flex items-center gap-2">
@@ -475,6 +483,26 @@ export default function CustomersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          {customerForEquipment != null && (
+            <AssetForm
+              customerId={customerForEquipment}
+              onComplete={() => {
+                setIsEquipmentDialogOpen(false);
+                setCustomerForEquipment(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+              }}
+              onCancel={() => {
+                setIsEquipmentDialogOpen(false);
+                setCustomerForEquipment(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

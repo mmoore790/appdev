@@ -135,3 +135,5 @@ SUPABASE_STORAGE_SECRET_ACCESS_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 4. **After Changes**: Always restart your backend server after updating environment variables.
 
+
+
