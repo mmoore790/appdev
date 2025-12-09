@@ -185,6 +185,7 @@ export const initAuthRoutes = (app: any) => {
   });
 
   // Login endpoint
+  console.log("[Auth] Registering POST /api/auth/login route");
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     console.log("=== LOGIN REQUEST START ===");
     console.log("Request body:", JSON.stringify(req.body));
