@@ -85,7 +85,7 @@ app.use(session({
     path: '/',
     // In development with proxy, use 'lax' (requests appear same-origin)
     // In production, use 'none' for cross-origin (Vercel -> Render)
-    sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as const
+    sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax'
   }
 }));
 
