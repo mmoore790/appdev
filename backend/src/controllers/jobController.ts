@@ -152,7 +152,7 @@ export class JobController {
       // If still not found, try to get email from customer record
       if (!customerEmail && (job as any).customerId) {
         const { storage } = await import("../storage");
-        const customer = await storage.getCustomer((job as any).customerId);
+        const customer = await storage.getCustomer((job as any).customerId, businessId);
         if (customer?.email) {
           customerEmail = customer.email;
         }
