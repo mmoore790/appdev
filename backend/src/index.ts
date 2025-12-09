@@ -205,12 +205,9 @@ app.use((req, res, next) => {
   // Port 5000 was from Replit.
   // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
   const port = process.env.PORT || 3001;
-  server.listen({
-    port: Number(port),
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    console.log(`✅ Backend server running at http://localhost:${port}`);
+  server.listen(Number(port), "0.0.0.0", () => {
+    console.log(`✅ Backend server running on port ${port}`);
+    console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
     
     // Start the scheduler service after server is running
     schedulerService.start();
