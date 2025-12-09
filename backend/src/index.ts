@@ -51,6 +51,7 @@ app.use(cors({
   credentials: true, // Allows session cookies
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['X-Auth-Token', 'X-Auth-Success'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // Explicitly allow all methods
 }));
 
 app.use(express.json());
@@ -138,8 +139,42 @@ app.use((req, res, next) => {
   next();
 });
 
+// Add health check endpoint BEFORE route registration (for Railway/Render health checks)
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Add root health check as well
+app.get("/", (_req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: "ok", 
+    message: "Backend API is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
 (async () => {
-  const server = await registerRoutes(app);
+  try {
+    const server = await registerRoutes(app);
+
+    // Add a catch-all route handler for unhandled routes (404)
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      // Only handle if no response has been sent
+      if (!res.headersSent) {
+        console.warn(`[404] Route not found: ${req.method} ${req.path}`);
+        res.status(404).json({ 
+          message: `Route not found: ${req.method} ${req.path}`,
+          path: req.path,
+          method: req.method
+        });
+      } else {
+        next();
+      }
+    });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -150,7 +185,9 @@ app.use((req, res, next) => {
       message: err.message,
       stack: err.stack,
       status,
-      originalError: err
+      originalError: err,
+      path: _req.path,
+      method: _req.method
     });
 
     // If response was already sent, don't send again
@@ -201,15 +238,60 @@ app.use((req, res, next) => {
     }));
   });
   
-  // The port should be 3001 to match your frontend .env file
-  // Port 5000 was from Replit.
-  // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
-  const port = process.env.PORT || 3001;
-  server.listen(Number(port), "0.0.0.0", () => {
-    console.log(`✅ Backend server running on port ${port}`);
-    console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
+    // The port should be 3001 to match your frontend .env file
+    // Port 5000 was from Replit.
+    // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
+    const port = process.env.PORT || 3001;
     
-    // Start the scheduler service after server is running
-    schedulerService.start();
-  });
+    server.listen(Number(port), "0.0.0.0", () => {
+      console.log(`✅ Backend server running on port ${port}`);
+      console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
+      console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
+      
+      // Start the scheduler service after server is running
+      try {
+        schedulerService.start();
+      } catch (schedulerError) {
+        console.error("❌ Failed to start scheduler service:", schedulerError);
+        // Don't crash the server if scheduler fails
+      }
+    });
+
+    // Handle server errors
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      console.error('❌ Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use`);
+        process.exit(1);
+      } else {
+        console.error('Unexpected server error:', error);
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 })();
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error: Error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // Don't exit immediately - let the server try to handle it
+});
+
+process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit immediately - let the server try to handle it
+});
+
+// Handle SIGTERM gracefully (Railway/Render sends this)
+process.on('SIGTERM', () => {
+  console.log('⚠️  SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('⚠️  SIGINT received, shutting down gracefully...');
+  process.exit(0);
+});
