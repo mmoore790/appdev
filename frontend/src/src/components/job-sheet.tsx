@@ -39,6 +39,59 @@ interface JobSheetProps {
   onWorkAdded?: () => void;
 }
 
+interface Job {
+  id: number;
+  jobId: string;
+  customerId?: number | null;
+  equipmentId?: number | null;
+  assignedTo?: number | null;
+  status: string;
+  description: string;
+  equipmentDescription?: string | null;
+  customerName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+interface User {
+  id: number;
+  fullName: string;
+}
+
+interface Business {
+  id: number;
+  name: string;
+  hourlyLabourFee?: number | null;
+}
+
+interface LabourEntry {
+  id: number;
+  technicianId: number;
+  description: string;
+  timeSpent: number;
+  costExcludingVat?: number | null;
+  costIncludingVat?: number | null;
+  cost?: number | null;
+}
+
+interface PartUsed {
+  id: number;
+  partName: string;
+  sku?: string | null;
+  quantity: number;
+  costExcludingVat?: number | null;
+  costIncludingVat?: number | null;
+  cost?: number | null;
+}
+
+interface JobNote {
+  id?: number;
+  workSummary?: string | null;
+  internalNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string | null;
+}
+
 export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -53,35 +106,35 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   const [uploadingFile, setUploadingFile] = useState(false);
 
   // Get job data
-  const { data: job } = useQuery({
+  const { data: job } = useQuery<Job>({
     queryKey: [`/api/jobs/${jobId}`],
     enabled: !!jobId,
   });
 
   // Get users for technician dropdown
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
 
   // Get business data for hourly labour fee
-  const { data: business } = useQuery({
+  const { data: business } = useQuery<Business>({
     queryKey: ["/api/business/me"],
   });
 
   // Get labour entries
-  const { data: labourEntries = [], isLoading: labourLoading } = useQuery({
+  const { data: labourEntries = [], isLoading: labourLoading } = useQuery<LabourEntry[]>({
     queryKey: [`/api/job-sheet/${jobId}/labour`],
     enabled: !!jobId,
   });
 
   // Get parts used
-  const { data: partsUsed = [], isLoading: partsLoading } = useQuery({
+  const { data: partsUsed = [], isLoading: partsLoading } = useQuery<PartUsed[]>({
     queryKey: [`/api/job-sheet/${jobId}/parts`],
     enabled: !!jobId,
   });
 
   // Get job notes
-  const { data: jobNote } = useQuery({
+  const { data: jobNote } = useQuery<JobNote>({
     queryKey: [`/api/job-sheet/${jobId}/notes`],
     enabled: !!jobId,
   });
@@ -437,7 +490,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
     setUploadingFile(true);
     try {
       const fileUrl = URL.createObjectURL(file);
-      const userResponse = await apiRequest("GET", "/api/user");
+      const userResponse = await apiRequest<{ id: number }>("GET", "/api/user");
       const uploadedBy = userResponse?.id || 1;
 
       await apiRequest("POST", `/api/job-sheet/${jobId}/attachments`, {
@@ -459,7 +512,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   };
 
   // Calculations
-  const totalLabourTime = labourEntries.reduce((total: number, entry: any) => total + (entry.timeSpent || 0), 0) / 60;
+  const totalLabourTime = labourEntries.reduce((total: number, entry: LabourEntry) => total + (entry.timeSpent || 0), 0) / 60;
   const totalPartsUsed = partsUsed.length;
   const lastUpdateTime = jobNote?.updatedAt || jobNote?.createdAt || job?.updatedAt;
   
@@ -469,14 +522,14 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   const labourChargeIncludingVat = labourChargeExcludingVat ? calculateIncludingVat(labourChargeExcludingVat) : null;
 
   // Calculate total costs from labour entries (use stored values if available, otherwise calculate)
-  const totalLabourExcludingVat = labourEntries.reduce((total: number, entry: any) => {
+  const totalLabourExcludingVat = labourEntries.reduce((total: number, entry: LabourEntry) => {
     const costExcludingVat = entry.costExcludingVat ? entry.costExcludingVat / 100 : 
                              (entry.cost ? entry.cost / 100 : 
                               (hourlyRate && entry.timeSpent ? (entry.timeSpent / 60) * hourlyRate : 0));
     return total + costExcludingVat;
   }, 0);
 
-  const totalLabourIncludingVat = labourEntries.reduce((total: number, entry: any) => {
+  const totalLabourIncludingVat = labourEntries.reduce((total: number, entry: LabourEntry) => {
     const costIncludingVat = entry.costIncludingVat ? entry.costIncludingVat / 100 :
                              (entry.costExcludingVat ? calculateIncludingVat(entry.costExcludingVat / 100) :
                               (entry.cost ? calculateIncludingVat(entry.cost / 100) :
@@ -485,13 +538,13 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   }, 0);
 
   // Calculate total costs from parts used
-  const totalPartsExcludingVat = partsUsed.reduce((total: number, part: any) => {
+  const totalPartsExcludingVat = partsUsed.reduce((total: number, part: PartUsed) => {
     const costExcludingVat = part.costExcludingVat ? part.costExcludingVat / 100 : 
                              (part.cost ? part.cost / 100 : 0);
     return total + costExcludingVat;
   }, 0);
 
-  const totalPartsIncludingVat = partsUsed.reduce((total: number, part: any) => {
+  const totalPartsIncludingVat = partsUsed.reduce((total: number, part: PartUsed) => {
     const costIncludingVat = part.costIncludingVat ? part.costIncludingVat / 100 :
                              (part.costExcludingVat ? calculateIncludingVat(part.costExcludingVat / 100) :
                               (part.cost ? calculateIncludingVat(part.cost / 100) : 0));
@@ -503,7 +556,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   const grandTotalIncludingVat = totalLabourIncludingVat + totalPartsIncludingVat;
 
   const getUserName = (userId: number) => {
-    const user = users.find((u: any) => u.id === userId);
+    const user = users.find((u) => u.id === userId);
     return user ? user.fullName : "Unknown";
   };
 
@@ -666,7 +719,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
                             </FormControl>
                             <SelectContent>
                               {Array.isArray(users) &&
-                                users.map((user: any) => (
+                                users.map((user) => (
                                   <SelectItem key={user.id} value={user.id.toString()}>
                                     {user.fullName}
                                   </SelectItem>
@@ -729,7 +782,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             </div>
           ) : (
             <div className="space-y-0 border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
-              {labourEntries.map((entry: any, index: number) => (
+              {labourEntries.map((entry, index: number) => (
                 <div key={entry.id} className="px-4 py-4 hover:bg-gray-50/50 transition-colors">
                   {editingLabourId === entry.id ? (
                     <div className="p-4 bg-blue-50/50 border-2 border-blue-200 rounded-lg">
@@ -774,7 +827,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
                                     </FormControl>
                                     <SelectContent>
                                       {Array.isArray(users) &&
-                                        users.map((user: any) => (
+                                        users.map((user) => (
                                           <SelectItem key={user.id} value={user.id.toString()}>
                                             {user.fullName}
                                           </SelectItem>
@@ -1065,7 +1118,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             </div>
           ) : (
             <div className="space-y-0 border border-green-200 rounded-lg divide-y divide-green-100 overflow-hidden">
-              {partsUsed.map((part: any) => (
+              {partsUsed.map((part) => (
                 <div key={part.id} className="px-4 py-4 hover:bg-green-50/30 transition-colors">
                   {editingPartId === part.id ? (
                     <div className="p-3 bg-gray-50 border border-gray-200 rounded">
