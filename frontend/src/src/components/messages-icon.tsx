@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,18 @@ interface Conversation {
 }
 
 export function MessagesIcon() {
-  const { data: conversations = [] } = useQuery<Conversation[]>({
+  const { data: conversationsData } = useQuery<Conversation[]>({
     queryKey: ['/api/messages/conversations'],
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  const unreadCount = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
+  // Ensure conversations is always an array
+  const conversations = useMemo(
+    () => (Array.isArray(conversationsData) ? conversationsData : []),
+    [conversationsData],
+  );
+
+  const unreadCount = conversations.reduce((sum, conv) => sum + (conv?.unreadCount || 0), 0);
 
   return (
     <Link href="/messages">

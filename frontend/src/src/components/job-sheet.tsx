@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -124,16 +124,27 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   });
 
   // Get labour entries
-  const { data: labourEntries = [], isLoading: labourLoading } = useQuery<LabourEntry[]>({
+  const { data: labourEntriesData = [], isLoading: labourLoading } = useQuery<LabourEntry[]>({
     queryKey: [`/api/job-sheet/${jobId}/labour`],
     enabled: !!jobId,
   });
 
   // Get parts used
-  const { data: partsUsed = [], isLoading: partsLoading } = useQuery<PartUsed[]>({
+  const { data: partsUsedData = [], isLoading: partsLoading } = useQuery<PartUsed[]>({
     queryKey: [`/api/job-sheet/${jobId}/parts`],
     enabled: !!jobId,
   });
+
+  // Ensure arrays are always arrays
+  const labourEntries = useMemo(
+    () => (Array.isArray(labourEntriesData) ? labourEntriesData : []),
+    [labourEntriesData],
+  );
+
+  const partsUsed = useMemo(
+    () => (Array.isArray(partsUsedData) ? partsUsedData : []),
+    [partsUsedData],
+  );
 
   // Get job notes
   const { data: jobNote } = useQuery<JobNote>({
