@@ -72,6 +72,7 @@ interface LabourEntry {
   costExcludingVat?: number | null;
   costIncludingVat?: number | null;
   cost?: number | null;
+  createdAt?: string;
 }
 
 interface PartUsed {
@@ -82,6 +83,7 @@ interface PartUsed {
   costExcludingVat?: number | null;
   costIncludingVat?: number | null;
   cost?: number | null;
+  notes?: string | null;
 }
 
 interface JobNote {
