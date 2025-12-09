@@ -51,16 +51,27 @@ function shouldUseSSL(connectionString: string): boolean {
   return false;
 }
 
-const connectionString = resolveDatabaseUrl();
-const useSSL = shouldUseSSL(connectionString);
+let connectionString: string;
+let useSSL: boolean;
 
-// Ensure downstream consumers see the fully constructed connection string
-process.env.DATABASE_URL = connectionString;
+try {
+  connectionString = resolveDatabaseUrl();
+  useSSL = shouldUseSSL(connectionString);
+  
+  // Ensure downstream consumers see the fully constructed connection string
+  process.env.DATABASE_URL = connectionString;
+  console.log('[DB] Database URL resolved successfully');
+} catch (error) {
+  console.error('[DB] ❌ Failed to resolve database URL:', error);
+  // Re-throw so the error is visible, but log it first
+  throw error;
+}
 
 // For serverless databases (like Neon), use a smaller pool size to avoid exceeding server limits
 // Session mode typically allows fewer connections than regular PostgreSQL
 const poolSize = parseInt(process.env.DB_POOL_SIZE || "10", 10);
 
+console.log('[DB] Creating connection pool...');
 export const pool = new Pool({
   connectionString,
   ssl: useSSL ? { rejectUnauthorized: false } : undefined,
@@ -69,6 +80,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 30000, // Return an error after 30 seconds if connection could not be established
   allowExitOnIdle: true, // Allow process to exit when pool is idle
 });
+console.log('[DB] Connection pool created (not yet connected)');
 
 pool.on("error", (err) => {
   console.error("Unexpected Postgres client error", err);
