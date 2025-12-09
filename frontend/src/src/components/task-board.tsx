@@ -626,6 +626,7 @@ export function TaskBoard({
     task: any;
   } | null>(null);
   const [restoreTargetId, setRestoreTargetId] = useState<string | null>(null);
+  const [archiveAllPending, setArchiveAllPending] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -977,6 +978,116 @@ export function TaskBoard({
     setPendingAction({ type: "archive", task });
   const requestDeleteTask = (task: any) =>
     setPendingAction({ type: "delete", task });
+
+  const archiveAllCompletedMutation = useMutation({
+    mutationFn: async (taskIds: number[]) => {
+      // Archive all tasks in parallel using allSettled to handle partial failures
+      const promises = taskIds.map((taskId) =>
+        apiRequest("PUT", `/api/tasks/${taskId}`, { status: "archived" })
+          .catch((error) => {
+            console.error(`Failed to archive task ${taskId}:`, error);
+            return { id: taskId, error: error.message || "Unknown error" };
+          })
+      );
+      const results = await Promise.allSettled(promises);
+      
+      // Separate successful and failed results
+      const successful: any[] = [];
+      const failed: Array<{ id: number; error: string }> = [];
+      
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          const value = result.value as any;
+          if (value && typeof value === "object" && "error" in value) {
+            // This is a failed task (caught in the catch block)
+            failed.push({ id: taskIds[index], error: value.error || "Unknown error" });
+          } else if (value && typeof value === "object" && "id" in value) {
+            // This is a successful task
+            successful.push(value);
+          }
+        } else {
+          const reason = result.reason as any;
+          failed.push({ id: taskIds[index], error: reason?.message || "Unknown error" });
+        }
+      });
+      
+      return { successful, failed };
+    },
+    onSuccess: ({ successful, failed }) => {
+      // Remove all successfully archived tasks from columns
+      successful.forEach((task) => {
+        removeTaskFromColumns(task.id);
+      });
+      
+      // Update archived tasks list
+      setArchivedTasks((prev) =>
+        sortArchivedTasks([
+          ...prev.filter(
+            (task) => !successful.some((t) => String(t.id) === String(task.id))
+          ),
+          ...successful,
+        ])
+      );
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/tasks?pendingOnly=true"],
+      });
+      
+      if (failed.length > 0) {
+        toast({
+          title: "Partial archive success",
+          description: `Successfully archived ${successful.length} task${successful.length === 1 ? "" : "s"}. ${failed.length} task${failed.length === 1 ? "" : "s"} could not be archived.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Tasks archived",
+          description: `Successfully archived ${successful.length} task${successful.length === 1 ? "" : "s"}.`,
+        });
+      }
+      setArchiveAllPending(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Archive failed",
+        description: error?.message || "We couldn't archive all tasks right now. Please try again.",
+        variant: "destructive",
+      });
+      setArchiveAllPending(false);
+    },
+  });
+
+  const handleArchiveAllCompleted = () => {
+    const completedTasks = columns.completed;
+    if (completedTasks.length === 0) {
+      toast({
+        title: "No tasks to archive",
+        description: "There are no completed tasks to archive.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Show confirmation dialog
+    setPendingAction({ 
+      type: "archive", 
+      task: { id: "all", title: `all ${completedTasks.length} completed task${completedTasks.length === 1 ? "" : "s"}` } 
+    });
+  };
+
+  const confirmArchiveAll = () => {
+    const completedTasks = columns.completed;
+    if (completedTasks.length === 0) {
+      setPendingAction(null);
+      return;
+    }
+    setArchiveAllPending(true);
+    setPendingAction(null);
+    const taskIds = completedTasks
+      .map((task) => Number(task.id))
+      .filter((id) => !Number.isNaN(id));
+    archiveAllCompletedMutation.mutate(taskIds);
+  };
 
   const handleRestoreTask = (task: any) => {
     const idKey = String(task.id);
@@ -1562,6 +1673,7 @@ export function TaskBoard({
                   activeTaskId={activeTaskId}
                   onArchiveTask={requestArchiveTask}
                   onDeleteTask={requestDeleteTask}
+                  onArchiveAll={status.id === "completed" ? handleArchiveAllCompleted : undefined}
                   density={viewDensity}
                   focusMode={focusMode}
                   isCollapsed={collapsedColumns[status.id]}
@@ -1772,7 +1884,8 @@ export function TaskBoard({
           if (
             !open &&
             !archiveTaskMutation.isPending &&
-            !deleteTaskMutation.isPending
+            !deleteTaskMutation.isPending &&
+            !archiveAllCompletedMutation.isPending
           ) {
             setPendingAction(null);
           }
@@ -1783,7 +1896,9 @@ export function TaskBoard({
             <AlertDialogTitle>
               {pendingAction?.type === "delete"
                 ? "Delete task"
-                : "Archive task"}
+                : pendingAction?.task?.id === "all"
+                  ? "Archive all completed tasks"
+                  : "Archive task"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingAction?.type === "delete" ? (
@@ -1813,7 +1928,9 @@ export function TaskBoard({
           <AlertDialogFooter>
             <AlertDialogCancel
               disabled={
-                archiveTaskMutation.isPending || deleteTaskMutation.isPending
+                archiveTaskMutation.isPending || 
+                deleteTaskMutation.isPending ||
+                archiveAllCompletedMutation.isPending
               }
               onClick={() => setPendingAction(null)}
             >
@@ -1826,12 +1943,18 @@ export function TaskBoard({
                   : "bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
               }
               disabled={
-                archiveTaskMutation.isPending || deleteTaskMutation.isPending
+                archiveTaskMutation.isPending || 
+                deleteTaskMutation.isPending ||
+                archiveAllCompletedMutation.isPending
               }
               onClick={() => {
                 if (!pendingAction) return;
                 if (pendingAction.type === "archive") {
-                  archiveTaskMutation.mutate(pendingAction.task.id);
+                  if (pendingAction.task.id === "all") {
+                    confirmArchiveAll();
+                  } else {
+                    archiveTaskMutation.mutate(pendingAction.task.id);
+                  }
                 } else {
                   deleteTaskMutation.mutate(pendingAction.task.id);
                 }
@@ -1841,9 +1964,13 @@ export function TaskBoard({
                 ? isDeletePending
                   ? "Deleting..."
                   : "Delete task"
-                : isArchivePending
-                  ? "Archiving..."
-                  : "Archive task"}
+                : pendingAction?.task?.id === "all"
+                  ? archiveAllCompletedMutation.isPending
+                    ? "Archiving..."
+                    : "Archive all"
+                  : isArchivePending
+                    ? "Archiving..."
+                    : "Archive task"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1863,6 +1990,7 @@ interface TaskBoardColumnProps {
   activeTaskId: string | null;
   onArchiveTask: (task: any) => void;
   onDeleteTask: (task: any) => void;
+  onArchiveAll?: () => void;
   density: BoardDensity;
   focusMode: FocusMode;
   isCollapsed: boolean;
@@ -1879,6 +2007,7 @@ function TaskBoardColumn({
   activeTaskId,
   onArchiveTask,
   onDeleteTask,
+  onArchiveAll,
   density,
   focusMode,
   isCollapsed,
@@ -1937,30 +2066,66 @@ function TaskBoardColumn({
       )}
       data-column={status.id}
     >
-      <div className="flex items-start justify-between gap-4 rounded-t-2xl bg-white/95 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100">
-            <status.icon size={18} className={status.accent} />
-          </div>
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-neutral-800">
-                {status.title}
-              </h3>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
-                  status.badge,
-                )}
-              >
-              </span>
+      <div className="rounded-t-2xl bg-white/95 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0 flex-1 overflow-hidden">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 flex-shrink-0">
+              <status.icon size={18} className={status.accent} />
             </div>
-            <p className="max-w-xs text-xs leading-relaxed text-neutral-500">
-              {status.description}
-            </p>
+            <div className="space-y-2 min-w-0 flex-1 overflow-hidden">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-neutral-800 truncate">
+                  {status.title}
+                </h3>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-xs font-semibold transition flex-shrink-0",
+                    status.badge,
+                  )}
+                >
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-neutral-500 line-clamp-2">
+                {status.description}
+              </p>
+            </div>
           </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-neutral-400 transition hover:text-neutral-700 flex-shrink-0"
+                onClick={onToggleCollapse}
+              >
+                {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {isCollapsed ? "Expand column" : "Collapse column"}
+            </TooltipContent>
+          </Tooltip>
         </div>
-        <div className="flex items-center gap-1">
+        {/* Action buttons below header */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-neutral-200">
+          {status.id === "completed" && onArchiveAll && tasks.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 whitespace-nowrap rounded-full border-neutral-200 bg-white text-xs font-medium text-neutral-600 transition hover:border-neutral-300 hover:bg-neutral-100"
+                  onClick={onArchiveAll}
+                >
+                  <Archive size={14} className="mr-1" />
+                  Archive All
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Archive all {tasks.length} completed task{tasks.length === 1 ? "" : "s"}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {status.id !== "completed" && (
             <Button
               size="sm"
@@ -1972,21 +2137,6 @@ function TaskBoardColumn({
               Add
             </Button>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full text-neutral-400 transition hover:text-neutral-700"
-                onClick={onToggleCollapse}
-              >
-                {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {isCollapsed ? "Expand column" : "Collapse column"}
-            </TooltipContent>
-          </Tooltip>
         </div>
       </div>
 
@@ -1994,15 +2144,8 @@ function TaskBoardColumn({
         items={tasks.map((task) => String(task.id))}
         strategy={verticalListSortingStrategy}
       >
-        <div
-          className={cn(
-            "flex flex-1 flex-col",
-            columnPadding,
-            columnGap,
-            isCollapsed && "justify-center",
-          )}
-        >
-          {isCollapsed ? (
+        {isCollapsed ? (
+          <div className={cn("flex flex-1 flex-col justify-center", columnPadding)}>
             <div className="flex min-h-[140px] flex-col justify-between rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-4 text-xs text-neutral-500">
               {tasks.length === 0 ? (
                 <p>{status.emptyMessage}</p>
@@ -2049,46 +2192,60 @@ function TaskBoardColumn({
                 </>
               )}
             </div>
-          ) : isLoading && tasks.length === 0 ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton
-                  key={index}
-                  className={cn(
-                    "h-24 rounded-xl bg-neutral-100/80",
-                    density === "compact" && "h-20",
-                  )}
-                />
-              ))}
-            </div>
-          ) : tasks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
-              {status.emptyMessage}
-            </div>
-          ) : (
-            tasks.map((task) => (
-              <TaskBoardCard
-                key={task.id}
-                task={task}
-                users={users}
-                columnId={status.id}
-                onClick={() => {
-                  const numericId = Number(task.id);
-                  if (!Number.isNaN(numericId)) {
-                    onTaskClick(numericId);
-                  }
-                }}
-                isActiveDrag={
-                  activeTaskId != null && String(task.id) === activeTaskId
-                }
-                onArchiveRequest={() => onArchiveTask(task)}
-                onDeleteRequest={() => onDeleteTask(task)}
-                density={density}
-                focusMode={focusMode}
-              />
-            ))
-          )}
-        </div>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex flex-col",
+              columnPadding,
+              columnGap,
+              tasks.length > 10 
+                ? "overflow-y-auto h-[70vh] flex-shrink-0" 
+                : "flex-1",
+            )}
+          >
+            {isLoading && tasks.length === 0 ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton
+                    key={index}
+                    className={cn(
+                      "h-24 rounded-xl bg-neutral-100/80",
+                      density === "compact" && "h-20",
+                    )}
+                  />
+                ))}
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/80 p-5 text-center text-sm text-neutral-500">
+                {status.emptyMessage}
+              </div>
+            ) : (
+              tasks.map((task) => (
+                <div key={task.id} className="flex-shrink-0">
+                  <TaskBoardCard
+                    task={task}
+                    users={users}
+                    columnId={status.id}
+                    onClick={() => {
+                      const numericId = Number(task.id);
+                      if (!Number.isNaN(numericId)) {
+                        onTaskClick(numericId);
+                      }
+                    }}
+                    isActiveDrag={
+                      activeTaskId != null && String(task.id) === activeTaskId
+                    }
+                    onArchiveRequest={() => onArchiveTask(task)}
+                    onDeleteRequest={() => onDeleteTask(task)}
+                    density={density}
+                    focusMode={focusMode}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </SortableContext>
     </div>
   );

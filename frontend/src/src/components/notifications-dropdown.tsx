@@ -100,6 +100,25 @@ export function NotificationsDropdown() {
     },
   });
 
+  // Delete all notifications mutation
+  const deleteAllNotificationsMutation = useMutation({
+    mutationFn: () => apiRequest('DELETE', '/api/notifications'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      toast({
+        title: "All notifications deleted",
+        description: "All notifications have been removed.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to delete all notifications",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleNotificationClick = (notification: Notification) => {
     // Mark as read if unread
     if (!notification.isRead) {
@@ -116,6 +135,10 @@ export function NotificationsDropdown() {
 
   const handleMarkAllAsRead = () => {
     markAllAsReadMutation.mutate();
+  };
+
+  const handleDeleteAll = () => {
+    deleteAllNotificationsMutation.mutate();
   };
 
   const getIcon = (type: string) => {
@@ -162,6 +185,7 @@ export function NotificationsDropdown() {
           variant="ghost"
           size="icon"
           className="relative h-8 w-8 text-slate-600 hover:text-emerald-700 hover:bg-emerald-100"
+          data-notifications-trigger
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
@@ -271,7 +295,7 @@ export function NotificationsDropdown() {
         {notifications.length > 0 && (
           <>
             <DropdownMenuSeparator />
-            <div className="p-2">
+            <div className="p-2 space-y-2">
               <Button
                 variant="ghost"
                 className="w-full justify-center text-xs"
@@ -279,6 +303,15 @@ export function NotificationsDropdown() {
                 onClick={() => setIsExpanded(!isExpanded)}
               >
                 {isExpanded ? 'Show less' : `View all notifications (${totalCount})`}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-center text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                size="sm"
+                onClick={handleDeleteAll}
+                disabled={deleteAllNotificationsMutation.isPending}
+              >
+                {deleteAllNotificationsMutation.isPending ? 'Deleting...' : 'Remove all notifications'}
               </Button>
             </div>
           </>

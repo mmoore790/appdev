@@ -90,6 +90,8 @@ export function getActivityDescription(type: string, entityType: string, entityI
       return `Added service to job ${meta.jobId || entityId}: ${meta.serviceType || 'Service'}`;
     case 'equipment_created':
       return `Added equipment: ${meta.equipmentName || entityId}`;
+    case 'equipment_deleted':
+      return `Deleted equipment: ${meta.equipmentName || entityId}`;
     case 'user_created':
       return `New user registered: ${meta.username || entityId}`;
     case 'user_login':

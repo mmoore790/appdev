@@ -939,19 +939,6 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
                           Cancel
                         </Button>
                       </div>
-                      {editMode && jobId && (
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setShowDeleteConfirmDialog(true)}
-                          disabled={deleteJob.isPending}
-                          className="flex items-center gap-2"
-                        >
-                          <Trash2 size={16} />
-                          {deleteJob.isPending ? "Deleting..." : "Delete Job"}
-                        </Button>
-                      )}
                     </div>
                   )}
                 </CardFooter>

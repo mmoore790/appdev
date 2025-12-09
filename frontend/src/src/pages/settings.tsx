@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react";
@@ -23,25 +24,44 @@ type Business = {
   address?: string | null;
   website?: string | null;
   logoUrl?: string | null;
+  jobTrackerEnabled?: boolean | null;
+  hourlyLabourFee?: number | null; // Stored in pence (e.g., 5000 = £50.00)
 };
 
 export default function Settings() {
   // Company information (per business, from backend)
   const [companyInfo, setCompanyInfo] = useState<Business | null>(null);
   
+  // Display value for hourly labour fee (allows free typing)
+  const [hourlyLabourFeeDisplay, setHourlyLabourFeeDisplay] = useState<string>("");
+  
   // Other settings
   const [theme, setTheme] = useState("light");
 
   // Load company info from backend
-  const { data: businessData } = useQuery<Business>({
+  const { data: businessData, error: businessError, isLoading: isLoadingBusiness } = useQuery<Business>({
     queryKey: ["/api/business/me"],
   });
 
   useEffect(() => {
     if (businessData) {
+      console.log("Business data loaded:", businessData);
       setCompanyInfo(businessData);
+      // Set display value for hourly labour fee
+      if (businessData.hourlyLabourFee !== null && businessData.hourlyLabourFee !== undefined) {
+        setHourlyLabourFeeDisplay((businessData.hourlyLabourFee / 100).toString());
+      } else {
+        setHourlyLabourFeeDisplay("");
+      }
+    } else if (businessError) {
+      console.error("Error loading business data:", businessError);
+      toast({
+        title: "Error loading company settings",
+        description: businessError instanceof Error ? businessError.message : "Failed to load company information",
+        variant: "destructive",
+      });
     }
-  }, [businessData]);
+  }, [businessData, businessError]);
 
   const updateBusinessMutation = useMutation({
     mutationFn: async (updates: Partial<Business>) => {
@@ -52,6 +72,12 @@ export default function Settings() {
     },
     onSuccess: (updated) => {
       setCompanyInfo(updated);
+      // Update display value for hourly labour fee
+      if (updated.hourlyLabourFee !== null && updated.hourlyLabourFee !== undefined) {
+        setHourlyLabourFeeDisplay((updated.hourlyLabourFee / 100).toString());
+      } else {
+        setHourlyLabourFeeDisplay("");
+      }
       toast({
         title: "Settings saved",
         description: "Company information has been updated.",
@@ -249,6 +275,17 @@ export default function Settings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {isLoadingBusiness ? (
+                  <div className="py-8 text-center">
+                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
+                    <p className="mt-3 text-sm text-gray-600">Loading company settings...</p>
+                  </div>
+                ) : businessError ? (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-red-600">Failed to load company settings. Please refresh the page.</p>
+                  </div>
+                ) : (
+                  <>
                 <div className="space-y-2">
                   <Label htmlFor="company-name">Company Name</Label>
                   <Input 
@@ -327,15 +364,85 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="space-y-2">
+                    <Label htmlFor="hourly-labour-fee">Hourly Labour Rate (Excluding VAT) (£)</Label>
+                    <Input 
+                      id="hourly-labour-fee" 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={hourlyLabourFeeDisplay}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setHourlyLabourFeeDisplay(value);
+                        // Convert to pence and update companyInfo
+                        if (value === "" || value === ".") {
+                          setCompanyInfo(prev => prev ? { ...prev, hourlyLabourFee: null } : prev);
+                        } else {
+                          const numValue = parseFloat(value);
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            const penceValue = Math.round(numValue * 100);
+                            setCompanyInfo(prev => prev ? { ...prev, hourlyLabourFee: penceValue } : prev);
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Format to 2 decimal places on blur
+                        const value = e.target.value;
+                        if (value && value !== ".") {
+                          const numValue = parseFloat(value);
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            setHourlyLabourFeeDisplay(numValue.toFixed(2));
+                            const penceValue = Math.round(numValue * 100);
+                            setCompanyInfo(prev => prev ? { ...prev, hourlyLabourFee: penceValue } : prev);
+                          } else {
+                            setHourlyLabourFeeDisplay("");
+                            setCompanyInfo(prev => prev ? { ...prev, hourlyLabourFee: null } : prev);
+                          }
+                        } else {
+                          setHourlyLabourFeeDisplay("");
+                          setCompanyInfo(prev => prev ? { ...prev, hourlyLabourFee: null } : prev);
+                        }
+                      }}
+                      placeholder="e.g., 50.00"
+                    />
+                    <p className="text-sm text-gray-500">
+                      The hourly rate used to calculate labour charges in job sheets. This will be multiplied by the total labour hours.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="job-tracker-enabled">Job Status Tracker</Label>
+                      <p className="text-sm text-gray-500">
+                        Enable customers to track their job status online. When enabled, tracker links will appear in job receipts and email confirmations.
+                      </p>
+                    </div>
+                    <Switch
+                      id="job-tracker-enabled"
+                      checked={companyInfo?.jobTrackerEnabled ?? true}
+                      onCheckedChange={(checked) => 
+                        setCompanyInfo(prev => prev ? { ...prev, jobTrackerEnabled: checked } : prev)
+                      }
+                    />
+                  </div>
+                </div>
                 
                 <div className="mt-6 flex justify-end">
                   <Button 
                     onClick={saveCompanyInfo} 
                     className="bg-green-700 hover:bg-green-800"
+                    disabled={!companyInfo || isLoadingBusiness}
                   >
                     Save Changes
                   </Button>
                 </div>
+                  </>
+                )}
                 
                 <Separator className="my-4" />
                 

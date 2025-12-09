@@ -10,6 +10,10 @@ import {
   jobUpdates, JobUpdate, InsertJobUpdate,
   activities, Activity, InsertActivity,
   workCompleted, WorkCompleted, InsertWorkCompleted,
+  labourEntries, LabourEntry, InsertLabourEntry,
+  partsUsed, PartUsed, InsertPartUsed,
+  jobNotes, JobNote, InsertJobNote,
+  jobAttachments, JobAttachment, InsertJobAttachment,
   paymentRequests, PaymentRequest, InsertPaymentRequest,
   jobCounter, JobCounter,
   partsOnOrder, PartOnOrder, InsertPartOnOrder,
@@ -88,8 +92,10 @@ export interface IStorage {
   // Equipment operations
   getEquipment(id: number, businessId: number): Promise<Equipment | undefined>;
   getEquipmentByCustomer(customerId: number, businessId: number): Promise<Equipment[]>;
+  getEquipmentBySerialNumber(serialNumber: string, businessId: number): Promise<Equipment | undefined>;
   createEquipment(equipment: InsertEquipment): Promise<Equipment>;
   updateEquipment(id: number, equipment: InsertEquipment, businessId: number): Promise<Equipment>;
+  deleteEquipment(id: number, businessId: number): Promise<boolean>;
   getAllEquipment(businessId: number): Promise<Equipment[]>;
 
   // Job operations
@@ -154,6 +160,28 @@ export interface IStorage {
   createWorkCompleted(workData: InsertWorkCompleted): Promise<WorkCompleted>;
   updateWorkCompleted(id: number, workData: Partial<InsertWorkCompleted>, businessId: number): Promise<WorkCompleted | undefined>;
   deleteWorkCompleted(id: number, businessId: number): Promise<boolean>;
+
+  // Job Sheet operations - Labour Entries
+  getLabourEntriesByJobId(jobId: number, businessId: number): Promise<LabourEntry[]>;
+  createLabourEntry(labourData: InsertLabourEntry): Promise<LabourEntry>;
+  updateLabourEntry(id: number, labourData: Partial<InsertLabourEntry>, businessId: number): Promise<LabourEntry | undefined>;
+  deleteLabourEntry(id: number, businessId: number): Promise<boolean>;
+
+  // Job Sheet operations - Parts Used
+  getPartsUsedByJobId(jobId: number, businessId: number): Promise<PartUsed[]>;
+  createPartUsed(partData: InsertPartUsed): Promise<PartUsed>;
+  updatePartUsed(id: number, partData: Partial<InsertPartUsed>, businessId: number): Promise<PartUsed | undefined>;
+  deletePartUsed(id: number, businessId: number): Promise<boolean>;
+
+  // Job Sheet operations - Job Notes
+  getJobNoteByJobId(jobId: number, businessId: number): Promise<JobNote | undefined>;
+  createOrUpdateJobNote(noteData: InsertJobNote): Promise<JobNote>;
+  deleteJobNote(jobId: number, businessId: number): Promise<boolean>;
+
+  // Job Sheet operations - Job Attachments
+  getJobAttachmentsByJobId(jobId: number, businessId: number): Promise<JobAttachment[]>;
+  createJobAttachment(attachmentData: InsertJobAttachment): Promise<JobAttachment>;
+  deleteJobAttachment(id: number, businessId: number): Promise<boolean>;
 
   // Payment Request operations
   getPaymentRequest(id: number, businessId: number): Promise<PaymentRequest | undefined>;
@@ -673,6 +701,13 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  async getEquipmentBySerialNumber(serialNumber: string, businessId: number): Promise<Equipment | undefined> {
+    const [equipmentItem] = await db.select().from(equipment).where(
+      and(eq(equipment.serialNumber, serialNumber), eq(equipment.businessId, businessId))
+    );
+    return equipmentItem;
+  }
+
   async createEquipment(equipmentData: InsertEquipment): Promise<Equipment> {
     const [newEquipment] = await db.insert(equipment).values(equipmentData).returning();
     return newEquipment;
@@ -687,6 +722,16 @@ export class DatabaseStorage implements IStorage {
       )
       .returning();
     return updatedEquipment;
+  }
+
+  async deleteEquipment(id: number, businessId: number): Promise<boolean> {
+    const [deleted] = await db
+      .delete(equipment)
+      .where(
+        and(eq(equipment.id, id), eq(equipment.businessId, businessId))
+      )
+      .returning();
+    return !!deleted;
   }
 
   async getAllEquipment(businessId: number): Promise<Equipment[]> {
@@ -750,12 +795,14 @@ export class DatabaseStorage implements IStorage {
           (job as any).customerName = customer.name;
           (job as any).customerEmail = customer.email || "";
           (job as any).customerPhone = customer.phone || "";
+          (job as any).customerAddress = customer.address || "";
         }
       } else if ((job as any).customerName) {
         // Name-only mode: customer data is stored directly on the job
-        // Ensure customerEmail and customerPhone are included (they may be null)
+        // Ensure customerEmail, customerPhone, and customerAddress are included (they may be null)
         (job as any).customerEmail = (job as any).customerEmail || "";
         (job as any).customerPhone = (job as any).customerPhone || "";
+        (job as any).customerAddress = (job as any).customerAddress || "";
       }
     }
     
@@ -786,6 +833,43 @@ export class DatabaseStorage implements IStorage {
           // If duplicate found, generate a new one
           console.warn(`[Storage] createJob - Duplicate jobId ${finalJobId} detected for business ${businessId}, generating new ID`);
           finalJobId = await this.generateNextJobId(businessId);
+        } else {
+          // If a custom jobId is provided, ensure the counter is at least as high
+          // Extract the number from the jobId format: B{businessId}-WS-{number}
+          const jobIdMatch = finalJobId.match(/^B(\d+)-WS-(\d+)$/);
+          if (jobIdMatch) {
+            const jobIdBusinessId = parseInt(jobIdMatch[1], 10);
+            const providedNumber = parseInt(jobIdMatch[2], 10);
+            
+            // Validate that the businessId in the jobId matches the current business
+            if (jobIdBusinessId !== businessId) {
+              console.warn(`[Storage] createJob - JobId businessId (${jobIdBusinessId}) doesn't match current businessId (${businessId}), generating new ID`);
+              finalJobId = await this.generateNextJobId(businessId);
+            } else {
+              // Update counter if the provided number is higher than current counter
+              // This ensures sequential IDs even if a custom jobId is provided
+              await db.transaction(async (tx) => {
+                let [counter] = await tx.select().from(jobCounter).where(eq(jobCounter.businessId, businessId));
+                
+                if (!counter) {
+                  [counter] = await tx.insert(jobCounter).values({
+                    businessId: businessId,
+                    currentNumber: providedNumber,
+                    updatedAt: new Date().toISOString()
+                  }).returning();
+                } else if (counter.currentNumber < providedNumber) {
+                  // Update counter to match or exceed the provided number
+                  // This keeps the counter in sync for sequential generation
+                  await tx.update(jobCounter)
+                    .set({
+                      currentNumber: providedNumber,
+                      updatedAt: new Date().toISOString()
+                    })
+                    .where(eq(jobCounter.id, counter.id));
+                }
+              });
+            }
+          }
         }
       }
 
@@ -868,6 +952,29 @@ export class DatabaseStorage implements IStorage {
           const insertData = { ...cleanJobData, jobId: currentJobId };
           const [job] = await db.insert(jobs).values(insertData as any).returning();
           console.log(`[Storage] createJob - Created job with id: ${job.id}, jobId: ${job.jobId}, businessId: ${job.businessId}`);
+          
+          // Enhance job with customer data before returning (similar to getJob)
+          if (job.customerId) {
+            try {
+              const customer = await this.getCustomer(job.customerId, businessId);
+              if (customer) {
+                (job as any).customerName = customer.name;
+                (job as any).customerEmail = customer.email || "";
+                (job as any).customerPhone = customer.phone || "";
+                (job as any).customerAddress = customer.address || "";
+              }
+            } catch (error) {
+              console.error(`[Storage] createJob - Error fetching customer ${job.customerId} for job ${job.id}:`, error);
+              // Continue without customer data if fetch fails
+            }
+          } else if ((job as any).customerName) {
+            // Name-only mode: customer data is stored directly on the job
+            // Ensure customerEmail, customerPhone, and customerAddress are included (they may be null)
+            (job as any).customerEmail = (job as any).customerEmail || "";
+            (job as any).customerPhone = (job as any).customerPhone || "";
+            (job as any).customerAddress = (job as any).customerAddress || "";
+          }
+          
           return job;
         } catch (error: any) {
           // Handle unique constraint violation (database-level check)
@@ -896,6 +1003,31 @@ export class DatabaseStorage implements IStorage {
         and(eq(jobs.id, id), eq(jobs.businessId, businessId))
       )
       .returning();
+    
+    if (job) {
+      // Enhance job with customer data before returning (similar to getJob)
+      if (job.customerId) {
+        try {
+          const customer = await this.getCustomer(job.customerId, businessId);
+          if (customer) {
+            (job as any).customerName = customer.name;
+            (job as any).customerEmail = customer.email || "";
+            (job as any).customerPhone = customer.phone || "";
+            (job as any).customerAddress = customer.address || "";
+          }
+        } catch (error) {
+          console.error(`[Storage] updateJob - Error fetching customer ${job.customerId} for job ${job.id}:`, error);
+          // Continue without customer data if fetch fails
+        }
+      } else if ((job as any).customerName) {
+        // Name-only mode: customer data is stored directly on the job
+        // Ensure customerEmail, customerPhone, and customerAddress are included (they may be null)
+        (job as any).customerEmail = (job as any).customerEmail || "";
+        (job as any).customerPhone = (job as any).customerPhone || "";
+        (job as any).customerAddress = (job as any).customerAddress || "";
+      }
+    }
+    
     return job;
   }
 
@@ -957,11 +1089,18 @@ export class DatabaseStorage implements IStorage {
             (job as any).customerName = customer.name;
             (job as any).customerEmail = customer.email || "";
             (job as any).customerPhone = customer.phone || "";
+            (job as any).customerAddress = customer.address || "";
           }
         } catch (error) {
           console.error(`[Storage] getAllJobs - Error fetching customer ${job.customerId} for job ${job.id}:`, error);
           // Continue without customer data if fetch fails
         }
+      } else if ((job as any).customerName) {
+        // Name-only mode: customer data is stored directly on the job
+        // Ensure customerEmail, customerPhone, and customerAddress are included (they may be null)
+        (job as any).customerEmail = (job as any).customerEmail || "";
+        (job as any).customerPhone = (job as any).customerPhone || "";
+        (job as any).customerAddress = (job as any).customerAddress || "";
       }
       return job;
     }));
@@ -1495,6 +1634,185 @@ export class DatabaseStorage implements IStorage {
       .delete(workCompleted)
       .where(
         and(eq(workCompleted.id, id), eq(workCompleted.businessId, businessId))
+      )
+      .returning();
+    return !!deleted;
+  }
+
+  // Job Sheet operations - Labour Entries
+  async getLabourEntriesByJobId(jobId: number, businessId: number): Promise<LabourEntry[]> {
+    return await db
+      .select()
+      .from(labourEntries)
+      .where(
+        and(eq(labourEntries.jobId, jobId), eq(labourEntries.businessId, businessId))
+      )
+      .orderBy(desc(labourEntries.createdAt));
+  }
+
+  async createLabourEntry(labourData: InsertLabourEntry): Promise<LabourEntry> {
+    const [entry] = await db
+      .insert(labourEntries)
+      .values({
+        ...labourData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+      .returning();
+    return entry;
+  }
+
+  async updateLabourEntry(id: number, labourData: Partial<InsertLabourEntry>, businessId: number): Promise<LabourEntry | undefined> {
+    const [entry] = await db
+      .update(labourEntries)
+      .set({
+        ...labourData,
+        updatedAt: new Date().toISOString()
+      })
+      .where(
+        and(eq(labourEntries.id, id), eq(labourEntries.businessId, businessId))
+      )
+      .returning();
+    return entry;
+  }
+
+  async deleteLabourEntry(id: number, businessId: number): Promise<boolean> {
+    const [deleted] = await db
+      .delete(labourEntries)
+      .where(
+        and(eq(labourEntries.id, id), eq(labourEntries.businessId, businessId))
+      )
+      .returning();
+    return !!deleted;
+  }
+
+  // Job Sheet operations - Parts Used
+  async getPartsUsedByJobId(jobId: number, businessId: number): Promise<PartUsed[]> {
+    return await db
+      .select()
+      .from(partsUsed)
+      .where(
+        and(eq(partsUsed.jobId, jobId), eq(partsUsed.businessId, businessId))
+      )
+      .orderBy(desc(partsUsed.createdAt));
+  }
+
+  async createPartUsed(partData: InsertPartUsed): Promise<PartUsed> {
+    const [part] = await db
+      .insert(partsUsed)
+      .values({
+        ...partData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+      .returning();
+    return part;
+  }
+
+  async updatePartUsed(id: number, partData: Partial<InsertPartUsed>, businessId: number): Promise<PartUsed | undefined> {
+    const [part] = await db
+      .update(partsUsed)
+      .set({
+        ...partData,
+        updatedAt: new Date().toISOString()
+      })
+      .where(
+        and(eq(partsUsed.id, id), eq(partsUsed.businessId, businessId))
+      )
+      .returning();
+    return part;
+  }
+
+  async deletePartUsed(id: number, businessId: number): Promise<boolean> {
+    const [deleted] = await db
+      .delete(partsUsed)
+      .where(
+        and(eq(partsUsed.id, id), eq(partsUsed.businessId, businessId))
+      )
+      .returning();
+    return !!deleted;
+  }
+
+  // Job Sheet operations - Job Notes
+  async getJobNoteByJobId(jobId: number, businessId: number): Promise<JobNote | undefined> {
+    const [note] = await db
+      .select()
+      .from(jobNotes)
+      .where(
+        and(eq(jobNotes.jobId, jobId), eq(jobNotes.businessId, businessId))
+      )
+      .limit(1);
+    return note;
+  }
+
+  async createOrUpdateJobNote(noteData: InsertJobNote): Promise<JobNote> {
+    // Check if note exists
+    const existing = await this.getJobNoteByJobId(noteData.jobId, noteData.businessId);
+    
+    if (existing) {
+      // Update existing note
+      const [updated] = await db
+        .update(jobNotes)
+        .set({
+          ...noteData,
+          updatedAt: new Date().toISOString()
+        })
+        .where(
+          and(eq(jobNotes.jobId, noteData.jobId), eq(jobNotes.businessId, noteData.businessId))
+        )
+        .returning();
+      return updated;
+    } else {
+      // Create new note
+      const [created] = await db
+        .insert(jobNotes)
+        .values({
+          ...noteData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+        .returning();
+      return created;
+    }
+  }
+
+  async deleteJobNote(jobId: number, businessId: number): Promise<boolean> {
+    const [deleted] = await db
+      .delete(jobNotes)
+      .where(
+        and(eq(jobNotes.jobId, jobId), eq(jobNotes.businessId, businessId))
+      )
+      .returning();
+    return !!deleted;
+  }
+
+  // Job Sheet operations - Job Attachments
+  async getJobAttachmentsByJobId(jobId: number, businessId: number): Promise<JobAttachment[]> {
+    return await db
+      .select()
+      .from(jobAttachments)
+      .where(
+        and(eq(jobAttachments.jobId, jobId), eq(jobAttachments.businessId, businessId))
+      )
+      .orderBy(desc(jobAttachments.createdAt));
+  }
+
+  async createJobAttachment(attachmentData: InsertJobAttachment): Promise<JobAttachment> {
+    const [attachment] = await db
+      .insert(jobAttachments)
+      .values({
+        ...attachmentData,
+        createdAt: new Date().toISOString()
+      })
+      .returning();
+    return attachment;
+  }
+
+  async deleteJobAttachment(id: number, businessId: number): Promise<boolean> {
+    const [deleted] = await db
+      .delete(jobAttachments)
+      .where(
+        and(eq(jobAttachments.id, id), eq(jobAttachments.businessId, businessId))
       )
       .returning();
     return !!deleted;

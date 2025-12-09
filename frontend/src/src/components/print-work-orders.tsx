@@ -240,7 +240,7 @@ export function PrintWorkOrders({ trigger }: PrintWorkOrdersProps) {
 
             {/* Footer */}
             <div className="mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-500">
-              <p>Moore Horticulture Equipment - Workshop Management System</p>
+              <p>Moore Horticulture Equipment - Workshop Operations System</p>
               <p>This document contains {activeJobs.length} outstanding work orders as of {formatDate(new Date().toISOString())}</p>
             </div>
           </div>

@@ -767,18 +767,17 @@ export default function Callbacks() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl">
-        {/* Modern Header with Stats */}
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent mb-2">
-                Customer Callbacks
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400 text-lg">
-                Manage and track all customer callback requests
-              </p>
-            </div>
+      <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              <PhoneCall className="h-5 w-5" />
+              Customer Callbacks
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage and track all customer callback requests</p>
+          </div>
+          <div className="flex gap-2">
             <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
               setIsCreateDialogOpen(open);
               if (!open) {
@@ -790,18 +789,19 @@ export default function Callbacks() {
             }}>
               <DialogTrigger asChild>
                 <Button 
-                  size="lg"
-                  className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-200"
+                  size="sm"
+                  className="h-9 bg-green-700 hover:bg-green-800"
                 >
-                  <Plus size={20} />
-                  <span className="font-semibold">New Callback</span>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Callback
                 </Button>
               </DialogTrigger>
             </Dialog>
           </div>
+        </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -844,7 +844,6 @@ export default function Callbacks() {
               </CardContent>
             </Card>
           </div>
-        </div>
 
         <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
           setIsCreateDialogOpen(open);
@@ -1117,9 +1116,6 @@ export default function Callbacks() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
-
-      {/* Comprehensive Callback Completion Dialog */}
       <Dialog open={isNotesDialogOpen} onOpenChange={(open) => {
         setIsNotesDialogOpen(open);
         if (!open) {
@@ -1902,6 +1898,7 @@ export default function Callbacks() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteConfirmDialogOpen} onOpenChange={setIsDeleteConfirmDialogOpen}>

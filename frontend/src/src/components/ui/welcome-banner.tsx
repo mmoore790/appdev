@@ -12,10 +12,26 @@ interface WelcomeBannerProps {
   className?: string;
 }
 
+type Business = {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+  jobTrackerEnabled?: boolean | null;
+};
+
 export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [greeting, setGreeting] = useState("");
   const [greetingIcon, setGreetingIcon] = useState<React.ReactNode>(null);
+  
+  // Fetch business information
+  const { data: businessData } = useQuery<Business>({
+    queryKey: ["/api/business/me"],
+  });
   
   // Fetch real-time data for actionable information
   const { data: tasks = [] } = useQuery<any[]>({
@@ -77,7 +93,18 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
             <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
               {greeting}, <span className="text-green-600 dark:text-green-400">{userName}</span>
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            {businessData?.name ? (
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
+                {businessData.name}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <Link href="/settings" className="text-green-600 dark:text-green-400 hover:underline">
+                  Update company settings
+                </Link> with your business information
+              </p>
+            )}
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {userRole && (
                 <span className="font-medium text-green-600 dark:text-green-400 mr-2">{userRole}</span>
               )}

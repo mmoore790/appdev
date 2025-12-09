@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HorizontalNav } from "@/components/ui/horizontal-nav";
 import { Spinner } from "@/components/ui/spinner";
+import logLogo from "@/assets/logo-m.png";
 import Dashboard from "@/pages/dashboard";
 import Tasks from "@/pages/tasks";
 import Workshop from "@/pages/workshop";
@@ -226,8 +227,14 @@ function AuthAwareLayout() {
             <Router />
           </div>
         </main>
-        <footer className="bg-white border-t border-slate-200 py-3 px-4 sm:py-4 sm:px-6 text-center text-xs text-slate-600 flex-shrink-0">
-          <p className="text-slate-700">BoltDown UK Copyright 2025</p>
+        <footer className="bg-white border-t border-slate-200 py-4 px-4 sm:py-6 sm:px-6 text-center flex-shrink-0">
+          <div className="flex flex-col items-center gap-3">
+            <img src={logLogo} alt="BoltDown Logo" className="h-8 sm:h-10 w-auto" />
+            <div className="flex flex-col items-center gap-1 text-black text-[10px] sm:text-xs">
+              <p>BoltDown UK © 2025</p>
+              <p>support@boltdown.co.uk</p>
+            </div>
+          </div>
         </footer>
       </div>
     </div>

@@ -127,7 +127,7 @@ export default function LoginPage() {
               <img
                 src={logoPath}
                 alt="Moore Horticulture Equipment Logo"
-                className="mx-auto h-28 sm:h-36 w-auto drop-shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
+                className="mx-auto h-20 sm:h-24 w-auto drop-shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
               />
             </div>
 

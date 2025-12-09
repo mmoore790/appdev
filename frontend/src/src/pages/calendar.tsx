@@ -1437,84 +1437,73 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ marginLeft: '-1rem', marginRight: '-1rem', paddingLeft: '1rem', paddingRight: '1rem' }}>
-      {/* Header with navigation and view controls */}
-      <div className="flex items-center justify-between mb-4 pb-4 border-b px-4">
-        <div className="flex items-center gap-4">
+    <div className="flex flex-col h-screen w-full overflow-hidden" style={{ marginLeft: '-1rem', marginRight: '-1rem', paddingLeft: '1rem', paddingRight: '1rem' }}>
+      <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px] flex-shrink-0">
+        {/* Header with navigation and view controls */}
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Staff Calendar</h1>
-            <p className="text-lg font-semibold text-slate-700 mt-1">
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              Staff Calendar
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
               {viewMode === "day" 
                 ? format(selectedDate, "EEEE, MMMM d, yyyy")
                 : `${format(dateRange.days[0], "MMM d")} - ${format(dateRange.days[dateRange.days.length - 1], "MMM d, yyyy")}`
               }
             </p>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {/* View Mode Toggle */}
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "day" | "week")}>
-            <TabsList>
-              <TabsTrigger value="day">
-                <LayoutList className="h-4 w-4 mr-2" />
-                Day
-              </TabsTrigger>
-              <TabsTrigger value="week">
-                <LayoutGrid className="h-4 w-4 mr-2" />
-                Week
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* Date Navigation */}
-          <div className="flex items-center gap-1 border rounded-lg p-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate("fast-prev")}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate("prev")}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateDate("today")}
-              className="h-8 px-3"
-            >
-              Today
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate("next")}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigateDate("fast-next")}
-              className="h-8 w-8 p-0"
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
+          
+          <div className="flex items-center gap-2">
+            {/* Date Navigation */}
+            <div className="flex items-center gap-1 border rounded-lg p-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate("fast-prev")}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate("prev")}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigateDate("today")}
+                className="h-8 px-3"
+              >
+                Today
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate("next")}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigateDate("fast-next")}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-        <div className="flex-1 flex gap-4 overflow-hidden px-4">
+        <div className="flex-1 flex gap-4 overflow-hidden px-4 min-h-0" style={{ height: 'calc(100vh - 200px)', maxHeight: 'calc(100vh - 200px)', overflow: 'hidden' }}>
           {/* Calendar Grid - wider to show more hours */}
           <div className="flex-[3] border border-slate-200 rounded-lg bg-white min-w-0 flex flex-col overflow-hidden">
             {/* Single scrollable container for header and body */}
@@ -1682,15 +1671,15 @@ export default function CalendarPage() {
           </div>
 
           {/* Jobs Panel - narrower to give more space to calendar */}
-          <div className="w-64 border border-slate-200 rounded-lg bg-white flex flex-col flex-shrink-0">
-            <div className="p-4 border-b border-slate-200">
+          <div className="w-64 border border-slate-200 rounded-lg bg-white flex flex-col flex-shrink-0" style={{ height: '100%', maxHeight: '100%', overflow: 'hidden' }}>
+            <div className="p-4 border-b border-slate-200 flex-shrink-0">
               <h2 className="font-semibold text-slate-900 flex items-center gap-2">
                 <Briefcase className="h-5 w-5" />
                 Active Jobs
               </h2>
               <p className="text-xs text-slate-500 mt-1">Drag to assign to time slots</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="overflow-y-auto p-4 space-y-2" style={{ flex: '1 1 auto', minHeight: 0, maxHeight: '100%' }}>
               {activeJobs.length === 0 ? (
                 <div className="text-center text-sm text-slate-500 py-8">
                   No active jobs available

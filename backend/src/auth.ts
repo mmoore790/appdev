@@ -27,15 +27,18 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    console.log(`[Auth] Attempting token authentication for ${req.path}, token length: ${token.length}`);
     const tokenData = tokenStorage.validateToken(token);
 
     if (tokenData) {
       // Valid token - use it to set session data for this request
-      console.log(`User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
+      console.log(`[Auth] User authenticated via token: userId=${tokenData.userId}, role=${tokenData.role}, businessId=${tokenData.businessId}`);
       req.session.userId = tokenData.userId;
       req.session.role = tokenData.role;
       req.session.businessId = tokenData.businessId;
       return next();
+    } else {
+      console.log(`[Auth] Token validation failed for ${req.path}. Token may be expired or invalid.`);
     }
   }
 
@@ -58,11 +61,14 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
   const hasAuthHeader = req.headers.authorization ? 'Yes' : 'No';
   const hasQueryToken = req.query.token ? 'Yes' : 'No';
   const hasSessionData = req.session ? 'Yes' : 'No';
+  const sessionUserId = req.session?.userId || 'None';
 
-  console.log(`Authentication failed: No valid session or token found.
+  console.log(`[Auth] Authentication failed for ${req.path}: No valid session or token found.
     Auth header present: ${hasAuthHeader}
     Query token present: ${hasQueryToken}
     Session exists: ${hasSessionData}
+    Session userId: ${sessionUserId}
+    Request method: ${req.method}
   `);
 
   return res.status(401).json({ message: "Unauthorized" });

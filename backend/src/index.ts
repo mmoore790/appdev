@@ -79,11 +79,13 @@ app.use(session({
   saveUninitialized: false, // Don't create session until something is stored (reduces DB connections)
   rolling: true, // Reset expiration on activity
   cookie: {
-    secure: true, // Required for cross-origin cookies with sameSite: 'none'
+    secure: process.env.NODE_ENV === 'production', // Only require HTTPS in production
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     path: '/',
-    sameSite: 'none' // Required for cross-origin requests (Vercel frontend -> Render backend)
+    // In development with proxy, use 'lax' (requests appear same-origin)
+    // In production, use 'none' for cross-origin (Vercel -> Render)
+    sameSite: (process.env.NODE_ENV === 'production' ? 'none' : 'lax') as const
   }
 }));
 

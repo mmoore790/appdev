@@ -1,8 +1,8 @@
-import { useState, type MouseEvent } from "react";
+import { useState, useEffect, type MouseEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Plus, Printer } from "lucide-react";
-import { Card, CardContent } from "./ui/card";
+import { Search, Plus, Printer, Phone, Mail, MapPin, FileText as FileTextIcon, X } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import {
@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { formatDate, getStatusColor, cn } from "../lib/utils";
 import { JobWizard } from "./job-wizard";
 import { PrintJobDialog } from "./print-job-dialog";
+import { StatusTimelineDialog } from "./status-timeline-dialog";
 import { apiRequest } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 
@@ -50,6 +51,10 @@ export function WorkshopJobsTable({
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [statusChangeJob, setStatusChangeJob] = useState<any>(null);
   const [newStatus, setNewStatus] = useState<string>("");
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [selectedCustomerJob, setSelectedCustomerJob] = useState<any>(null);
+  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
+  const [selectedTimelineJob, setSelectedTimelineJob] = useState<any>(null);
   const itemsPerPage = 10;
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -72,6 +77,26 @@ export function WorkshopJobsTable({
       toast({
         title: "Error",
         description: error.message || "Failed to update job status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const assignJobMutation = useMutation({
+    mutationFn: async ({ jobId, assignedTo }: { jobId: number; assignedTo: number | null }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}`, { assignedTo });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({
+        title: "Success",
+        description: "Job assignment updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update job assignment",
         variant: "destructive",
       });
     },
@@ -153,6 +178,11 @@ export function WorkshopJobsTable({
   const startIndex = (effectivePage - 1) * itemsPerPage;
   const paginatedJobs = filteredJobs.slice(startIndex, startIndex + itemsPerPage);
 
+  // Reset to page 1 when jobs list changes (e.g., switching tabs)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [jobs.length]);
+
   const goToPage = (page: number) => {
     if (page < 1) page = 1;
     if (page > totalPages) page = totalPages;
@@ -187,6 +217,29 @@ export function WorkshopJobsTable({
   function getCustomerEmail(customerId: number): string {
     return "";
   }
+
+  function getCustomerPhone(customerId: number | null, job?: any): string {
+    // First check if phone is on the job object
+    if (job && job.customerPhone) {
+      return job.customerPhone;
+    }
+    
+    // Then check customerData array
+    if (customerId && Array.isArray(customerData)) {
+      const customer = customerData.find((c: any) => c && c.id === customerId);
+      if (customer && customer.phone) {
+        return customer.phone;
+      }
+    }
+    
+    return "";
+  }
+
+  const handleCustomerClick = (job: any, event: MouseEvent) => {
+    event.stopPropagation();
+    setSelectedCustomerJob(job);
+    setCustomerDialogOpen(true);
+  };
 
   function getEquipmentName(job: any): string {
     if (!job) return "No equipment specified";
@@ -224,12 +277,52 @@ export function WorkshopJobsTable({
         return "Waiting Assessment";
       case "in_progress":
         return "In Progress";
+      case "on_hold":
+        return "On Hold";
+      case "ready_for_pickup":
+        return "Ready for Pickup";
       case "completed":
         return "Completed";
       case "cancelled":
         return "Cancelled";
       default:
         return status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+  }
+
+  function formatTimeInStatus(days: number | undefined): string {
+    if (days === undefined || days === null) return "—";
+    
+    if (days < 1) {
+      const hours = Math.round(days * 24);
+      if (hours < 1) {
+        const minutes = Math.round(days * 24 * 60);
+        return `${minutes}m`;
+      }
+      return `${hours}h`;
+    }
+    
+    if (days < 7) {
+      return `${Math.round(days)}d`;
+    }
+    
+    const weeks = Math.floor(days / 7);
+    const remainingDays = Math.round(days % 7);
+    if (remainingDays === 0) {
+      return `${weeks}w`;
+    }
+    return `${weeks}w ${remainingDays}d`;
+  }
+
+  function getTimeInStatusColor(days: number | undefined): string {
+    if (days === undefined || days === null) return "text-neutral-500";
+    
+    if (days < 1) {
+      return "text-green-600 font-semibold";
+    } else if (days < 3) {
+      return "text-orange-600 font-semibold";
+    } else {
+      return "text-red-600 font-semibold";
     }
   }
 
@@ -266,29 +359,32 @@ export function WorkshopJobsTable({
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
         <div className="hidden lg:block">
-          <div className="overflow-x-auto overflow-y-auto max-h-[600px] px-4 py-4">
-            <Table className="min-w-[960px]">
+          <div className="px-2 py-4">
+            <Table className="w-full table-auto">
                 <TableHeader>
                   <TableRow className="border-b border-neutral-200">
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[120px]">
                       Job ID
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 min-w-[150px]">
                       Brand &amp; Model
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 min-w-[180px]">
                       Customer
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[160px]">
                       Assigned To
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[140px]">
                       Status
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[120px]">
+                      Time in Status
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[110px]">
                       Created
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <TableHead className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[100px]">
                       Actions
                     </TableHead>
                   </TableRow>
@@ -296,7 +392,7 @@ export function WorkshopJobsTable({
               <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-12 text-center">
+                      <TableCell colSpan={8} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
                         <p className="text-sm text-neutral-600">Loading jobs...</p>
@@ -305,7 +401,7 @@ export function WorkshopJobsTable({
                   </TableRow>
                   ) : filteredJobs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-12 text-center">
+                      <TableCell colSpan={8} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="rounded-full bg-neutral-100 p-3">
                           <svg className="h-8 w-8 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -333,7 +429,7 @@ export function WorkshopJobsTable({
                           }
                         }}
                       >
-                        <TableCell className="px-6 py-4 text-sm font-semibold text-green-800">
+                        <TableCell className="px-3 py-4 text-sm font-semibold text-green-800">
                           <button
                             type="button"
                             className="text-left underline-offset-2 hover:underline focus-visible:underline"
@@ -345,10 +441,13 @@ export function WorkshopJobsTable({
                             {job.jobId}
                           </button>
                         </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-neutral-700">
+                      <TableCell className="px-3 py-4 text-sm text-neutral-700">
                         {getEquipmentName(job)}
                       </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-neutral-700">
+                      <TableCell 
+                        className="px-3 py-4 text-sm text-neutral-700 cursor-pointer hover:bg-neutral-50 transition-colors"
+                        onClick={(e) => handleCustomerClick(job, e)}
+                      >
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-sm font-semibold text-green-700">
                             {getCustomerName(job.customerId, job)
@@ -362,25 +461,42 @@ export function WorkshopJobsTable({
                               {getCustomerName(job.customerId, job)}
                             </div>
                             <div className="text-xs text-neutral-500">
-                              {getCustomerEmail(job.customerId)}
+                              {getCustomerPhone(job.customerId, job) || "Click to view details"}
                             </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-neutral-700">
-                        {job.assignedTo ? (
-                          getAssigneeName(job.assignedTo)
-                        ) : (
-                          <span className="font-medium text-amber-600">Unassigned</span>
-                        )}
+                      <TableCell className="px-3 py-4 text-sm text-neutral-700" onClick={stopPropagation}>
+                        <Select
+                          value={job.assignedTo?.toString() || "unassigned"}
+                          onValueChange={(value) => {
+                            const assignedTo = value === "unassigned" ? null : parseInt(value);
+                            assignJobMutation.mutate({ jobId: job.id, assignedTo });
+                          }}
+                          disabled={assignJobMutation.isPending}
+                        >
+                          <SelectTrigger className="w-full border-neutral-200">
+                            <SelectValue placeholder="Unassigned" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {Array.isArray(userData) && userData.length > 0 && userData.map((user: any) => (
+                              user && user.id ? (
+                                <SelectItem key={user.id} value={user.id.toString()}>
+                                  {user.fullName || user.username}
+                                </SelectItem>
+                              ) : null
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
-                        <TableCell className="px-6 py-4" onClick={stopPropagation}>
+                        <TableCell className="px-3 py-4" onClick={stopPropagation}>
                         <Select
                           value={job.status}
                           onValueChange={(status) => handleStatusChange(job, status)}
                           disabled={statusUpdateMutation.isPending}
                         >
-                          <SelectTrigger className="w-44 border-neutral-200">
+                          <SelectTrigger className="w-full border-neutral-200">
                             <SelectValue>
                               <span
                                 className={cn(
@@ -396,15 +512,39 @@ export function WorkshopJobsTable({
                           <SelectContent>
                             <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
                             <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="on_hold">On Hold</SelectItem>
                             <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="px-6 py-4 text-sm text-neutral-600">
+                      <TableCell 
+                        className="px-3 py-4 text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTimelineJob(job);
+                          setTimelineDialogOpen(true);
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className={cn(
+                            "text-left underline-offset-2 hover:underline focus-visible:underline cursor-pointer",
+                            getTimeInStatusColor((job as any).timeInStatusDays)
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTimelineJob(job);
+                            setTimelineDialogOpen(true);
+                          }}
+                        >
+                          {formatTimeInStatus((job as any).timeInStatusDays)}
+                        </button>
+                      </TableCell>
+                      <TableCell className="px-3 py-4 text-sm text-neutral-600">
                         {formatDate(job.createdAt)}
                       </TableCell>
-                        <TableCell className="px-6 py-4 text-right" onClick={stopPropagation}>
+                        <TableCell className="px-3 py-4 text-right" onClick={stopPropagation}>
                           <div className="flex items-center justify-end gap-2">
                             <PrintJobDialog
                               job={job}
@@ -432,7 +572,7 @@ export function WorkshopJobsTable({
           </div>
         </div>
 
-        <div className="lg:hidden overflow-y-auto max-h-[600px] px-4 py-4">
+        <div className="lg:hidden px-4 py-4">
           {isLoading ? (
             <div className="py-10 text-center">
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
@@ -498,18 +638,34 @@ export function WorkshopJobsTable({
                           <p className="text-sm font-medium text-neutral-800">
                             {getCustomerName(job.customerId, job)}
                           </p>
-                          <p className="text-xs text-neutral-500">
-                            Assigned:&nbsp;
-                            {job.assignedTo ? (
-                              getAssigneeName(job.assignedTo)
-                            ) : (
-                              <span className="font-semibold text-amber-600">Unassigned</span>
-                            )}
-                          </p>
+                          <div className="mt-1" onClick={stopPropagation}>
+                            <Select
+                              value={job.assignedTo?.toString() || "unassigned"}
+                              onValueChange={(value) => {
+                                const assignedTo = value === "unassigned" ? null : parseInt(value);
+                                assignJobMutation.mutate({ jobId: job.id, assignedTo });
+                              }}
+                              disabled={assignJobMutation.isPending}
+                            >
+                              <SelectTrigger className="h-7 w-full border-neutral-200 text-xs">
+                                <SelectValue placeholder="Unassigned" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                {Array.isArray(userData) && userData.length > 0 && userData.map((user: any) => (
+                                  user && user.id ? (
+                                    <SelectItem key={user.id} value={user.id.toString()}>
+                                      {user.fullName || user.username}
+                                    </SelectItem>
+                                  ) : null
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-3" onClick={stopPropagation}>
+                        <div className="flex items-center justify-between gap-3" onClick={stopPropagation}>
                         <Select
                           value={job.status}
                           onValueChange={(status) => handleStatusChange(job, status)}
@@ -531,11 +687,28 @@ export function WorkshopJobsTable({
                           <SelectContent>
                             <SelectItem value="waiting_assessment">Waiting Assessment</SelectItem>
                             <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="on_hold">On Hold</SelectItem>
                             <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                           </SelectContent>
                         </Select>
-                        <span className="text-xs text-neutral-500">{formatDate(job.createdAt)}</span>
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTimelineJob(job);
+                              setTimelineDialogOpen(true);
+                            }}
+                            className={cn(
+                              "text-xs font-medium underline-offset-2 hover:underline focus-visible:underline cursor-pointer text-left",
+                              getTimeInStatusColor((job as any).timeInStatusDays)
+                            )}
+                          >
+                            {formatTimeInStatus((job as any).timeInStatusDays)}
+                          </button>
+                          <span className="text-xs text-neutral-500">{formatDate(job.createdAt)}</span>
+                        </div>
                       </div>
 
                         <div className="flex justify-end" onClick={stopPropagation}>
@@ -565,60 +738,83 @@ export function WorkshopJobsTable({
         </div>
       </div>
 
-      {showPagination && filteredJobs.length > 0 && totalPages > 1 && (
+      {showPagination && filteredJobs.length > 0 && (
         <div className="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600 sm:flex-row sm:items-center sm:justify-between">
           <div>
             Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredJobs.length)} of {filteredJobs.length} jobs
           </div>
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() => goToPage(effectivePage - 1)}
-                  className={effectivePage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                />
-              </PaginationItem>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let page: number;
-                if (totalPages <= 5) {
-                  page = i + 1;
-                } else if (effectivePage <= 3) {
-                  page = i + 1;
-                } else if (effectivePage >= totalPages - 2) {
-                  page = totalPages - 4 + i;
-                } else {
-                  page = effectivePage - 2 + i;
-                }
+          <div className="flex items-center gap-2">
+            {totalPages > 1 && (
+              <>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() => goToPage(effectivePage - 1)}
+                        className={effectivePage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let page: number;
+                      if (totalPages <= 5) {
+                        page = i + 1;
+                      } else if (effectivePage <= 3) {
+                        page = i + 1;
+                      } else if (effectivePage >= totalPages - 2) {
+                        page = totalPages - 4 + i;
+                      } else {
+                        page = effectivePage - 2 + i;
+                      }
 
-                return (
-                  <PaginationItem key={page} className="hidden sm:block">
-                    <button
-                      onClick={() => goToPage(page)}
-                      className={cn(
-                        "flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors",
-                        page === effectivePage
-                          ? "border border-green-600 bg-green-50 text-green-700"
-                          : "text-neutral-600 hover:bg-neutral-50"
-                      )}
-                    >
-                      {page}
-                    </button>
-                  </PaginationItem>
-                );
-              })}
-              <PaginationItem className="sm:hidden">
-                <span className="flex h-9 items-center px-3 text-sm font-medium text-neutral-700">
-                  {effectivePage} of {totalPages}
-                </span>
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() => goToPage(effectivePage + 1)}
-                  className={effectivePage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+                      return (
+                        <PaginationItem key={page} className="hidden sm:block">
+                          <button
+                            onClick={() => goToPage(page)}
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors",
+                              page === effectivePage
+                                ? "border border-green-600 bg-green-50 text-green-700"
+                                : "text-neutral-600 hover:bg-neutral-50"
+                            )}
+                          >
+                            {page}
+                          </button>
+                        </PaginationItem>
+                      );
+                    })}
+                    <PaginationItem className="sm:hidden">
+                      <span className="flex h-9 items-center px-3 text-sm font-medium text-neutral-700">
+                        {effectivePage} of {totalPages}
+                      </span>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() => goToPage(effectivePage + 1)}
+                        className={effectivePage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+                {totalPages > 5 && (
+                  <Select value={String(effectivePage)} onValueChange={(value) => goToPage(Number(value))}>
+                    <SelectTrigger className="w-20 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <SelectItem key={page} value={String(page)}>
+                          {page}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            )}
+            {totalPages === 1 && (
+              <span className="text-sm text-neutral-500">Page 1 of 1</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -663,6 +859,156 @@ export function WorkshopJobsTable({
       </Dialog>
 
       <JobWizard open={wizardDialogOpen} onOpenChange={setWizardDialogOpen} mode="create" />
+
+      {/* Customer Details Dialog */}
+      <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Customer Details</DialogTitle>
+            <DialogDescription>
+              Contact information and address for this customer
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCustomerJob && (
+            <CustomerDetailsView 
+              job={selectedCustomerJob}
+              customerMap={customerMap}
+              onClose={() => setCustomerDialogOpen(false)} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Status Timeline Dialog */}
+      {selectedTimelineJob && (
+        <StatusTimelineDialog
+          open={timelineDialogOpen}
+          onOpenChange={setTimelineDialogOpen}
+          jobId={selectedTimelineJob.id}
+          jobIdString={selectedTimelineJob.jobId}
+          currentStatus={selectedTimelineJob.status}
+          createdAt={selectedTimelineJob.createdAt}
+        />
+      )}
+    </div>
+  );
+}
+
+// Customer Details View Component
+function CustomerDetailsView({ job, customerMap, onClose }: { job: any; customerMap: Record<number, string>; onClose: () => void }) {
+  const customerId = job.customerId;
+  const hasCustomerRecord = Boolean(customerId);
+
+  // Fetch customer from API if customerId exists
+  const { data: customer, isLoading } = useQuery<{
+    id: number;
+    name: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    notes?: string;
+  }>({
+    queryKey: ['/api/customers', customerId],
+    queryFn: () => apiRequest('GET', `/api/customers/${customerId}`),
+    enabled: hasCustomerRecord,
+  });
+
+  // Helper to get customer name from job
+  const getCustomerNameFromJob = (job: any): string => {
+    if (job.customer) return job.customer;
+    if (job.customerName) return job.customerName;
+    // Try to get from customerMap if available
+    if (job.customerId && customerMap && customerMap[job.customerId]) {
+      return customerMap[job.customerId];
+    }
+    return "Unknown Customer";
+  };
+
+  // Use customer from API if available, otherwise use job data
+  const customerData = customer || {
+    name: getCustomerNameFromJob(job),
+    phone: job.customerPhone || undefined,
+    email: job.customerEmail || undefined,
+    address: job.customerAddress || undefined,
+    notes: undefined,
+  };
+
+  if (isLoading && hasCustomerRecord) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{customerData.name}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {customerData.phone && (
+              <div className="flex items-start gap-3">
+                <Phone className="h-5 w-5 text-neutral-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Phone</p>
+                  <a 
+                    href={`tel:${customerData.phone}`}
+                    className="text-base text-neutral-900 hover:text-green-700 hover:underline"
+                  >
+                    {customerData.phone}
+                  </a>
+                </div>
+              </div>
+            )}
+            {customerData.email && (
+              <div className="flex items-start gap-3">
+                <Mail className="h-5 w-5 text-neutral-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Email</p>
+                  <a 
+                    href={`mailto:${customerData.email}`}
+                    className="text-base text-neutral-900 hover:text-green-700 hover:underline break-all"
+                  >
+                    {customerData.email}
+                  </a>
+                </div>
+              </div>
+            )}
+            {customerData.address && (
+              <div className="flex items-start gap-3 md:col-span-2">
+                <MapPin className="h-5 w-5 text-neutral-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Address</p>
+                  <p className="text-base text-neutral-900 whitespace-pre-wrap">{customerData.address}</p>
+                </div>
+              </div>
+            )}
+            {customerData.notes && (
+              <div className="flex items-start gap-3 md:col-span-2">
+                <FileTextIcon className="h-5 w-5 text-neutral-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Notes</p>
+                  <p className="text-base text-neutral-900 whitespace-pre-wrap">{customerData.notes}</p>
+                </div>
+              </div>
+            )}
+            {!customerData.phone && !customerData.email && !customerData.address && (
+              <div className="md:col-span-2 text-center py-4">
+                <p className="text-sm text-neutral-500">No contact details available for this customer</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
     </div>
   );
 }
