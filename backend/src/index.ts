@@ -10,6 +10,34 @@ import cors from 'cors';
 
 const app = express();
 
+// CRITICAL: Register health check endpoints FIRST, before any middleware
+// This ensures Railway's health checks work immediately without any delays
+app.get("/health", (_req: Request, res: Response) => {
+  res.status(200).setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  }));
+});
+
+app.get("/", (_req: Request, res: Response) => {
+  res.status(200).setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ 
+    status: "ok", 
+    message: "Backend API is running",
+    timestamp: new Date().toISOString()
+  }));
+});
+
+app.get("/ready", (_req: Request, res: Response) => {
+  res.status(200).setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ 
+    status: "ready", 
+    timestamp: new Date().toISOString()
+  }));
+});
+
 // Configure CORS to allow the frontend dev server and any configured origins
 const envOrigins = [
   process.env.CORS_ORIGIN,
@@ -140,25 +168,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Add health check endpoint BEFORE route registration (for Railway/Render health checks)
-// These must be available immediately when server starts listening
-app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: "ok", 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// Add root health check as well
-app.get("/", (_req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: "ok", 
-    message: "Backend API is running",
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Create HTTP server immediately so we can start listening ASAP
 const httpServer = createServer(app);
 
@@ -180,7 +189,9 @@ const httpServer = createServer(app);
       console.log(`✅ Backend server running on port ${port}`);
       console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
       console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
+      console.log(`✅ Root health check available at http://0.0.0.0:${port}/`);
       console.log(`[Startup] Server is ready to accept connections (health checks will pass)`);
+      console.log(`[Startup] Server will stay alive - process will not exit unless explicitly terminated`);
     });
     
     // Now do async initialization (DB test, route registration) AFTER server is listening
@@ -323,10 +334,40 @@ process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
 // Handle SIGTERM gracefully (Railway/Render sends this)
 process.on('SIGTERM', () => {
   console.log('⚠️  SIGTERM received, shutting down gracefully...');
-  process.exit(0);
+  console.log('[Shutdown] Closing HTTP server...');
+  httpServer.close(() => {
+    console.log('[Shutdown] HTTP server closed');
+    console.log('[Shutdown] Closing database pool...');
+    pool.end(() => {
+      console.log('[Shutdown] Database pool closed');
+      console.log('[Shutdown] Exiting process...');
+      process.exit(0);
+    });
+  });
+  
+  // Force exit after 10 seconds if graceful shutdown doesn't complete
+  setTimeout(() => {
+    console.log('[Shutdown] Forcing exit after timeout...');
+    process.exit(0);
+  }, 10000);
 });
 
 process.on('SIGINT', () => {
   console.log('⚠️  SIGINT received, shutting down gracefully...');
-  process.exit(0);
+  httpServer.close(() => {
+    pool.end(() => {
+      process.exit(0);
+    });
+  });
+  
+  setTimeout(() => {
+    process.exit(0);
+  }, 10000);
 });
+
+// Keep the process alive - prevent accidental exits
+// This ensures Railway doesn't think the process has crashed
+setInterval(() => {
+  // This is just to keep the event loop active
+  // Railway will see the process is still running
+}, 30000); // Every 30 seconds
