@@ -19,3 +19,4 @@ END;
 ALTER TABLE equipment
   DROP COLUMN IF EXISTS make,
   DROP COLUMN IF EXISTS model;
+

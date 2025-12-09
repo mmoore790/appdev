@@ -17,3 +17,4 @@ ALTER TABLE "parts_used" ADD COLUMN IF NOT EXISTS "cost_including_vat" integer;
 UPDATE "parts_used" 
 SET "cost_excluding_vat" = "cost" 
 WHERE "cost" IS NOT NULL AND "cost_excluding_vat" IS NULL;
+

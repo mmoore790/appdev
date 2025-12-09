@@ -633,3 +633,4 @@ export function WorkshopJobsKanban({
     </div>
   );
 }
+
