@@ -2,3 +2,4 @@
 
 ALTER TABLE "jobs" 
 ADD COLUMN "equipment_serial" TEXT;
+
