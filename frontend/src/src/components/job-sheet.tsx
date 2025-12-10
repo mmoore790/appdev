@@ -585,20 +585,22 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
       {/* Header with Print Button */}
-      <div className="flex justify-between items-start px-6 pt-6 pb-4 border-b border-gray-200">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-1">Job Sheet</h2>
-          <p className="text-sm text-gray-500">Work Completed Report</p>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 px-3 sm:px-4 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 border-b border-gray-200">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">Job Sheet</h2>
+          <p className="text-xs sm:text-sm text-gray-500">Work Completed Report</p>
           {lastUpdateTime && (
-            <p className="text-xs text-gray-400 mt-1">Last updated: {formatDate(lastUpdateTime)}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-1">Last updated: {formatDate(lastUpdateTime)}</p>
           )}
         </div>
-        <PrintJobSheet jobId={jobId} />
+        <div className="flex-shrink-0">
+          <PrintJobSheet jobId={jobId} />
+        </div>
       </div>
 
       {/* Document Header */}
-      <div className="px-6 py-5 border-b border-gray-200 bg-gray-50/50">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+      <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 border-b border-gray-200 bg-gray-50/50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 text-xs sm:text-sm">
           <div>
             <span className="text-gray-500 font-medium">Job ID:</span>
             <span className="ml-2 text-gray-900">{job?.jobId || "—"}</span>
@@ -627,32 +629,32 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       </div>
 
       {/* Summary Ribbon */}
-      <div className="px-6 py-3 bg-blue-50/50 border-b border-gray-200">
-        <div className="flex items-center gap-6 text-sm flex-wrap">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-blue-600" />
+      <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 bg-blue-50/50 border-b border-gray-200">
+        <div className="flex items-center gap-3 sm:gap-4 md:gap-6 text-xs sm:text-sm flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
             <span className="text-gray-600">Total Labour:</span>
             <span className="font-semibold text-gray-900">{totalLabourTime.toFixed(2)}h</span>
           </div>
           {labourChargeExcludingVat !== null && labourChargeIncludingVat !== null && (
             <>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">Labour Charge (Ex VAT):</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-gray-600">Labour (Ex VAT):</span>
                 <span className="font-semibold text-gray-900">£{labourChargeExcludingVat.toFixed(2)}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">Labour Charge (Inc VAT):</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-gray-600">Labour (Inc VAT):</span>
                 <span className="font-semibold text-gray-900">£{labourChargeIncludingVat.toFixed(2)}</span>
               </div>
             </>
           )}
-          <div className="flex items-center gap-2">
-            <Package className="h-4 w-4 text-blue-600" />
-            <span className="text-gray-600">Items/Parts Used:</span>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
+            <span className="text-gray-600">Parts Used:</span>
             <span className="font-semibold text-gray-900">{totalPartsUsed}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-blue-600" />
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
             <span className="text-gray-600">Attachments:</span>
             <span className="font-semibold text-gray-900">{attachments.length}</span>
           </div>
@@ -660,28 +662,29 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       </div>
 
       {/* Document Body */}
-      <div className="px-6 py-6 space-y-6">
+      <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-5 md:py-6 space-y-4 sm:space-y-5 md:space-y-6">
         {/* Labour Section */}
         <div className="bg-blue-50/30 rounded-lg border border-blue-200/50 overflow-hidden">
-          <div className="bg-blue-600 px-5 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-white" />
-              <h3 className="text-lg font-semibold text-white">Labour Performed</h3>
+          <div className="bg-blue-600 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-white flex-shrink-0" />
+              <h3 className="text-base sm:text-lg font-semibold text-white">Labour Performed</h3>
             </div>
             {!readOnly && (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleAddLabour}
-                className="h-8 text-xs bg-white/20 hover:bg-white/30 text-white border-white/30"
+                className="h-9 sm:h-8 text-xs bg-white/20 hover:bg-white/30 text-white border-white/30 w-full sm:w-auto"
                 disabled={isAddingLabour || editingLabourId !== null}
               >
                 <Plus className="h-3 w-3 mr-1" />
-                Add Labour Entry
+                <span className="hidden sm:inline">Add Labour Entry</span>
+                <span className="sm:hidden">Add Labour</span>
               </Button>
             )}
           </div>
-          <div className="px-5 py-4">
+          <div className="px-3 sm:px-4 md:px-5 py-3 sm:py-4">
 
           {(isAddingLabour || editingLabourId !== null) && !readOnly && (
             <div className="mb-4 p-5 bg-blue-50/50 border-2 border-blue-200 rounded-lg shadow-sm">

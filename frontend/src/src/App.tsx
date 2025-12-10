@@ -219,20 +219,20 @@ function AuthAwareLayout() {
   
   // For protected routes, show the full app layout with horizontal navigation
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen bg-white overflow-hidden">
       <HorizontalNav />
-      <div className="flex-1 overflow-y-auto flex flex-col bg-slate-50">
-        <main className="flex-1 relative pb-4 sm:pb-8 z-0">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6">
+      <div className="flex-1 overflow-y-auto flex flex-col bg-slate-50 min-h-0">
+        <main className="flex-1 relative pb-3 sm:pb-4 md:pb-8 z-0 min-w-0">
+          <div className="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 py-3 sm:py-4 md:py-6">
             <Router />
           </div>
         </main>
-        <footer className="bg-white border-t border-slate-200 py-4 px-4 sm:py-6 sm:px-6 text-center flex-shrink-0">
-          <div className="flex flex-col items-center gap-3">
-            <img src={logLogo} alt="BoltDown Logo" className="h-8 sm:h-10 w-auto" />
-            <div className="flex flex-col items-center gap-1 text-black text-[10px] sm:text-xs">
+        <footer className="bg-white border-t border-slate-200 py-3 px-3 sm:py-4 sm:px-4 md:py-6 md:px-6 text-center flex-shrink-0">
+          <div className="flex flex-col items-center gap-2 sm:gap-3">
+            <img src={logLogo} alt="BoltDown Logo" className="h-7 sm:h-8 md:h-10 w-auto" />
+            <div className="flex flex-col items-center gap-0.5 sm:gap-1 text-black text-[9px] sm:text-[10px] md:text-xs">
               <p>BoltDown UK © 2025</p>
-              <p>support@boltdown.co.uk</p>
+              <p className="break-all">support@boltdown.co.uk</p>
             </div>
           </div>
         </footer>

@@ -189,8 +189,8 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
     <>
       {/* Desktop Horizontal Navigation */}
       <nav className={cn(
-        "hidden md:flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200",
-        "sticky top-0 z-50 text-slate-900",
+        "hidden md:flex items-center justify-between px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 bg-white border-b border-slate-200",
+        "sticky top-0 z-50 text-slate-900 min-w-0",
         className
       )}>
         {/* Logo */}
@@ -201,18 +201,18 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
           <img 
             src={logoPath}
             alt="Moore Horticulture Equipment Logo" 
-            className="h-7 w-auto drop-shadow-sm"
+            className="h-6 sm:h-7 w-auto drop-shadow-sm"
           />
         </Link>
 
         {/* Navigation Items - Compact Layout */}
-        <div className="flex items-center space-x-0.5 flex-1 justify-center max-w-4xl mx-4">
+        <div className="flex items-center space-x-0.5 flex-1 justify-center max-w-4xl mx-2 sm:mx-4 min-w-0 overflow-x-auto scrollbar-hide">
           {/* Primary Navigation Items */}
           {filteredPrimaryItems.map((item) => (
-            <Link key={item.path} href={item.path}>
+            <Link key={item.path} href={item.path} className="flex-shrink-0">
               <div
                 className={cn(
-                  "flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                  "flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-[10px] xs:text-xs font-medium transition-all duration-200 whitespace-nowrap",
                   "hover:bg-emerald-100 hover:text-emerald-700",
                   location === item.path
                     ? "bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 text-white shadow-md shadow-emerald-500/30 hover:from-emerald-600 hover:to-emerald-800 hover:text-white"
@@ -220,7 +220,8 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                 )}
               >
                 <span className="flex-shrink-0">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="hidden sm:inline">{item.label}</span>
+                <span className="sm:hidden">{item.label.split(' ')[0]}</span>
               </div>
             </Link>
           ))}
@@ -240,7 +241,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                 <DropdownMenuTrigger asChild>
                   <button
                     className={cn(
-                      "flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                      "flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1.5 rounded-md text-[10px] xs:text-xs font-medium transition-all duration-200 flex-shrink-0 whitespace-nowrap",
                       "hover:bg-emerald-100 hover:text-emerald-700",
                       isAnyActive
                         ? "bg-emerald-100 text-emerald-700"
@@ -248,8 +249,9 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                     )}
                   >
                     <span className="flex-shrink-0">{group.icon}</span>
-                    <span>{group.label}</span>
-                    <ChevronDown size={12} className="ml-0.5" />
+                    <span className="hidden sm:inline">{group.label}</span>
+                    <span className="sm:hidden">{group.label.substring(0, 4)}</span>
+                    <ChevronDown size={10} className="ml-0.5 hidden sm:block" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="center" className="w-48 bg-white border border-slate-200 shadow-lg">
@@ -280,7 +282,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
         </div>
 
         {/* Right Side - User Menu & Actions */}
-        <div className="flex items-center space-x-1.5 flex-shrink-0">
+        <div className="flex items-center space-x-1 sm:space-x-1.5 flex-shrink-0">
           {/* Messages */}
           <MessagesIcon />
           
@@ -290,8 +292,8 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
           {/* Account Dropdown - Compact */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center space-x-1.5 px-2 py-1.5 rounded-md hover:bg-emerald-100 transition-colors duration-200 focus:outline-none">
-                <div className="h-7 w-7 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 flex items-center justify-center text-white font-semibold text-xs shadow-sm shadow-emerald-500/30">
+              <button className="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2 py-1.5 rounded-md hover:bg-emerald-100 transition-colors duration-200 focus:outline-none">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 flex items-center justify-center text-white font-semibold text-xs shadow-sm shadow-emerald-500/30 flex-shrink-0">
                   {user?.fullName ? (
                     <span>
                       {user.fullName.split(' ').map(name => name[0]).join('')}
@@ -300,7 +302,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                     <User size={14} />
                   )}
                 </div>
-                <div className="hidden xl:block text-left">
+                <div className="hidden lg:block text-left">
                   <p className="text-xs font-medium text-slate-900 leading-tight">
                     {user?.fullName?.split(' ')[0] || user?.username || 'User'}
                   </p>
@@ -308,7 +310,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
                     {user?.role || 'User'}
                   </p>
                 </div>
-                <ChevronDown size={12} className="text-slate-600 hidden xl:block" />
+                <ChevronDown size={12} className="text-slate-600 hidden lg:block" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52 bg-white border border-slate-200 shadow-lg">
@@ -363,34 +365,44 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
       </nav>
 
       {/* Mobile Header */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 text-slate-900 sticky top-0 z-50">
+      <div className="md:hidden flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-200 text-slate-900 sticky top-0 z-50 gap-2">
         <Link
           href={userRole === "master" ? "/master" : "/dashboard"}
           onClick={() => setMobileMenuOpen(false)}
+          className="flex-shrink-0 flex items-center"
         >
           <img 
             src={logoPath}
             alt="Moore Horticulture Equipment Logo" 
-            className="h-7 w-auto drop-shadow-sm"
+            className="h-6 sm:h-7 w-auto drop-shadow-sm"
           />
         </Link>
         
-        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <button 
-              className="p-2 rounded-md text-slate-700 hover:text-emerald-700 hover:bg-emerald-100 transition-colors duration-200"
-              aria-label="Menu"
+        {/* Mobile Actions - Messages, Notifications, Menu */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* Messages */}
+          <MessagesIcon />
+          
+          {/* Notifications */}
+          <NotificationsDropdown />
+          
+          {/* Menu */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <button 
+                className="p-2 rounded-md text-slate-700 hover:text-emerald-700 hover:bg-emerald-100 transition-colors duration-200"
+                aria-label="Menu"
+              >
+                <Menu size={20} />
+              </button>
+              </SheetTrigger>
+            <SheetOverlay 
+              className="bg-black/50 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" 
+            />
+            <SheetContent 
+              side="right" 
+              className="p-0 border-l border-slate-200 w-[280px] sm:w-[300px] focus:outline-none bg-white"
             >
-              <Menu size={20} />
-            </button>
-          </SheetTrigger>
-          <SheetOverlay 
-            className="bg-black/50 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" 
-          />
-          <SheetContent 
-            side="right" 
-            className="p-0 border-l border-slate-200 w-[280px] sm:w-[300px] focus:outline-none bg-white"
-          >
             <div className="flex flex-col h-full bg-white text-slate-900">
               {/* Mobile Header */}
               <div className="flex items-center justify-between p-3 border-b border-slate-200 bg-emerald-50/50">
@@ -518,6 +530,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
             </div>
           </SheetContent>
         </Sheet>
+        </div>
       </div>
 
       {/* Help Dialog */}

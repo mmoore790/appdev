@@ -63,8 +63,12 @@ export function WorkshopJobsTable({
     mutationFn: async ({ jobId, status }: { jobId: number; status: string }) => {
       return apiRequest("PUT", `/api/jobs/${jobId}`, { status });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    onSuccess: async () => {
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       toast({
         title: "Success",
         description: "Job status updated successfully",
@@ -329,8 +333,8 @@ export function WorkshopJobsTable({
   return (
     <div className={cn("space-y-4", className)}>
       {showSearch && (
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="rounded-xl border border-neutral-200 bg-white p-3 sm:p-4 shadow-sm">
+          <div className="flex flex-col gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between">
             <div className="relative w-full md:max-w-sm">
               <Input
                 type="text"
@@ -340,17 +344,18 @@ export function WorkshopJobsTable({
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="h-11 w-full rounded-md border-neutral-200 pl-10 pr-3 text-sm shadow-sm focus-visible:border-green-600 focus-visible:ring-green-600"
+                className="h-10 sm:h-11 w-full rounded-md border-neutral-200 pl-9 sm:pl-10 pr-3 text-xs sm:text-sm shadow-sm focus-visible:border-green-600 focus-visible:ring-green-600"
               />
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <Search className="pointer-events-none absolute left-2.5 sm:left-3 top-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 -translate-y-1/2 text-neutral-400" />
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Button
                 onClick={() => setWizardDialogOpen(true)}
-                className="h-11 gap-1.5 bg-green-700 text-white hover:bg-green-800"
+                className="h-10 sm:h-11 gap-1.5 bg-green-700 text-white hover:bg-green-800 text-xs sm:text-sm"
               >
-                <Plus size={16} />
-                New Job
+                <Plus size={14} className="sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">New Job</span>
+                <span className="sm:hidden">New</span>
               </Button>
             </div>
           </div>

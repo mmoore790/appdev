@@ -181,19 +181,20 @@ export default function CustomersPage() {
 
   return (
     <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Customers
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+            <span className="truncate">Customers</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">View and manage all customers and equipment</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 hidden sm:block">View and manage all customers and equipment</p>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9">
+              <Button variant="outline" size="sm" className="h-9 w-9 sm:w-auto p-0 sm:px-3">
                 <MoreVertical className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">More</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -205,9 +206,10 @@ export default function CustomersPage() {
           </DropdownMenu>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Customer
+              <Button size="sm" className="h-9 text-xs sm:text-sm">
+                <Plus className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Add Customer</span>
+                <span className="sm:hidden">Add</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-xl">
@@ -218,12 +220,12 @@ export default function CustomersPage() {
       </div>
 
       <Card className="border shadow-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2 sm:pb-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-2.5 sm:left-3 top-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name, email, phone, make/model, or serial number..."
-              className="pl-9 h-9 text-sm"
+              placeholder="Search by name, email, phone..."
+              className="pl-8 sm:pl-9 h-9 sm:h-10 text-xs sm:text-sm"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => {

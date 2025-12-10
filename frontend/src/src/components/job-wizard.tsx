@@ -46,9 +46,12 @@ interface WizardData {
   useNameOnly?: boolean; // Flag to use name only without saving customer
   
   // Step 2: Equipment Info
-  equipmentMakeModel: string;
+  machineType: string;
+  machineTypeOther: string; // Free text for "other" option
+  equipmentMake: string;
+  equipmentModel: string;
   equipmentSerial: string;
-  equipmentDescription: string;
+  roboticMowerPinCode: string;
   
   // Step 3: Job Details
   description: string;
@@ -70,9 +73,12 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     customerName: "",
     customerEmail: "",
     customerPhone: "",
-    equipmentMakeModel: "",
+    machineType: "",
+    machineTypeOther: "",
+    equipmentMake: "",
+    equipmentModel: "",
     equipmentSerial: "",
-    equipmentDescription: "",
+    roboticMowerPinCode: "",
     description: "",
     priority: "medium"
   });
@@ -137,9 +143,13 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
         return await apiRequest('PUT', `/api/jobs/${initialData?.id}`, jobData);
       }
     },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+    onSuccess: async (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['/api/jobs'] }),
+        queryClient.refetchQueries({ queryKey: ['/api/analytics/summary'] })
+      ]);
       const jobId = data?.jobId || (initialData as any)?.jobId || 'unknown';
       toast({
         title: mode === "create" ? "Job created successfully" : "Job updated successfully",
@@ -163,9 +173,12 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
       customerName: "",
       customerEmail: "",
       customerPhone: "",
-      equipmentMakeModel: "",
+      machineType: "",
+      machineTypeOther: "",
+      equipmentMake: "",
+      equipmentModel: "",
       equipmentSerial: "",
-      equipmentDescription: "",
+      roboticMowerPinCode: "",
       description: "",
       priority: "medium"
     });
@@ -241,7 +254,8 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
         }
         return hasName;
       case 2:
-        return wizardData.equipmentDescription.trim() !== "";
+        // Equipment step is valid if machine type is selected
+        return wizardData.machineType.trim() !== "";
       case 3:
         return wizardData.description.trim() !== "";
       default:
@@ -252,13 +266,38 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
   const handleSubmit = async () => {
     // Prepare job data
     // Don't include jobId - let the backend generate it sequentially
-    const equipmentDesc = `${wizardData.equipmentMakeModel} ${wizardData.equipmentSerial}`.trim();
     const jobData: any = {
       description: wizardData.description,
       status: "waiting_assessment"
     };
     
-    // Only include equipmentDescription if it's not empty
+    // Add machine type (use "other" text if "other" is selected)
+    if (wizardData.machineType) {
+      jobData.machineType = wizardData.machineType === "other" && wizardData.machineTypeOther
+        ? wizardData.machineTypeOther
+        : wizardData.machineType;
+    }
+    
+    // Add equipment make and model
+    if (wizardData.equipmentMake) {
+      jobData.equipmentMake = wizardData.equipmentMake;
+    }
+    if (wizardData.equipmentModel) {
+      jobData.equipmentModel = wizardData.equipmentModel;
+    }
+    
+    // Add equipment serial number
+    if (wizardData.equipmentSerial) {
+      jobData.equipmentSerial = wizardData.equipmentSerial;
+    }
+    
+    // Add robotic mower pin code if machine type is robotic mower
+    if (wizardData.machineType === "robotic mower" && wizardData.roboticMowerPinCode) {
+      jobData.roboticMowerPinCode = wizardData.roboticMowerPinCode;
+    }
+    
+    // Keep equipmentDescription for backward compatibility (combine make/model/serial)
+    const equipmentDesc = `${wizardData.equipmentMake} ${wizardData.equipmentModel} ${wizardData.equipmentSerial}`.trim();
     if (equipmentDesc) {
       jobData.equipmentDescription = equipmentDesc;
     }
@@ -559,17 +598,82 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
             
             <div className="space-y-4">
               <div>
-                <Label htmlFor="equipment-make-model" className="text-base font-medium">
-                  Equipment Make & Model
+                <Label htmlFor="machine-type" className="text-base font-medium">
+                  What is the machine?
                 </Label>
-                <Input
-                  id="equipment-make-model"
-                  placeholder="e.g. John Deere X300, Honda GX160, Husqvarna 545RX"
-                  value={wizardData.equipmentMakeModel || ""}
-                  onChange={(e) => updateWizardData("equipmentMakeModel", e.target.value)}
-                  className="mt-2"
-                />
+                <Select
+                  value={wizardData.machineType}
+                  onValueChange={(value) => updateWizardData("machineType", value)}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select machine type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ride on Mower">Ride on Mower</SelectItem>
+                    <SelectItem value="Walk behind mower">Walk behind mower</SelectItem>
+                    <SelectItem value="chainsaw">chainsaw</SelectItem>
+                    <SelectItem value="strimmer">strimmer</SelectItem>
+                    <SelectItem value="hedge trimmer">hedge trimmer</SelectItem>
+                    <SelectItem value="robotic mower">robotic mower</SelectItem>
+                    <SelectItem value="other">other</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* Show free text input when "other" is selected */}
+                {wizardData.machineType === "other" && (
+                  <Input
+                    id="machine-type-other"
+                    placeholder="Enter machine type"
+                    value={wizardData.machineTypeOther}
+                    onChange={(e) => updateWizardData("machineTypeOther", e.target.value)}
+                    className="mt-2"
+                  />
+                )}
               </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="equipment-make" className="text-base font-medium">
+                    Make
+                  </Label>
+                  <Input
+                    id="equipment-make"
+                    placeholder="e.g. John Deere, Honda, Husqvarna"
+                    value={wizardData.equipmentMake || ""}
+                    onChange={(e) => updateWizardData("equipmentMake", e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="equipment-model" className="text-base font-medium">
+                    Model
+                  </Label>
+                  <Input
+                    id="equipment-model"
+                    placeholder="e.g. X300, GX160, 545RX"
+                    value={wizardData.equipmentModel || ""}
+                    onChange={(e) => updateWizardData("equipmentModel", e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+              
+              {/* Show robotic mower pin code field when robotic mower is selected */}
+              {wizardData.machineType === "robotic mower" && (
+                <div>
+                  <Label htmlFor="robotic-mower-pin-code" className="text-base font-medium">
+                    Robotic mower pin code
+                  </Label>
+                  <Input
+                    id="robotic-mower-pin-code"
+                    placeholder="Enter robotic mower PIN code"
+                    value={wizardData.roboticMowerPinCode || ""}
+                    onChange={(e) => updateWizardData("roboticMowerPinCode", e.target.value)}
+                    className="mt-2"
+                  />
+                </div>
+              )}
               
               <div>
                 <Label htmlFor="equipment-serial" className="text-base font-medium">
@@ -582,23 +686,6 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                   onChange={(e) => updateWizardData("equipmentSerial", e.target.value)}
                   className="mt-2"
                 />
-              </div>
-              
-              <div>
-                <Label htmlFor="equipment-description" className="text-base font-medium required">
-                  Equipment Description *
-                </Label>
-                <Textarea
-                  id="equipment-description"
-                  placeholder="Describe the equipment (e.g. Ride-on mower, Chainsaw, Strimmer)"
-                  value={wizardData.equipmentDescription}
-                  onChange={(e) => updateWizardData("equipmentDescription", e.target.value)}
-                  className="mt-2"
-                  rows={3}
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  Help us identify the equipment by describing what it is
-                </p>
               </div>
             </div>
           </div>
@@ -704,14 +791,23 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    <p className="font-medium">{wizardData.equipmentDescription}</p>
-                    {wizardData.equipmentMakeModel && (
+                    {wizardData.machineType && (
+                      <p className="font-medium">
+                        Machine Type: {wizardData.machineType === "other" && wizardData.machineTypeOther 
+                          ? wizardData.machineTypeOther 
+                          : wizardData.machineType}
+                      </p>
+                    )}
+                    {(wizardData.equipmentMake || wizardData.equipmentModel) && (
                       <p className="text-sm text-gray-600">
-                        {wizardData.equipmentMakeModel}
+                        {wizardData.equipmentMake} {wizardData.equipmentModel}
                       </p>
                     )}
                     {wizardData.equipmentSerial && (
                       <p className="text-sm text-gray-600">Serial: {wizardData.equipmentSerial}</p>
+                    )}
+                    {wizardData.machineType === "robotic mower" && wizardData.roboticMowerPinCode && (
+                      <p className="text-sm text-gray-600">Robotic Mower PIN Code: {wizardData.roboticMowerPinCode}</p>
                     )}
                   </div>
                 </CardContent>

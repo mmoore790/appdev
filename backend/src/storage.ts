@@ -36,6 +36,16 @@ import { formatDistanceToNow } from "date-fns";
 import { db, pool } from "./db";
 import { and, desc, eq, ne, lt, gte, lte, isNull, isNotNull, or, sql, inArray } from "drizzle-orm";
 
+/**
+ * Normalize phone number by removing all non-digit characters
+ * This allows matching phone numbers regardless of formatting (spaces, dashes, parentheses, etc.)
+ */
+function normalizePhoneNumber(phone: string | null | undefined): string {
+  if (!phone) return '';
+  // Remove all non-digit characters
+  return phone.replace(/\D/g, '');
+}
+
 // Interface for storage operations
 export interface IStorage {
   // Business operations
@@ -661,8 +671,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerByEmail(email: string, businessId: number): Promise<Customer | undefined> {
+    // Use case-insensitive matching for email
     const [customer] = await db.select().from(customers).where(
-      and(eq(customers.email, email), eq(customers.businessId, businessId))
+      and(
+        sql`LOWER(${customers.email}) = LOWER(${email})`,
+        eq(customers.businessId, businessId)
+      )
     );
     return customer;
   }
@@ -680,8 +694,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEmailHistoryByEmail(email: string, businessId: number): Promise<EmailHistory[]> {
+    // Use case-insensitive matching for email
     return await db.select().from(emailHistory)
-      .where(and(eq(emailHistory.customerEmail, email), eq(emailHistory.businessId, businessId)))
+      .where(and(
+        sql`LOWER(${emailHistory.customerEmail}) = LOWER(${email})`,
+        eq(emailHistory.businessId, businessId)
+      ))
       .orderBy(desc(emailHistory.sentAt));
   }
 
@@ -1119,9 +1137,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobsByCustomerPhone(phone: string, businessId: number): Promise<Job[]> {
-    // Get all customers with this phone number
-    const customersWithPhone = await db.select().from(customers).where(
-      and(eq(customers.businessId, businessId), eq(customers.phone, phone))
+    // Normalize the input phone number
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!normalizedPhone) {
+      return [];
+    }
+    
+    // Get all customers with this phone number (using normalized comparison)
+    // We need to normalize phone numbers in the database for comparison
+    const allCustomers = await db.select().from(customers).where(
+      eq(customers.businessId, businessId)
+    );
+    
+    // Filter customers by normalized phone number
+    const customersWithPhone = allCustomers.filter(c => 
+      normalizePhoneNumber(c.phone) === normalizedPhone
     );
     
     if (customersWithPhone.length === 0) {
@@ -1230,11 +1260,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTask(taskData: InsertTask): Promise<Task> {
-    const [task] = await db.insert(tasks).values({
+    console.log("[Storage] createTask - Input data:", JSON.stringify(taskData, null, 2));
+    
+    const result = await db.insert(tasks).values({
       ...taskData,
       createdAt: new Date().toISOString()
     }).returning();
     
+    console.log("[Storage] createTask - Insert result:", result ? `${result.length} row(s) returned` : "null result");
+    
+    if (!result || result.length === 0) {
+      console.error("[Storage] createTask - Failed: database insert returned no rows");
+      throw new Error("Failed to create task: database insert returned no rows");
+    }
+    
+    const task = result[0];
+    if (!task) {
+      console.error("[Storage] createTask - Failed: database insert returned undefined");
+      throw new Error("Failed to create task: database insert returned undefined");
+    }
+    
+    console.log("[Storage] createTask - Success: Created task with ID:", task.id);
     return task;
   }
 
@@ -1421,13 +1467,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCallbackRequestsByPhone(phoneNumber: string, businessId: number): Promise<CallbackRequest[]> {
-    return await db
+    // Normalize the input phone number
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (!normalizedPhone) {
+      return [];
+    }
+    
+    // Get all callbacks for this business
+    const allCallbacks = await db
       .select()
       .from(callbackRequests)
-      .where(
-        and(eq(callbackRequests.phoneNumber, phoneNumber), eq(callbackRequests.businessId, businessId))
-      )
-      .orderBy(desc(callbackRequests.requestedAt));
+      .where(eq(callbackRequests.businessId, businessId));
+    
+    // Filter callbacks by normalized phone number
+    const matchingCallbacks = allCallbacks.filter(cb =>
+      normalizePhoneNumber(cb.phoneNumber) === normalizedPhone
+    );
+    
+    // Sort by requestedAt descending
+    return matchingCallbacks.sort((a, b) => 
+      new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+    );
   }
 
   async getCallbackRequestsByAssignee(assignedTo: number, businessId: number): Promise<CallbackRequest[]> {
@@ -1481,8 +1541,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCallbackRequest(callbackData: InsertCallbackRequest): Promise<CallbackRequest> {
+    // Try to find existing customer by phone number (normalized)
+    let customerId: number | null = callbackData.customerId ?? null;
+    
+    if (!customerId && callbackData.phoneNumber) {
+      const normalizedPhone = normalizePhoneNumber(callbackData.phoneNumber);
+      if (normalizedPhone) {
+        // Get all customers for this business
+        const allCustomers = await db.select().from(customers).where(
+          eq(customers.businessId, callbackData.businessId)
+        );
+        
+        // Find customer by normalized phone number
+        const matchingCustomer = allCustomers.find(c => 
+          normalizePhoneNumber(c.phone) === normalizedPhone
+        );
+        
+        if (matchingCustomer) {
+          customerId = matchingCustomer.id;
+        }
+      }
+    }
+    
     const [callback] = await db.insert(callbackRequests).values({
       ...callbackData,
+      customerId: customerId ?? null,
       requestedAt: new Date().toISOString(),
       status: 'pending'
     }).returning();

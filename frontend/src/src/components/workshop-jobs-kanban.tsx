@@ -167,18 +167,18 @@ function KanbanColumn({
   });
 
   return (
-    <div className="flex flex-col h-full min-w-[280px] max-w-[320px] flex-shrink-0">
+    <div className="flex flex-col h-full min-w-[200px] sm:min-w-[220px] max-w-[200px] sm:max-w-[240px] flex-shrink-0">
       <div
         className={cn(
-          "rounded-lg border-2 p-3 mb-2 transition-colors",
+          "rounded-lg border-2 p-2 sm:p-3 mb-2 transition-colors",
           column.bgColor,
           column.color,
           isOver && "ring-2 ring-green-500 ring-offset-2"
         )}
       >
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">{column.title}</h3>
-          <Badge variant="secondary" className="text-xs font-semibold">
+          <h3 className="font-semibold text-xs sm:text-sm truncate flex-1">{column.title}</h3>
+          <Badge variant="secondary" className="text-[10px] sm:text-xs font-semibold ml-2 flex-shrink-0">
             {jobs.length}
           </Badge>
         </div>
@@ -187,13 +187,13 @@ function KanbanColumn({
         ref={setNodeRef}
         className={cn(
           "flex-1 overflow-y-auto space-y-2 pb-4",
-          "min-h-[500px] max-h-[calc(100vh-300px)]",
+          "min-h-[400px] sm:min-h-[500px] max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-300px)]",
           isOver && "bg-green-50/50 rounded-lg ring-2 ring-green-400 ring-inset"
         )}
       >
         {jobs.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-neutral-200 p-8 text-center mt-2 min-h-[200px] flex items-center justify-center">
-            <p className="text-xs text-neutral-400">Drop jobs here</p>
+          <div className="rounded-lg border-2 border-dashed border-neutral-200 p-4 sm:p-8 text-center mt-2 min-h-[150px] sm:min-h-[200px] flex items-center justify-center">
+            <p className="text-[10px] sm:text-xs text-neutral-400">Drop jobs here</p>
           </div>
         ) : (
           jobs.map((job) => (
@@ -301,48 +301,48 @@ function KanbanJobCard({
       {...attributes}
       {...listeners}
     >
-      <CardContent className="p-3 space-y-2" onClick={handleClick}>
-        <div className="flex items-start justify-between gap-2">
+      <CardContent className="p-2 sm:p-3 space-y-1.5 sm:space-y-2" onClick={handleClick}>
+        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <GripVertical className="h-4 w-4 text-neutral-400 flex-shrink-0" />
-              <span className="text-sm font-semibold text-green-800 hover:underline">
+            <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+              <GripVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-neutral-400 flex-shrink-0" />
+              <span className="text-xs sm:text-sm font-semibold text-green-800 hover:underline truncate">
                 {job.jobId}
               </span>
             </div>
-            <p className="text-xs font-medium text-neutral-800 truncate">
+            <p className="text-[10px] sm:text-xs font-medium text-neutral-800 truncate">
               {getEquipmentName(job)}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-xs font-semibold text-green-700 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-green-100 text-[10px] sm:text-xs font-semibold text-green-700 flex-shrink-0">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-neutral-800 truncate">
+            <p className="text-[10px] sm:text-xs font-medium text-neutral-800 truncate">
               {customerName}
             </p>
-            <p className="text-[10px] text-neutral-500 truncate">
+            <p className="text-[9px] sm:text-[10px] text-neutral-500 truncate">
               {getAssigneeName(job.assignedTo)}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-neutral-100">
-          <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3 text-neutral-400" />
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 pt-1 border-t border-neutral-100">
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-neutral-400" />
             <span
               className={cn(
-                "text-[10px] font-medium",
+                "text-[9px] sm:text-[10px] font-medium",
                 getTimeInStatusColor((job as any).timeInStatusDays)
               )}
             >
               {formatTimeInStatus((job as any).timeInStatusDays)}
             </span>
           </div>
-          <span className="text-[10px] text-neutral-500">
+          <span className="text-[9px] sm:text-[10px] text-neutral-500">
             {formatDate(job.createdAt)}
           </span>
         </div>
@@ -444,8 +444,12 @@ export function WorkshopJobsKanban({
     mutationFn: async ({ jobId, status }: { jobId: number; status: string }) => {
       return apiRequest("PUT", `/api/jobs/${jobId}`, { status });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    onSuccess: async () => {
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       toast({
         title: "Success",
         description: "Job status updated successfully",
@@ -526,17 +530,17 @@ export function WorkshopJobsKanban({
   }
 
   return (
-    <div className={cn("space-y-4", className)}>
-      <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+    <div className={cn("space-y-3 sm:space-y-4", className)}>
+      <div className="rounded-xl border border-neutral-200 bg-white p-3 sm:p-4 shadow-sm">
         <div className="relative w-full max-w-sm">
           <Input
             type="text"
             placeholder="Search jobs, customers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-11 w-full rounded-md border-neutral-200 pl-10 pr-3 text-sm shadow-sm focus-visible:border-green-600 focus-visible:ring-green-600"
+            className="h-10 sm:h-11 w-full rounded-md border-neutral-200 pl-9 sm:pl-10 pr-3 text-xs sm:text-sm shadow-sm focus-visible:border-green-600 focus-visible:ring-green-600"
           />
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <Search className="pointer-events-none absolute left-2.5 sm:left-3 top-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 -translate-y-1/2 text-neutral-400" />
         </div>
       </div>
       
@@ -546,7 +550,7 @@ export function WorkshopJobsKanban({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin scrollbar-thumb-neutral-300 scrollbar-track-transparent">
           {STATUS_COLUMNS.map((column) => (
             <KanbanColumn
               key={column.id}
@@ -560,7 +564,7 @@ export function WorkshopJobsKanban({
         </div>
         <DragOverlay>
           {draggedJob ? (
-            <div className="rotate-3 opacity-90 shadow-xl w-[280px]">
+            <div className="rotate-3 opacity-90 shadow-xl w-[200px] sm:w-[240px]">
               <Card className="border-neutral-200">
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">

@@ -51,11 +51,18 @@ export class TaskController {
   private async createTask(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getBusinessIdFromRequest(req);
+      console.log(`[TaskController] createTask - businessId: ${businessId}, body:`, JSON.stringify(req.body, null, 2));
+      
       const data = insertTaskSchema.parse({ ...req.body, businessId });
+      console.log(`[TaskController] createTask - Parsed data:`, JSON.stringify(data, null, 2));
+      
       const actorId = (req.session as any)?.userId ?? undefined;
       const task = await taskService.createTask(data, actorId);
+      
+      console.log(`[TaskController] createTask - Task created successfully with ID: ${task.id}`);
       res.status(201).json(task);
     } catch (error) {
+      console.error(`[TaskController] createTask - Error:`, error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           message: "Invalid task data",

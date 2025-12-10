@@ -84,8 +84,12 @@ export class TaskService {
   }
 
   async createTask(data: InsertTask, actorUserId?: number) {
+    console.log("[TaskService] createTask - Input data:", JSON.stringify(data, null, 2));
+    
     const status = data.status ? normalizeTaskStatus(data.status) : "pending";
     const task = await taskRepository.create({ ...data, status });
+    
+    console.log("[TaskService] createTask - Task created with ID:", task.id);
 
     let assignedToName = "";
     if (task.assignedTo) {
@@ -99,26 +103,31 @@ export class TaskService {
       }
     }
 
-    await logActivity({
-      businessId: task.businessId,
-      userId: actorUserId ?? null,
-      activityType: "task_created",
-      description: getActivityDescription("task_created", "task", task.id, {
-        taskTitle: task.title,
-        assignedTo: task.assignedTo,
-        assignedToName,
-        priority: task.priority
-      }),
-      entityType: "task",
-      entityId: task.id,
-      metadata: {
-        taskTitle: task.title,
-        assignedTo: task.assignedTo,
-        assignedToName,
-        priority: task.priority,
-        dueDate: task.dueDate
-      }
-    });
+    try {
+      await logActivity({
+        businessId: task.businessId,
+        userId: actorUserId ?? null,
+        activityType: "task_created",
+        description: getActivityDescription("task_created", "task", task.id, {
+          taskTitle: task.title,
+          assignedTo: task.assignedTo,
+          assignedToName,
+          priority: task.priority
+        }),
+        entityType: "task",
+        entityId: task.id,
+        metadata: {
+          taskTitle: task.title,
+          assignedTo: task.assignedTo,
+          assignedToName,
+          priority: task.priority,
+          dueDate: task.dueDate
+        }
+      });
+    } catch (error) {
+      console.error("Error logging task creation activity:", error);
+      // Don't fail task creation if activity logging fails
+    }
 
     // Create notification if task is assigned
     if (task.assignedTo) {
@@ -136,6 +145,7 @@ export class TaskService {
       }
     }
 
+    console.log("[TaskService] createTask - Returning task:", task.id);
     return task;
   }
 

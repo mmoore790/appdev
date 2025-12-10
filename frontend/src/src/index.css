@@ -108,3 +108,61 @@
     animation: none;
   }
 }
+
+/* Mobile-first responsive improvements */
+@media (max-width: 640px) {
+  /* Ensure minimum touch target sizes (44x44px recommended) */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Improve scrolling on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Better text selection */
+  * {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better focus visibility on mobile */
+@media (max-width: 768px) {
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Improve table responsiveness */
+@media (max-width: 768px) {
+  table {
+    font-size: 0.875rem;
+  }
+  
+  th, td {
+    padding: 0.5rem 0.25rem;
+  }
+}

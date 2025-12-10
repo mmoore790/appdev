@@ -418,7 +418,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
         throw new Error("Failed to create job: " + (error.message || "Unknown error"));
       }
     },
-    onSuccess: (newJob) => {
+    onSuccess: async (newJob) => {
       toast({
         title: "Job created",
         description: "The job has been successfully created."
@@ -428,8 +428,12 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       setCreatedJob(newJob);
       setShowPrintOption(true);
       
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      // Refetch both jobs and analytics to immediately update dashboard charts
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       
       // Don't auto-close to allow user to print receipt if needed
     },
@@ -509,11 +513,12 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
         description: "The job has been successfully updated."
       });
       
-      // Invalidate queries and wait for them to complete
+      // Refetch queries to immediately update dashboard charts
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["/api/jobs"] }),
-        queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}`] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/customers"] })
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
       ]);
       
       // Force a fresh query with new timestamp to ensure form shows updated values
@@ -539,13 +544,17 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
       if (!jobId) throw new Error("No job ID provided");
       return apiRequest("DELETE", `/api/jobs/${jobId}`);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Job deleted",
         description: "The job has been successfully deleted."
       });
       
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       
       // Close the dialog
       if (onComplete) {
