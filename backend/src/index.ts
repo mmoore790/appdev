@@ -56,6 +56,16 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Health check endpoint (must be early for Cloud Run)
+// This endpoint should work even if database is not connected
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // PostgreSQL session store for proper persistence in hosted environments
 const PgSession = ConnectPgSimple(session);
 
@@ -139,7 +149,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  console.log('🚀 Starting server initialization...');
+  console.log(`📦 Node version: ${process.version}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔌 PORT: ${process.env.PORT || '3001 (default)'}`);
+  
   const server = await registerRoutes(app);
+  console.log('✅ Routes registered successfully');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -203,13 +219,40 @@ app.use((req, res, next) => {
   
   // The port should be 3001 to match your frontend .env file
   // Port 5000 was from Replit.
-  // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
+  // Use PORT environment variable (required by Google Cloud Run), otherwise default to 3001 for local dev
   const port = process.env.PORT || 3001;
+  
   server.listen(Number(port), "0.0.0.0", () => {
     console.log(`✅ Backend server running on port ${port}`);
     console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
+    console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
     
     // Start the scheduler service after server is running
     schedulerService.start();
   });
-})();
+
+  // Handle server errors
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.syscall !== 'listen') {
+      throw error;
+    }
+
+    const bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
+
+    switch (error.code) {
+      case 'EACCES':
+        console.error(`${bind} requires elevated privileges`);
+        process.exit(1);
+        break;
+      case 'EADDRINUSE':
+        console.error(`${bind} is already in use`);
+        process.exit(1);
+        break;
+      default:
+        throw error;
+    }
+  });
+})().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});
