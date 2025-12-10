@@ -18,3 +18,4 @@ UPDATE "parts_used"
 SET "cost_excluding_vat" = "cost" 
 WHERE "cost" IS NOT NULL AND "cost_excluding_vat" IS NULL;
 
+
