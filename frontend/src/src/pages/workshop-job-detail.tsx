@@ -48,6 +48,11 @@ interface JobEntity {
   description?: string;
   taskDetails?: string;
   equipmentDescription?: string;
+  machineType?: string | null;
+  equipmentMake?: string | null;
+  equipmentModel?: string | null;
+  equipmentSerial?: string | null;
+  roboticMowerPinCode?: string | null;
   assignedTo?: number | null;
   customerId?: number | null;
   customerName?: string | null;
@@ -87,6 +92,10 @@ export default function WorkshopJobDetail() {
   const [jobFormData, setJobFormData] = useState({
     description: "",
     equipmentDescription: "",
+    machineType: "",
+    equipmentMake: "",
+    equipmentModel: "",
+    roboticMowerPinCode: "",
     estimatedHours: "",
     taskDetails: "",
     customerNotified: false,
@@ -216,13 +225,17 @@ export default function WorkshopJobDetail() {
     mutationFn: async ({ jobId, status }: { jobId: number; status: string }) => {
       return apiRequest("PUT", `/api/jobs/${jobId}`, { status });
     },
-    onSuccess: (_, variables) => {
+    onSuccess: async (_, variables) => {
       toast({
         title: "Status updated",
         description: `Job status changed to ${formatStatusLabel(variables.status)}.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: [`/api/jobs/${variables.jobId}`] });
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       void refetchJob();
     },
     onError: (error: any) => {
@@ -392,7 +405,7 @@ export default function WorkshopJobDetail() {
 
   // Update job details mutation
   const updateJobMutation = useMutation({
-    mutationFn: async (data: { description?: string; equipmentDescription?: string; estimatedHours?: number | null; taskDetails?: string; customerNotified?: boolean }) => {
+    mutationFn: async (data: { description?: string; equipmentDescription?: string; machineType?: string; equipmentMake?: string; equipmentModel?: string; roboticMowerPinCode?: string; estimatedHours?: number | null; taskDetails?: string; customerNotified?: boolean }) => {
       if (!job) throw new Error("No job loaded");
       return apiRequest("PUT", `/api/jobs/${job.id}`, data);
     },
@@ -420,6 +433,10 @@ export default function WorkshopJobDetail() {
       setJobFormData({
         description: job.description || "",
         equipmentDescription: job.equipmentDescription || "",
+        machineType: job.machineType || "",
+        equipmentMake: job.equipmentMake || "",
+        equipmentModel: job.equipmentModel || "",
+        roboticMowerPinCode: job.roboticMowerPinCode || "",
         estimatedHours: job.estimatedHours?.toString() || "",
         taskDetails: job.taskDetails || "",
         customerNotified: !!(job as any).customerNotified,
@@ -430,13 +447,17 @@ export default function WorkshopJobDetail() {
 
   const handleCancelEditJob = () => {
     setEditingJob(false);
-    setJobFormData({ description: "", equipmentDescription: "", estimatedHours: "", taskDetails: "", customerNotified: false });
+    setJobFormData({ description: "", equipmentDescription: "", machineType: "", equipmentMake: "", equipmentModel: "", roboticMowerPinCode: "", estimatedHours: "", taskDetails: "", customerNotified: false });
   };
 
   const handleSaveJob = () => {
     updateJobMutation.mutate({
       description: jobFormData.description,
       equipmentDescription: jobFormData.equipmentDescription,
+      machineType: jobFormData.machineType || null,
+      equipmentMake: jobFormData.equipmentMake || null,
+      equipmentModel: jobFormData.equipmentModel || null,
+      roboticMowerPinCode: jobFormData.roboticMowerPinCode || null,
       estimatedHours: jobFormData.estimatedHours ? parseInt(jobFormData.estimatedHours) : null,
       taskDetails: jobFormData.taskDetails,
       customerNotified: jobFormData.customerNotified,
@@ -449,12 +470,16 @@ export default function WorkshopJobDetail() {
       if (!job?.id) throw new Error("No job ID provided");
       return apiRequest("DELETE", `/api/jobs/${job.id}`);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({
         title: "Job deleted",
         description: "The job has been successfully deleted.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      // Refetch both jobs and analytics to immediately update dashboard charts
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/jobs"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/analytics/summary"] })
+      ]);
       navigate("/workshop");
     },
     onError: (error: any) => {
@@ -782,12 +807,75 @@ export default function WorkshopJobDetail() {
                 
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
-                    Brand & Model
+                    What is the machine?
+                  </label>
+                  <Select
+                    value={jobFormData.machineType}
+                    onValueChange={(value) => setJobFormData({ ...jobFormData, machineType: value })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select machine type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Ride on Mower">Ride on Mower</SelectItem>
+                      <SelectItem value="Walk behind mower">Walk behind mower</SelectItem>
+                      <SelectItem value="chainsaw">chainsaw</SelectItem>
+                      <SelectItem value="strimmer">strimmer</SelectItem>
+                      <SelectItem value="hedge trimmer">hedge trimmer</SelectItem>
+                      <SelectItem value="robotic mower">robotic mower</SelectItem>
+                      <SelectItem value="other">other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                      Make
+                    </label>
+                    <Input
+                      value={jobFormData.equipmentMake}
+                      onChange={(e) => setJobFormData({ ...jobFormData, equipmentMake: e.target.value })}
+                      placeholder="e.g. John Deere, Honda"
+                      className="h-9"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                      Model
+                    </label>
+                    <Input
+                      value={jobFormData.equipmentModel}
+                      onChange={(e) => setJobFormData({ ...jobFormData, equipmentModel: e.target.value })}
+                      placeholder="e.g. X300, GX160"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                
+                {jobFormData.machineType === "robotic mower" && (
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                      Robotic mower pin code
+                    </label>
+                    <Input
+                      value={jobFormData.roboticMowerPinCode}
+                      onChange={(e) => setJobFormData({ ...jobFormData, roboticMowerPinCode: e.target.value })}
+                      placeholder="Enter robotic mower PIN code"
+                      className="h-9"
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1 block">
+                    Equipment Description
                   </label>
                   <Textarea
                     value={jobFormData.equipmentDescription}
                     onChange={(e) => setJobFormData({ ...jobFormData, equipmentDescription: e.target.value })}
-                    placeholder="Enter brand, model, and serial number"
+                    placeholder="Additional equipment details"
                     rows={3}
                     className="resize-none"
                   />
@@ -864,12 +952,38 @@ export default function WorkshopJobDetail() {
                   value={job?.description || "No description"}
                   className="sm:col-span-2"
                 />
-                <MetaItem
-                  icon={<Wrench size={16} />}
-                  label="Brand & Model"
-                  value={job?.equipmentDescription || "No equipment details"}
-                  className="sm:col-span-2"
-                />
+                {job?.machineType && (
+                  <MetaItem
+                    icon={<Wrench size={16} />}
+                    label="Machine Type"
+                    value={job.machineType}
+                    className="sm:col-span-2"
+                  />
+                )}
+                {(job?.equipmentMake || job?.equipmentModel) && (
+                  <MetaItem
+                    icon={<Wrench size={16} />}
+                    label="Make & Model"
+                    value={`${job.equipmentMake || ""} ${job.equipmentModel || ""}`.trim() || "Not specified"}
+                    className="sm:col-span-2"
+                  />
+                )}
+                {job?.machineType === "robotic mower" && job?.roboticMowerPinCode && (
+                  <MetaItem
+                    icon={<Wrench size={16} />}
+                    label="Robotic mower pin code"
+                    value={job.roboticMowerPinCode}
+                    className="sm:col-span-2"
+                  />
+                )}
+                {job?.equipmentSerial && (
+                  <MetaItem
+                    icon={<Wrench size={16} />}
+                    label="Serial Number"
+                    value={job.equipmentSerial}
+                    className="sm:col-span-2"
+                  />
+                )}
                 <MetaItem
                   icon={<Clock size={16} />}
                   label="Estimated Hours"

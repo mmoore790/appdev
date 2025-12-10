@@ -211,7 +211,7 @@ export type Customer = typeof customers.$inferSelect;
 export const emailHistory = pgTable("email_history", {
   id: serial("id").primaryKey(),
   businessId: integer("business_id").notNull(),
-  customerId: integer("customer_id").notNull(),
+  customerId: integer("customer_id"), // Nullable - emails can be sent to addresses without customer records
   customerEmail: text("customer_email").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -285,6 +285,11 @@ export const jobs = pgTable("jobs", {
   jobId: text("job_id").notNull(), // No longer unique globally, unique per business
   equipmentId: integer("equipment_id"),
   equipmentDescription: text("equipment_description"),
+  machineType: text("machine_type"), // Ride on Mower, Walk behind mower, chainsaw, strimmer, hedge trimmer, robotic mower, other
+  equipmentMake: text("equipment_make"), // Make/brand of equipment
+  equipmentModel: text("equipment_model"), // Model of equipment
+  equipmentSerial: text("equipment_serial"), // Serial number of equipment
+  roboticMowerPinCode: text("robotic_mower_pin_code"), // PIN code for robotic mowers
   customerId: integer("customer_id"),
   customerName: text("customer_name"), // For custom customer entries (name-only mode)
   customerEmail: text("customer_email"), // For storing email when customer profile not saved
@@ -318,6 +323,11 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   jobId: true,
   equipmentId: true,
   equipmentDescription: true,
+  machineType: true,
+  equipmentMake: true,
+  equipmentModel: true,
+  equipmentSerial: true,
+  roboticMowerPinCode: true,
   customerId: true,
   assignedTo: true,
   status: true,
@@ -339,6 +349,11 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   jobId: true, // Make jobId optional - backend will generate it if not provided
   equipmentId: true,
   equipmentDescription: true,
+  machineType: true,
+  equipmentMake: true,
+  equipmentModel: true,
+  equipmentSerial: true,
+  roboticMowerPinCode: true,
   assignedTo: true,
   taskDetails: true,
   estimatedHours: true,

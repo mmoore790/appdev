@@ -269,24 +269,31 @@ export default function Workshop() {
 
   return (
     <>
-      <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
+      <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-4 max-w-[1920px]">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <Wrench className="h-5 w-5" />
-              Workshop Operations
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+              <Wrench className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="truncate">Workshop Operations</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Filter by technician, focus on bottlenecks, and keep every repair moving.</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 hidden sm:block">Filter by technician, focus on bottlenecks, and keep every repair moving.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  {dateRange?.from && dateRange?.to
-                    ? `${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`
-                    : "Select dates"}
+                <Button variant="outline" size="sm" className="h-9 text-xs sm:text-sm">
+                  <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">
+                    {dateRange?.from && dateRange?.to
+                      ? `${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`
+                      : "Select dates"}
+                  </span>
+                  <span className="sm:hidden">
+                    {dateRange?.from && dateRange?.to
+                      ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                      : "Dates"}
+                  </span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
@@ -367,19 +374,21 @@ export default function Workshop() {
             </Popover>
             <PrintWorkOrders
               trigger={
-                <Button variant="outline" size="sm" className="h-9">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print Work Orders
+                <Button variant="outline" size="sm" className="h-9 text-xs sm:text-sm">
+                  <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Print Work Orders</span>
+                  <span className="sm:hidden">Print</span>
                 </Button>
               }
             />
             <Button
               size="sm"
-              className="h-9 bg-green-700 hover:bg-green-800"
+              className="h-9 bg-green-700 hover:bg-green-800 text-xs sm:text-sm"
               onClick={() => setWizardOpen(true)}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              New Job
+              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden sm:inline">New Job</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </div>
         </div>
@@ -387,17 +396,17 @@ export default function Workshop() {
         <div className="w-full">
           <div className="space-y-6">
           <Card className="border border-neutral-200 shadow-sm">
-            <CardHeader className="space-y-6 border-b border-neutral-100 pb-6">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-semibold text-neutral-800">
+            <CardHeader className="space-y-4 sm:space-y-6 border-b border-neutral-100 pb-4 sm:pb-6">
+              <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-xl sm:text-2xl font-semibold text-neutral-800">
                     Job Pipeline
                   </CardTitle>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                   <div className="w-full sm:w-64">
                     <Select value={selectedUser} onValueChange={setSelectedUser}>
-                      <SelectTrigger className="h-11 w-full border-neutral-200">
+                      <SelectTrigger className="h-10 sm:h-11 w-full border-neutral-200 text-sm">
                         <SelectValue placeholder="All staff" />
                       </SelectTrigger>
                       <SelectContent>
@@ -419,39 +428,39 @@ export default function Workshop() {
                         setViewMode(value as ViewMode);
                       }
                     }}
-                    className="border border-neutral-200 rounded-lg p-1"
+                    className="border border-neutral-200 rounded-lg p-0.5 sm:p-1"
                   >
                     <ToggleGroupItem
                       value="list"
                       aria-label="List view"
-                      className="data-[state=on]:bg-green-600 data-[state=on]:text-white"
+                      className="data-[state=on]:bg-green-600 data-[state=on]:text-white h-9 sm:h-10 px-2 sm:px-3"
                     >
-                      <List className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">List</span>
+                      <List className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+                      <span className="hidden sm:inline text-xs sm:text-sm">List</span>
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value="kanban"
                       aria-label="Kanban view"
-                      className="data-[state=on]:bg-green-600 data-[state=on]:text-white"
+                      className="data-[state=on]:bg-green-600 data-[state=on]:text-white h-9 sm:h-10 px-2 sm:px-3"
                     >
-                      <LayoutGrid className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Kanban</span>
+                      <LayoutGrid className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+                      <span className="hidden sm:inline text-xs sm:text-sm">Kanban</span>
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </div>
               </div>
               {user?.id && myAssignedJobsCount > 0 && (
-                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 w-fit">
-                  <Briefcase className="h-4 w-4 text-green-700" />
-                  <span className="text-sm font-semibold text-green-800">
+                <div className="flex items-center gap-1.5 sm:gap-2 rounded-lg border border-green-200 bg-green-50 px-2 sm:px-3 py-1.5 sm:py-2 w-fit">
+                  <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-700 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm font-semibold text-green-800">
                     {myAssignedJobsCount} {myAssignedJobsCount === 1 ? "job" : "jobs"} assigned to me
                   </span>
                 </div>
               )}
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6">
               {viewMode === "kanban" ? (
-                <div className="space-y-4">
+                <div className="space-y-4 -mx-4 sm:-mx-6 px-4 sm:px-6">
                   <div className="text-sm font-medium text-neutral-700">
                     {tabSummaryText}
                   </div>
@@ -462,26 +471,26 @@ export default function Workshop() {
                 </div>
               ) : (
                 <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as StatusTabValue)}>
-                  <TabsList className="flex h-auto w-full flex-nowrap gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-2 overflow-x-auto">
+                  <TabsList className="flex h-auto w-full flex-nowrap gap-1 sm:gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-1.5 sm:p-2 overflow-x-auto">
                     {STATUS_TABS.map((tab, index) => (
-                      <div key={tab.value} className="flex items-center gap-1.5 flex-shrink-0">
+                      <div key={tab.value} className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
                         <TabsTrigger
                           value={tab.value}
-                          className="group flex min-w-[100px] sm:min-w-[120px] items-center justify-between gap-1.5 sm:gap-2 rounded-lg border border-transparent bg-white px-2 sm:px-2.5 py-2 text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:text-sm whitespace-nowrap"
+                          className="group flex min-w-[80px] xs:min-w-[100px] sm:min-w-[120px] items-center justify-between gap-1 sm:gap-1.5 sm:gap-2 rounded-lg border border-transparent bg-white px-1.5 sm:px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] xs:text-xs font-medium text-neutral-600 shadow-sm transition-colors hover:border-green-200 hover:text-green-700 data-[state=active]:border-green-600 data-[state=active]:bg-green-600 data-[state=active]:text-white sm:text-sm whitespace-nowrap"
                         >
                           <span className="truncate">{tab.shortLabel}</span>
-                          <span className="flex h-5 sm:h-6 min-w-[1.75rem] sm:min-w-[2rem] items-center justify-center rounded-full bg-neutral-100 px-1 sm:px-1.5 text-[10px] sm:text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white flex-shrink-0">
+                          <span className="flex h-4 sm:h-5 sm:h-6 min-w-[1.5rem] sm:min-w-[1.75rem] sm:min-w-[2rem] items-center justify-center rounded-full bg-neutral-100 px-0.5 sm:px-1 sm:px-1.5 text-[9px] sm:text-[10px] sm:text-[11px] font-semibold text-neutral-600 transition-colors group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white flex-shrink-0">
                             {statusCounts[tab.value]}
                           </span>
                         </TabsTrigger>
                         {index < STATUS_TABS.length - 1 && (
-                          <ChevronRight className="h-3.5 w-3.5 text-neutral-400 flex-shrink-0" />
+                          <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-neutral-400 flex-shrink-0" />
                         )}
                       </div>
                     ))}
                   </TabsList>
 
-                  <div className="mt-4 text-sm font-medium text-neutral-700">
+                  <div className="mt-3 sm:mt-4 text-xs sm:text-sm font-medium text-neutral-700">
                     {tabSummaryText}
                   </div>
 

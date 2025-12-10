@@ -265,11 +265,11 @@ export class CustomerController {
         return res.status(500).json({ message: "Failed to send email" });
       }
 
-      // Record in email history
+      // Record in email history (normalize email to lowercase for consistency)
       await storage.createEmailHistory({
         businessId,
         customerId: customer.id,
-        customerEmail: customer.email,
+        customerEmail: customer.email.toLowerCase(),
         subject,
         body,
         emailType: "manual",

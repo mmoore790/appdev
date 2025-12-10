@@ -608,8 +608,12 @@ export default function Callbacks() {
 
           const newJob = await apiRequest('POST', '/api/jobs', jobData);
           
-          queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
           queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+          // Refetch both jobs and analytics to immediately update dashboard charts
+          await Promise.all([
+            queryClient.refetchQueries({ queryKey: ['/api/jobs'] }),
+            queryClient.refetchQueries({ queryKey: ['/api/analytics/summary'] })
+          ]);
           
           toast({
             title: 'Job Created',
@@ -769,15 +773,15 @@ export default function Callbacks() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <PhoneCall className="h-5 w-5" />
-              Customer Callbacks
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+              <PhoneCall className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="truncate">Customer Callbacks</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Manage and track all customer callback requests</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 hidden sm:block">Manage and track all customer callback requests</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
               setIsCreateDialogOpen(open);
               if (!open) {
@@ -790,10 +794,11 @@ export default function Callbacks() {
               <DialogTrigger asChild>
                 <Button 
                   size="sm"
-                  className="h-9 bg-green-700 hover:bg-green-800"
+                  className="h-9 bg-green-700 hover:bg-green-800 text-xs sm:text-sm"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Callback
+                  <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">New Callback</span>
+                  <span className="sm:hidden">New</span>
                 </Button>
               </DialogTrigger>
             </Dialog>
@@ -801,44 +806,44 @@ export default function Callbacks() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
             <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 md:p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">To Do</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{stats.pendingCount}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">To Do</p>
+                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.pendingCount}</p>
                   </div>
-                  <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                    <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  <div className="p-2 sm:p-2.5 md:p-3 bg-blue-100 dark:bg-blue-900/50 rounded-full flex-shrink-0 ml-2">
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-blue-600 dark:text-blue-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 md:p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Scheduled</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{stats.scheduledCount}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">Scheduled</p>
+                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.scheduledCount}</p>
                   </div>
-                  <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-full">
-                    <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                  <div className="p-2 sm:p-2.5 md:p-3 bg-purple-100 dark:bg-purple-900/50 rounded-full flex-shrink-0 ml-2">
+                    <Calendar className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-purple-600 dark:text-purple-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-6">
+            <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow col-span-2 sm:col-span-1">
+              <CardContent className="p-3 sm:p-4 md:p-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Assigned to Me</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{stats.assignedCount}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">Assigned to Me</p>
+                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.assignedCount}</p>
                   </div>
-                  <div className="p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full">
-                    <UserCheck className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                  <div className="p-2 sm:p-2.5 md:p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full flex-shrink-0 ml-2">
+                    <UserCheck className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-amber-600 dark:text-amber-400" />
                   </div>
                 </div>
               </CardContent>
@@ -854,18 +859,18 @@ export default function Callbacks() {
             setShowCustomerDropdown(false);
           }
         }}>
-          <DialogContent className="sm:max-w-[525px]">
+          <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create New Callback Request</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-base sm:text-lg">Create New Callback Request</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Fill in the details below to create a new customer callback request.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
                 {/* Searchable Customer Selection */}
                 <FormItem>
-                  <FormLabel>Customer</FormLabel>
+                  <FormLabel className="text-xs sm:text-sm">Customer</FormLabel>
                   <div className="relative" ref={customerDropdownRef}>
                     <Input
                       placeholder="Search for customer or enter new name..."
@@ -892,6 +897,7 @@ export default function Callbacks() {
                         // Keep dropdown open briefly to allow clicking on items
                         setTimeout(() => setShowCustomerDropdown(false), 200);
                       }}
+                      className="text-xs sm:text-sm h-9 sm:h-10"
                     />
                     {customerSearchQuery && (
                       <Button
@@ -916,10 +922,10 @@ export default function Callbacks() {
                             {filteredCustomers.map((customer: any) => (
                               <div
                                 key={customer.id}
-                                className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between group"
+                                className="px-3 sm:px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between group"
                               >
                                 <div
-                                  className="flex-1 cursor-pointer"
+                                  className="flex-1 cursor-pointer min-w-0"
                                   onClick={() => {
                                     setSelectedCustomerId(customer.id);
                                     setCustomerSearchQuery(customer.name);
@@ -929,16 +935,16 @@ export default function Callbacks() {
                                     setShowCustomerDropdown(false);
                                   }}
                                 >
-                                  <div className="font-medium">{customer.name}</div>
+                                  <div className="font-medium text-xs sm:text-sm truncate">{customer.name}</div>
                                   {customer.phone && (
-                                    <div className="text-sm text-gray-500">{customer.phone}</div>
+                                    <div className="text-xs sm:text-sm text-gray-500 truncate">{customer.phone}</div>
                                   )}
                                 </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setViewingCustomerId(customer.id);
@@ -946,28 +952,29 @@ export default function Callbacks() {
                                     setShowCustomerDropdown(false);
                                   }}
                                 >
-                                  <Eye className="h-4 w-4" />
+                                  <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                 </Button>
                               </div>
                             ))}
                           </>
                         ) : customerSearchQuery ? (
-                          <div className="px-4 py-3">
-                            <div className="text-sm text-gray-500 mb-2">
+                          <div className="px-3 sm:px-4 py-3">
+                            <div className="text-xs sm:text-sm text-gray-500 mb-2">
                               No customers found matching "{customerSearchQuery}"
                             </div>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="w-full"
+                              className="w-full text-xs sm:text-sm h-9"
                               onClick={() => {
                                 setIsCreateCustomerDialogOpen(true);
                                 setShowCustomerDropdown(false);
                               }}
                             >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Create New Customer: "{customerSearchQuery}"
+                              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                              <span className="hidden sm:inline">Create New Customer: "{customerSearchQuery}"</span>
+                              <span className="sm:hidden">Create "{customerSearchQuery}"</span>
                             </Button>
                           </div>
                         ) : null}
@@ -984,7 +991,7 @@ export default function Callbacks() {
                         </FormControl>
                         <FormMessage />
                         {customerSearchQuery && !selectedCustomerId && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">
                             New customer will be created with this name
                           </p>
                         )}
@@ -998,9 +1005,9 @@ export default function Callbacks() {
                   name="phoneNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
+                      <FormLabel className="text-xs sm:text-sm">Phone Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="Phone number" {...field} />
+                        <Input placeholder="Phone number" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1012,9 +1019,9 @@ export default function Callbacks() {
                   name="subject"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Subject</FormLabel>
+                      <FormLabel className="text-xs sm:text-sm">Subject</FormLabel>
                       <FormControl>
-                        <Input placeholder="Callback subject" {...field} />
+                        <Input placeholder="Callback subject" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1026,12 +1033,13 @@ export default function Callbacks() {
                   name="details"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Details</FormLabel>
+                      <FormLabel className="text-xs sm:text-sm">Details</FormLabel>
                       <FormControl>
                         <Textarea 
                           placeholder="Enter additional details about the callback request" 
                           {...field} 
                           value={field.value || ''}
+                          className="text-xs sm:text-sm min-h-[80px] sm:min-h-[100px]"
                         />
                       </FormControl>
                       <FormMessage />
@@ -1044,10 +1052,10 @@ export default function Callbacks() {
                   name="priority"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Priority</FormLabel>
+                      <FormLabel className="text-xs sm:text-sm">Priority</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-xs sm:text-sm h-9 sm:h-10">
                             <SelectValue placeholder="Select priority" />
                           </SelectTrigger>
                         </FormControl>
@@ -1067,7 +1075,7 @@ export default function Callbacks() {
                   name="assignedTo"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Assign To</FormLabel>
+                      <FormLabel className="text-xs sm:text-sm">Assign To</FormLabel>
                       <Select 
                         onValueChange={(value) => {
                           if (value === "unassigned") {
@@ -1079,7 +1087,7 @@ export default function Callbacks() {
                         value={field.value?.toString() || "unassigned"}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-xs sm:text-sm h-9 sm:h-10">
                             <SelectValue placeholder="Select staff member or leave unassigned" />
                           </SelectTrigger>
                         </FormControl>
@@ -1097,17 +1105,19 @@ export default function Callbacks() {
                   )}
                 />
                 
-                <DialogFooter>
+                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
                   <Button 
                     type="button" 
                     variant="outline" 
                     onClick={() => setIsCreateDialogOpen(false)}
+                    className="w-full sm:w-auto text-xs sm:text-sm h-9"
                   >
                     Cancel
                   </Button>
                   <Button 
                     type="submit" 
                     disabled={createMutation.isPending}
+                    className="w-full sm:w-auto text-xs sm:text-sm h-9"
                   >
                     {createMutation.isPending ? 'Creating...' : 'Create Callback'}
                   </Button>
@@ -1130,17 +1140,17 @@ export default function Callbacks() {
             </DialogDescription>
           </DialogHeader>
           <Form {...completionForm}>
-            <form onSubmit={completionForm.handleSubmit(handleCallbackCompletion)} className="space-y-6">
+            <form onSubmit={completionForm.handleSubmit(handleCallbackCompletion)} className="space-y-4 sm:space-y-6">
               {/* Call Outcome */}
               <FormField
                 control={completionForm.control}
                 name="outcome"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Call Outcome *</FormLabel>
+                    <FormLabel className="text-xs sm:text-sm">Call Outcome *</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="text-xs sm:text-sm h-9 sm:h-10">
                           <SelectValue placeholder="Select outcome" />
                         </SelectTrigger>
                       </FormControl>
@@ -1166,12 +1176,13 @@ export default function Callbacks() {
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Notes *</FormLabel>
+                    <FormLabel className="text-xs sm:text-sm">Notes *</FormLabel>
                     <FormControl>
                       <Textarea 
                         placeholder="Enter details about the call, what was discussed, and any important information..." 
                         {...field} 
-                        rows={5}
+                        rows={4}
+                        className="text-xs sm:text-sm min-h-[100px] sm:min-h-[120px]"
                       />
                     </FormControl>
                     <FormMessage />
@@ -1181,15 +1192,15 @@ export default function Callbacks() {
 
               {/* Follow-up Date/Time - shown when outcome is needs_followup */}
               {completionForm.watch('outcome') === 'needs_followup' && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <FormField
                     control={completionForm.control}
                     name="followUpDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Follow-up Date</FormLabel>
+                        <FormLabel className="text-xs sm:text-sm">Follow-up Date</FormLabel>
                         <FormControl>
-                          <Input type="date" {...field} />
+                          <Input type="date" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1200,9 +1211,9 @@ export default function Callbacks() {
                     name="followUpTime"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Follow-up Time</FormLabel>
+                        <FormLabel className="text-xs sm:text-sm">Follow-up Time</FormLabel>
                         <FormControl>
-                          <Input type="time" {...field} />
+                          <Input type="time" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1213,12 +1224,12 @@ export default function Callbacks() {
 
               {/* Create Job Option */}
               {completionForm.watch('outcome') === 'needs_job' && (
-                <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="space-y-3 sm:space-y-4 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-blue-900 dark:text-blue-100">Job Creation Required</p>
-                      <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-blue-900 dark:text-blue-100 text-xs sm:text-sm">Job Creation Required</p>
+                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 mt-1">
                         A job will be automatically created when you complete this callback. Please provide the job description below.
                       </p>
                     </div>
@@ -1228,12 +1239,13 @@ export default function Callbacks() {
                     name="jobDescription"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Job Description *</FormLabel>
+                        <FormLabel className="text-xs sm:text-sm">Job Description *</FormLabel>
                         <FormControl>
                           <Textarea 
                             placeholder="Describe the work needed for the job (equipment, issue, etc.)..." 
                             {...field} 
-                            rows={4}
+                            rows={3}
+                            className="text-xs sm:text-sm min-h-[80px] sm:min-h-[100px]"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1244,23 +1256,23 @@ export default function Callbacks() {
               )}
 
               {/* Create Task Option */}
-              <div className="space-y-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="space-y-3 sm:space-y-4 p-3 sm:p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
                 <FormField
                   control={completionForm.control}
                   name="createTask"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormItem className="flex flex-row items-start space-x-2 sm:space-x-3 space-y-0">
                       <FormControl>
                         <input
                           type="checkbox"
                           checked={field.value}
                           onChange={field.onChange}
-                          className="mt-1"
+                          className="mt-1 h-4 w-4 sm:h-5 sm:w-5"
                         />
                       </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Create Follow-up Task</FormLabel>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="space-y-1 leading-none flex-1 min-w-0">
+                        <FormLabel className="text-xs sm:text-sm">Create Follow-up Task</FormLabel>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                           Create a task for any follow-up work needed
                         </p>
                       </div>
@@ -1273,12 +1285,13 @@ export default function Callbacks() {
                     name="taskDescription"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Task Description</FormLabel>
+                        <FormLabel className="text-xs sm:text-sm">Task Description</FormLabel>
                         <FormControl>
                           <Textarea 
                             placeholder="Describe what needs to be done..." 
                             {...field} 
                             rows={3}
+                            className="text-xs sm:text-sm min-h-[80px] sm:min-h-[90px]"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1288,7 +1301,7 @@ export default function Callbacks() {
                 )}
               </div>
               
-              <DialogFooter>
+              <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
                 <Button 
                   type="button" 
                   variant="outline" 
@@ -1296,12 +1309,14 @@ export default function Callbacks() {
                     setIsNotesDialogOpen(false);
                     completionForm.reset();
                   }}
+                  className="w-full sm:w-auto text-xs sm:text-sm h-9"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={completeMutation.isPending}
+                  className="w-full sm:w-auto text-xs sm:text-sm h-9"
                 >
                   {completeMutation.isPending ? 'Completing...' : 'Complete Callback'}
                 </Button>
@@ -1313,10 +1328,10 @@ export default function Callbacks() {
 
       {/* View Callback Details Dialog */}
       <Dialog open={isViewDetailsDialogOpen} onOpenChange={setIsViewDetailsDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto mx-2 sm:mx-0">
           <DialogHeader>
-            <DialogTitle>Callback Details</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-base sm:text-lg">Callback Details</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               View detailed information about this callback request.
             </DialogDescription>
           </DialogHeader>
@@ -1399,36 +1414,40 @@ export default function Callbacks() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <span className="font-medium text-gray-500">Customer:</span>
-                  <span>{selectedCallback.customerName}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-[100px_1fr] gap-2 sm:gap-2">
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Customer:</span>
+                  <span className="text-xs sm:text-sm">{selectedCallback.customerName}</span>
                   
-                  <span className="font-medium text-gray-500">Phone:</span>
-                  <span>{selectedCallback.phoneNumber}</span>
-                  
-                  <span className="font-medium text-gray-500">Subject:</span>
-                  <span>{selectedCallback.subject}</span>
-                  
-                  <span className="font-medium text-gray-500">Status:</span>
-                  <span>{getStatusBadge(selectedCallback.status)}</span>
-                  
-                  <span className="font-medium text-gray-500">Priority:</span>
-                  <span>{getPriorityBadge(selectedCallback.priority)}</span>
-                  
-                  <span className="font-medium text-gray-500">Assigned To:</span>
-                  <span>
-                    {selectedCallback.assignedTo 
-                      ? users?.find((u: any) => u.id === selectedCallback.assignedTo)?.fullName 
-                      : <Badge variant="outline" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">Unassigned</Badge>}
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Phone:</span>
+                  <span className="text-xs sm:text-sm">
+                    <a href={`tel:${selectedCallback.phoneNumber}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                      {selectedCallback.phoneNumber}
+                    </a>
                   </span>
                   
-                  <span className="font-medium text-gray-500">Requested:</span>
-                  <span>{selectedCallback.requestedAt ? format(new Date(selectedCallback.requestedAt), 'PPp') : 'Unknown'}</span>
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Subject:</span>
+                  <span className="text-xs sm:text-sm">{selectedCallback.subject}</span>
+                  
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Status:</span>
+                  <span className="text-xs sm:text-sm">{getStatusBadge(selectedCallback.status)}</span>
+                  
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Priority:</span>
+                  <span className="text-xs sm:text-sm">{getPriorityBadge(selectedCallback.priority)}</span>
+                  
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Assigned To:</span>
+                  <span className="text-xs sm:text-sm">
+                    {selectedCallback.assignedTo 
+                      ? users?.find((u: any) => u.id === selectedCallback.assignedTo)?.fullName 
+                      : <Badge variant="outline" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[10px] sm:text-xs">Unassigned</Badge>}
+                  </span>
+                  
+                  <span className="font-medium text-gray-500 text-xs sm:text-sm">Requested:</span>
+                  <span className="text-xs sm:text-sm">{selectedCallback.requestedAt ? format(new Date(selectedCallback.requestedAt), 'PPp') : 'Unknown'}</span>
                   
                   {selectedCallback.completedAt && (
                     <>
-                      <span className="font-medium text-gray-500">Completed:</span>
-                      <span>{format(new Date(selectedCallback.completedAt), 'PPp')}</span>
+                      <span className="font-medium text-gray-500 text-xs sm:text-sm">Completed:</span>
+                      <span className="text-xs sm:text-sm">{format(new Date(selectedCallback.completedAt), 'PPp')}</span>
                     </>
                   )}
                 </div>
@@ -1448,42 +1467,44 @@ export default function Callbacks() {
                 )}
                 
                 {selectedCallback.status === 'pending' && (
-                  <div className="flex space-x-2 pt-4">
+                  <div className="flex flex-col sm:flex-row gap-2 pt-3 sm:pt-4">
                     {!selectedCallback.assignedTo && (
                       <Button
                         variant="outline"
-                        className="flex items-center border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-900/20"
+                        className="flex items-center justify-center border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-900/20 text-xs sm:text-sm h-9 w-full sm:w-auto"
                         onClick={() => {
                           claimCallback(selectedCallback.id);
                           setIsViewDetailsDialogOpen(false);
                         }}
                         disabled={updateMutation.isPending}
                       >
-                        <UserCheck className="h-4 w-4 mr-1" />
-                        Claim This Callback
+                        <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Claim This Callback</span>
+                        <span className="sm:hidden">Claim</span>
                       </Button>
                     )}
                     <Button
                       variant="outline"
-                      className="flex items-center"
+                      className="flex items-center justify-center text-xs sm:text-sm h-9 w-full sm:w-auto"
                       onClick={() => {
                         setIsViewDetailsDialogOpen(false);
                         setIsNotesDialogOpen(true);
                       }}
                     >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Mark Complete
+                      <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-1" />
+                      <span className="hidden sm:inline">Mark Complete</span>
+                      <span className="sm:hidden">Complete</span>
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex items-center text-destructive"
+                      className="flex items-center justify-center text-destructive text-xs sm:text-sm h-9 w-full sm:w-auto"
                       onClick={() => {
                         setIsViewDetailsDialogOpen(false);
                         setCallbackToDelete(selectedCallback);
                         setIsDeleteConfirmDialogOpen(true);
                       }}
                     >
-                      <Trash2 className="h-4 w-4 mr-1" />
+                      <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-1" />
                       Delete
                     </Button>
                   </div>
@@ -1493,7 +1514,7 @@ export default function Callbacks() {
           })()}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDetailsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsViewDetailsDialogOpen(false)} className="w-full sm:w-auto text-xs sm:text-sm h-9">
               Close
             </Button>
           </DialogFooter>
@@ -1501,13 +1522,13 @@ export default function Callbacks() {
       </Dialog>
 
       <Card className="shadow-xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <CardTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+        <CardHeader className="pb-3 sm:pb-4">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
                 Callback Requests
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-xs sm:text-sm md:text-base">
                 {filteredAndSortedCallbacks.length} of {callbacks.length} callbacks
                 {searchQuery && ` matching "${searchQuery}"`}
               </CardDescription>
@@ -1515,38 +1536,38 @@ export default function Callbacks() {
           </div>
           
           {/* Search and Filters - Enhanced */}
-          <div className="mb-6 space-y-4">
+          <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
             {/* Enhanced Search Bar */}
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 z-10" />
+              <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 z-10" />
               <Input
-                placeholder="Search by customer, subject, phone, or details..."
+                placeholder="Search callbacks..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-12 pr-10 h-12 text-base border-2 focus:border-blue-500 dark:focus:border-blue-400 rounded-xl shadow-sm"
+                className="pl-10 sm:pl-12 pr-9 sm:pr-10 h-10 sm:h-12 text-sm sm:text-base border-2 focus:border-blue-500 dark:focus:border-blue-400 rounded-xl shadow-sm"
               />
               {searchQuery && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                  className="absolute right-1.5 sm:right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
                   onClick={() => setSearchQuery('')}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>
               )}
             </div>
 
             {/* Enhanced Filter Row */}
-            <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Quick Filters:</span>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600 dark:text-gray-400" />
+                <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">Filters:</span>
               </div>
               
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-[150px] h-10 border-2 rounded-lg">
+                <SelectTrigger className="w-full sm:w-[140px] md:w-[150px] h-9 sm:h-10 border-2 rounded-lg text-xs sm:text-sm">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1558,7 +1579,7 @@ export default function Callbacks() {
               </Select>
 
               <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-                <SelectTrigger className="w-[180px] h-10 border-2 rounded-lg">
+                <SelectTrigger className="w-full sm:w-[160px] md:w-[180px] h-9 sm:h-10 border-2 rounded-lg text-xs sm:text-sm">
                   <SelectValue placeholder="Assignee" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1579,16 +1600,16 @@ export default function Callbacks() {
             onValueChange={(value) => setSelectedTab(value)}
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-5 h-14 bg-gray-100 dark:bg-gray-900/50 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+            <TabsList className="grid w-full grid-cols-5 h-auto sm:h-12 md:h-14 bg-gray-100 dark:bg-gray-900/50 p-0.5 sm:p-1 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
               <TabsTrigger 
                 value="pending"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-blue-400 rounded-lg transition-all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-blue-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
               >
-                <div className="flex items-center gap-2 font-semibold">
-                  <Clock className="h-4 w-4" />
-                  <span>To Do</span>
+                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
+                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">To Do</span>
                   {stats.pendingCount > 0 && (
-                    <Badge className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                    <Badge className="ml-0 sm:ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
                       {stats.pendingCount}
                     </Badge>
                   )}
@@ -1596,13 +1617,13 @@ export default function Callbacks() {
               </TabsTrigger>
               <TabsTrigger 
                 value="scheduled"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-purple-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-purple-400 rounded-lg transition-all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-purple-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-purple-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
               >
-                <div className="flex items-center gap-2 font-semibold">
-                  <Calendar className="h-4 w-4" />
-                  <span>Follow Up</span>
+                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
+                  <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">Follow Up</span>
                   {stats.scheduledCount > 0 && (
-                    <Badge className="ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
+                    <Badge className="ml-0 sm:ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
                       {stats.scheduledCount}
                     </Badge>
                   )}
@@ -1610,13 +1631,13 @@ export default function Callbacks() {
               </TabsTrigger>
               <TabsTrigger 
                 value="assigned"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-amber-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-amber-400 rounded-lg transition-all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-amber-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-amber-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
               >
-                <div className="flex items-center gap-2 font-semibold">
-                  <UserCheck className="h-4 w-4" />
-                  <span>My Callbacks</span>
+                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
+                  <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">My Callbacks</span>
                   {stats.assignedCount > 0 && (
-                    <Badge className="ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                    <Badge className="ml-0 sm:ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
                       {stats.assignedCount}
                     </Badge>
                   )}
@@ -1624,13 +1645,13 @@ export default function Callbacks() {
               </TabsTrigger>
               <TabsTrigger 
                 value="completed"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-green-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-green-400 rounded-lg transition-all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-green-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-green-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
               >
-                <div className="flex items-center gap-2 font-semibold">
-                  <CheckCircle className="h-4 w-4" />
-                  <span>Completed</span>
+                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
+                  <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="truncate">Completed</span>
                   {stats.completedCount > 0 && (
-                    <Badge className="ml-1 bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300">
+                    <Badge className="ml-0 sm:ml-1 bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
                       {stats.completedCount}
                     </Badge>
                   )}
@@ -1638,9 +1659,9 @@ export default function Callbacks() {
               </TabsTrigger>
               <TabsTrigger 
                 value="all"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-gray-700 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-gray-300 rounded-lg transition-all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-gray-700 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-gray-300 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
               >
-                <span className="font-semibold">All</span>
+                <span className="font-semibold text-[10px] xs:text-xs sm:text-sm">All</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1648,15 +1669,15 @@ export default function Callbacks() {
         <CardContent>
           {/* Date Filter - Only show for "completed" and "all" tabs */}
           {(selectedTab === 'completed' || selectedTab === 'all') && (
-            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900">
-              <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900">
+              <div className="flex flex-col gap-3 sm:gap-4">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm font-semibold text-blue-900 dark:text-blue-100">
                     Filter by Date Range
                   </span>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="grid grid-cols-2 sm:flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1664,9 +1685,9 @@ export default function Callbacks() {
                       from: startOfDay(subDays(new Date(), 7)),
                       to: endOfDay(new Date())
                     })}
-                    className="text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                   >
-                    Last 7 days
+                    7 days
                   </Button>
                   <Button
                     variant="outline"
@@ -1675,9 +1696,9 @@ export default function Callbacks() {
                       from: startOfDay(subDays(new Date(), 31)),
                       to: endOfDay(new Date())
                     })}
-                    className="text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                   >
-                    Last 31 days
+                    31 days
                   </Button>
                   <Button
                     variant="outline"
@@ -1686,9 +1707,9 @@ export default function Callbacks() {
                       from: startOfDay(subDays(new Date(), 90)),
                       to: endOfDay(new Date())
                     })}
-                    className="text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                   >
-                    Last 90 days
+                    90 days
                   </Button>
                   <Button
                     variant="outline"
@@ -1697,12 +1718,12 @@ export default function Callbacks() {
                       from: startOfDay(new Date(0)),
                       to: endOfDay(addDays(new Date(), 365))
                     })}
-                    className="text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50 col-span-2 sm:col-span-1"
                   >
                     All Time
                   </Button>
                 </div>
-                <div className="text-xs text-blue-700 dark:text-blue-300">
+                <div className="text-[10px] sm:text-xs text-blue-700 dark:text-blue-300">
                   Showing: {format(dateFilter.from, 'MMM dd, yyyy')} - {format(dateFilter.to, 'MMM dd, yyyy')}
                 </div>
               </div>
@@ -1710,19 +1731,19 @@ export default function Callbacks() {
           )}
           
           {isLoading ? (
-            <div className="flex justify-center items-center p-8">
+            <div className="flex flex-col justify-center items-center p-6 sm:p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
-              <span className="ml-3">Loading callbacks...</span>
+              <span className="ml-0 sm:ml-3 mt-2 sm:mt-0 text-xs sm:text-sm">Loading callbacks...</span>
             </div>
           ) : filteredAndSortedCallbacks?.length === 0 ? (
-            <div className="text-center p-8">
-              <PhoneCall className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-semibold text-gray-900">
+            <div className="text-center p-6 sm:p-8">
+              <PhoneCall className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+              <h3 className="mt-2 text-xs sm:text-sm font-semibold text-gray-900">
                 {searchQuery || priorityFilter !== 'all' || assigneeFilter !== 'all'
                   ? 'No callbacks match your filters'
                   : 'No callback requests'}
               </h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs sm:text-sm text-gray-500">
                 {searchQuery || priorityFilter !== 'all' || assigneeFilter !== 'all'
                   ? 'Try adjusting your search or filter criteria.'
                   : selectedTab === 'all' 
@@ -1746,22 +1767,24 @@ export default function Callbacks() {
                       setPriorityFilter('all');
                       setAssigneeFilter('all');
                     }}
+                    className="text-xs sm:text-sm h-9"
                   >
                     Clear Filters
                   </Button>
                 </div>
               )}
               {selectedTab !== 'deleted' && !searchQuery && priorityFilter === 'all' && assigneeFilter === 'all' && (
-                <div className="mt-6">
-                  <Button onClick={() => setIsCreateDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Callback Request
+                <div className="mt-4 sm:mt-6">
+                  <Button onClick={() => setIsCreateDialogOpen(true)} className="text-xs sm:text-sm h-9">
+                    <Plus className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">New Callback Request</span>
+                    <span className="sm:hidden">New Callback</span>
                   </Button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {filteredAndSortedCallbacks?.map((callback: any) => {
                 const assignee = users?.find((u: any) => u.id === callback.assignedTo);
                 const isScheduled = callback.requestedAt && new Date(callback.requestedAt) > new Date();
@@ -1784,110 +1807,112 @@ export default function Callbacks() {
                           setIsViewDetailsDialogOpen(true);
                         }}
                       >
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            {/* Left Section - Main Info */}
-                            <div className="flex-1 space-y-3">
-                              <div className="flex items-start gap-4">
-                                <div className={`p-3 rounded-xl ${
+                        <CardContent className="p-3 sm:p-4 md:p-6">
+                          <div className="flex flex-col gap-3 sm:gap-4">
+                            {/* Main Info Section */}
+                            <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
+                              <div className={`p-2 sm:p-2.5 md:p-3 rounded-xl flex-shrink-0 ${
+                                isScheduled
+                                  ? 'bg-purple-100 dark:bg-purple-900/50'
+                                  : isHighPriority
+                                    ? 'bg-red-100 dark:bg-red-900/50'
+                                    : 'bg-blue-100 dark:bg-blue-900/50'
+                              }`}>
+                                <PhoneCall className={`h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 ${
                                   isScheduled
-                                    ? 'bg-purple-100 dark:bg-purple-900/50'
+                                    ? 'text-purple-600 dark:text-purple-400'
                                     : isHighPriority
-                                      ? 'bg-red-100 dark:bg-red-900/50'
-                                      : 'bg-blue-100 dark:bg-blue-900/50'
-                                }`}>
-                                  <PhoneCall className={`h-6 w-6 ${
-                                    isScheduled
-                                      ? 'text-purple-600 dark:text-purple-400'
-                                      : isHighPriority
-                                        ? 'text-red-600 dark:text-red-400'
-                                        : 'text-blue-600 dark:text-blue-400'
-                                  }`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
-                                      {callback.customerName}
-                                    </h3>
+                                      ? 'text-red-600 dark:text-red-400'
+                                      : 'text-blue-600 dark:text-blue-400'
+                                }`} />
+                              </div>
+                              <div className="flex-1 min-w-0 space-y-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
+                                    {callback.customerName}
+                                  </h3>
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     {getPriorityBadge(callback.priority)}
                                     {isScheduled && (
-                                      <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
+                                      <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 text-[10px] sm:text-xs">
                                         <Calendar className="h-3 w-3 mr-1" />
                                         Scheduled
                                       </Badge>
                                     )}
                                   </div>
-                                  <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                                    {callback.subject}
+                                </div>
+                                <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">
+                                  {callback.subject}
+                                </p>
+                                {callback.details && (
+                                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                                    {callback.details}
                                   </p>
-                                  {callback.details && (
-                                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
-                                      {callback.details}
-                                    </p>
-                                  )}
-                                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                                    <div className="flex items-center gap-2">
-                                      <PhoneForwarded className="h-4 w-4" />
-                                      <span className="font-mono">{callback.phoneNumber}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <UserCheck className="h-4 w-4" />
-                                      <span>{assignee?.fullName || 'Unassigned'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="h-4 w-4" />
-                                      <span>
-                                        {callback.requestedAt 
-                                          ? format(new Date(callback.requestedAt), 'MMM dd, yyyy • HH:mm')
-                                          : 'Unknown'}
+                                )}
+                                <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                                  <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <PhoneForwarded className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                    <a href={`tel:${callback.phoneNumber}`} className="font-mono hover:text-blue-600 dark:hover:text-blue-400" onClick={(e) => e.stopPropagation()}>
+                                      {callback.phoneNumber}
+                                    </a>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                    <span>{assignee?.fullName || 'Unassigned'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                    <span>
+                                      {callback.requestedAt 
+                                        ? format(new Date(callback.requestedAt), 'MMM dd, yyyy • HH:mm')
+                                        : 'Unknown'}
+                                    </span>
+                                    {isScheduled && (
+                                      <span className="text-purple-600 dark:text-purple-400 font-medium">
+                                        ({formatDistanceToNow(new Date(callback.requestedAt), { addSuffix: true })})
                                       </span>
-                                      {isScheduled && (
-                                        <span className="text-purple-600 dark:text-purple-400 font-medium">
-                                          ({formatDistanceToNow(new Date(callback.requestedAt), { addSuffix: true })})
-                                        </span>
-                                      )}
-                                    </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
                             </div>
 
-                            {/* Right Section - Status & Actions */}
-                            <div className="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4">
-                              <div className="flex flex-col items-end gap-2">
+                            {/* Actions Section */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex-shrink-0">
                                 {getStatusBadge(callback.status)}
-                                {callback.status === 'pending' && (
-                                  <div className="flex gap-2">
-                                    {!callback.assignedTo && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-900/20"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          claimCallback(callback.id);
-                                        }}
-                                        disabled={updateMutation.isPending}
-                                      >
-                                        <UserCheck className="h-4 w-4 mr-2" />
-                                        Claim
-                                      </Button>
-                                    )}
+                              </div>
+                              {callback.status === 'pending' && (
+                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                  {!callback.assignedTo && (
                                     <Button
                                       size="sm"
-                                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md"
+                                      variant="outline"
+                                      className="border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-900/20 text-xs sm:text-sm h-9 w-full sm:w-auto"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedCallback(callback);
-                                        setIsNotesDialogOpen(true);
+                                        claimCallback(callback.id);
                                       }}
+                                      disabled={updateMutation.isPending}
                                     >
-                                      <CheckCircle className="h-4 w-4 mr-2" />
-                                      Complete
+                                      <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                                      Claim
                                     </Button>
-                                  </div>
-                                )}
-                              </div>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md text-xs sm:text-sm h-9 w-full sm:w-auto"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCallback(callback);
+                                      setIsNotesDialogOpen(true);
+                                    }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                                    Complete
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -1911,41 +1936,43 @@ export default function Callbacks() {
           </DialogHeader>
 
           {callbackToDelete && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="font-medium">Customer:</div>
-                <div>{callbackToDelete.customerName}</div>
+            <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                <div className="font-medium text-gray-500">Customer:</div>
+                <div className="text-gray-900 dark:text-gray-100">{callbackToDelete.customerName}</div>
                 
-                <div className="font-medium">Phone:</div>
-                <div>{callbackToDelete.phoneNumber}</div>
+                <div className="font-medium text-gray-500">Phone:</div>
+                <div className="text-gray-900 dark:text-gray-100">{callbackToDelete.phoneNumber}</div>
                 
-                <div className="font-medium">Subject:</div>
-                <div>{callbackToDelete.subject}</div>
+                <div className="font-medium text-gray-500">Subject:</div>
+                <div className="text-gray-900 dark:text-gray-100">{callbackToDelete.subject}</div>
                 
-                <div className="font-medium">Priority:</div>
+                <div className="font-medium text-gray-500">Priority:</div>
                 <div>{getPriorityBadge(callbackToDelete.priority)}</div>
               </div>
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteConfirmDialogOpen(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsDeleteConfirmDialogOpen(false)} className="w-full sm:w-auto text-xs sm:text-sm h-9">
               Cancel
             </Button>
             <Button 
               variant="destructive" 
               onClick={() => deleteMutation.mutate(callbackToDelete?.id)}
               disabled={deleteMutation.isPending}
+              className="w-full sm:w-auto text-xs sm:text-sm h-9"
             >
               {deleteMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 sm:h-4 sm:w-4 border-t-2 border-b-2 border-white mr-1.5 sm:mr-2"></div>
                   Deleting...
                 </>
               ) : (
                 <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Permanently
+                  <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Delete Permanently</span>
+                  <span className="sm:hidden">Delete</span>
                 </>
               )}
             </Button>
@@ -1955,10 +1982,10 @@ export default function Callbacks() {
 
       {/* Create Customer Dialog */}
       <Dialog open={isCreateCustomerDialogOpen} onOpenChange={setIsCreateCustomerDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Customer</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-base sm:text-lg">Create New Customer</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               Create a new customer profile. The name field is pre-filled from your search.
             </DialogDescription>
           </DialogHeader>
@@ -1999,10 +2026,10 @@ export default function Callbacks() {
 
       {/* View Customer Details Dialog */}
       <Dialog open={isViewCustomerDialogOpen} onOpenChange={setIsViewCustomerDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-0">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <User className="h-4 w-4 sm:h-5 sm:w-5" />
               Customer Details
             </DialogTitle>
           </DialogHeader>
@@ -2057,41 +2084,45 @@ function CustomerDetailsView({ customerId, onClose }: { customerId: number; onCl
         <CardHeader>
           <CardTitle>{customer.name}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="space-y-3 sm:space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {customer.phone && (
-              <div className="flex items-start gap-3">
-                <Phone className="h-5 w-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Phone</p>
-                  <p className="text-base">{customer.phone}</p>
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Phone</p>
+                  <a href={`tel:${customer.phone}`} className="text-sm sm:text-base text-blue-600 dark:text-blue-400 hover:underline break-all">
+                    {customer.phone}
+                  </a>
                 </div>
               </div>
             )}
             {customer.email && (
-              <div className="flex items-start gap-3">
-                <Mail className="h-5 w-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Email</p>
-                  <p className="text-base">{customer.email}</p>
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Email</p>
+                  <a href={`mailto:${customer.email}`} className="text-sm sm:text-base text-blue-600 dark:text-blue-400 hover:underline break-all">
+                    {customer.email}
+                  </a>
                 </div>
               </div>
             )}
             {customer.address && (
-              <div className="flex items-start gap-3 md:col-span-2">
-                <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Address</p>
-                  <p className="text-base">{customer.address}</p>
+              <div className="flex items-start gap-2 sm:gap-3 md:col-span-2">
+                <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Address</p>
+                  <p className="text-sm sm:text-base whitespace-pre-wrap break-words">{customer.address}</p>
                 </div>
               </div>
             )}
             {customer.notes && (
-              <div className="flex items-start gap-3 md:col-span-2">
-                <FileTextIcon className="h-5 w-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Notes</p>
-                  <p className="text-base whitespace-pre-wrap">{customer.notes}</p>
+              <div className="flex items-start gap-2 sm:gap-3 md:col-span-2">
+                <FileTextIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Notes</p>
+                  <p className="text-sm sm:text-base whitespace-pre-wrap break-words">{customer.notes}</p>
                 </div>
               </div>
             )}
@@ -2100,7 +2131,7 @@ function CustomerDetailsView({ customerId, onClose }: { customerId: number; onCl
       </Card>
 
       <DialogFooter>
-        <Button variant="outline" onClick={onClose}>
+        <Button variant="outline" onClick={onClose} className="w-full sm:w-auto text-xs sm:text-sm h-9">
           Close
         </Button>
       </DialogFooter>

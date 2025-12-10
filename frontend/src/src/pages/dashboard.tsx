@@ -654,49 +654,50 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-5 pb-6">
+    <div className="space-y-4 sm:space-y-5 pb-4 sm:pb-6">
       {/* Header Section - Clean and Simple */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200">
+        <div className="flex flex-col gap-1.5 sm:gap-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
             {getGreeting()}, <span className="text-emerald-600 dark:text-emerald-400">{user?.fullName?.split(" ")[0] || user?.username || "User"}</span>
           </h1>
           {businessData?.name ? (
-            <p className="text-base font-medium text-slate-700 dark:text-slate-300">
+            <p className="text-sm sm:text-base font-medium text-slate-700 dark:text-slate-300">
               {businessData.name}
             </p>
           ) : (
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
               <Link href="/settings" className="text-emerald-600 dark:text-emerald-400 hover:underline">
                 Update company settings
               </Link> with your business information
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+            <span className="flex items-center gap-1 sm:gap-1.5">
+              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500 dark:text-slate-400" />
               <span className="font-medium">{todayDate}</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+            <span className="flex items-center gap-1 sm:gap-1.5">
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-500 dark:text-slate-400" />
               <span className="font-medium">{currentTimeStr}</span>
             </span>
             {user?.role && (
-              <span className="capitalize px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-md text-xs font-medium">
+              <span className="capitalize px-2 sm:px-2.5 py-0.5 sm:py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-md text-[10px] sm:text-xs font-medium">
                 {user.role}
               </span>
             )}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
-            className="inline-flex items-center gap-1.5 text-xs"
+            className="inline-flex items-center gap-1.5 text-xs h-8 sm:h-auto"
             onClick={() => setIsTourOpen(true)}
           >
             <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-            Product tour
+            <span className="hidden xs:inline">Product tour</span>
+            <span className="xs:hidden">Tour</span>
           </Button>
           <AddMenu
             size="sm"
@@ -710,84 +711,84 @@ export default function Dashboard() {
       <div className="space-y-5">
         {/* Key Metrics - Large and Prominent */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Operations Snapshot</h2>
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900">Operations Snapshot</h2>
             <Link href="/analytics">
-              <Button variant="ghost" size="sm" className="text-xs h-7">
-                <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
-                Analytics
+              <Button variant="ghost" size="sm" className="text-xs h-7 sm:h-8">
+                <BarChart3 className="h-3.5 w-3.5 mr-1 sm:mr-1.5" />
+                <span className="hidden sm:inline">Analytics</span>
               </Button>
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <Card className="border-slate-200 hover:border-emerald-300 transition-colors">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-600 mb-1">Active Jobs</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Active Jobs</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
                       {analyticsLoading ? "..." : analytics.activeJobs}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-lg bg-emerald-500 flex items-center justify-center">
-                    <Wrench className="h-6 w-6 text-white" />
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0 ml-2">
+                    <Wrench className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/workshop" className="block mt-3 text-xs text-emerald-600 hover:text-emerald-700 font-medium">
+                <Link href="/workshop" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-emerald-600 hover:text-emerald-700 font-medium">
                   View workshop →
                 </Link>
               </CardContent>
             </Card>
             <Card className="border-slate-200 hover:border-amber-300 transition-colors">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-600 mb-1">Pending Tasks</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Pending Tasks</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
                       {tasksLoading ? "..." : metrics.pendingTasksCount}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-lg bg-amber-500 flex items-center justify-center">
-                    <Clock className="h-6 w-6 text-white" />
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-amber-500 flex items-center justify-center flex-shrink-0 ml-2">
+                    <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/tasks" className="block mt-3 text-xs text-amber-600 hover:text-amber-700 font-medium">
+                <Link href="/tasks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-amber-600 hover:text-amber-700 font-medium">
                   Manage tasks →
                 </Link>
               </CardContent>
             </Card>
             <Card className="border-slate-200 hover:border-blue-300 transition-colors">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-600 mb-1">Open Orders</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Open Orders</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
                       {ordersLoading ? "..." : metrics.openOrders}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-lg bg-blue-500 flex items-center justify-center">
-                    <Package className="h-6 w-6 text-white" />
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0 ml-2">
+                    <Package className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/orders" className="block mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Link href="/orders" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
                   View orders →
                 </Link>
               </CardContent>
             </Card>
             <Card className="border-slate-200 hover:border-blue-300 transition-colors">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-600 mb-1">Callbacks</p>
-                    <p className="text-3xl font-bold text-slate-900">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Callbacks</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
                       {metrics.pendingCallbacks}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-lg bg-blue-500 flex items-center justify-center">
-                    <PhoneCall className="h-6 w-6 text-white" />
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0 ml-2">
+                    <PhoneCall className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/callbacks" className="block mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Link href="/callbacks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
                   View callbacks →
                 </Link>
               </CardContent>
@@ -796,17 +797,17 @@ export default function Dashboard() {
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           {/* Job Status Distribution */}
           <Card className="border-slate-200">
-            <CardHeader className="px-4 py-3 border-b border-slate-200">
+            <CardHeader className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200">
               <CardTitle className="text-sm font-semibold">Job Status</CardTitle>
               <CardDescription className="text-xs">Breakdown by status</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-4 py-3 sm:py-4">
               {analyticsLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
-                  <div className="text-slate-500">Loading...</div>
+                <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+                  <div className="text-sm sm:text-base text-slate-500">Loading...</div>
                 </div>
               ) : metrics.jobStatusChartData.length > 0 ? (
                 <ChartContainer
@@ -815,7 +816,7 @@ export default function Dashboard() {
                       label: "Jobs",
                     },
                   }}
-                  className="h-[300px]"
+                  className="h-[250px] sm:h-[300px]"
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={metrics.jobStatusChartData}>
@@ -832,7 +833,7 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 </ChartContainer>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-slate-500">
+                <div className="h-[250px] sm:h-[300px] flex items-center justify-center text-sm sm:text-base text-slate-500">
                   No job data available
                 </div>
               )}
@@ -841,14 +842,14 @@ export default function Dashboard() {
 
           {/* Task Status Summary */}
           <Card className="border-slate-200">
-            <CardHeader className="px-4 py-3 border-b border-slate-200">
+            <CardHeader className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200">
               <CardTitle className="text-sm font-semibold">Task Status</CardTitle>
               <CardDescription className="text-xs">Task distribution</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-4 py-3 sm:py-4">
               {tasksLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
-                  <div className="text-slate-500">Loading...</div>
+                <div className="h-[250px] sm:h-[300px] flex items-center justify-center">
+                  <div className="text-sm sm:text-base text-slate-500">Loading...</div>
                 </div>
               ) : (
                 <ChartContainer
@@ -857,7 +858,7 @@ export default function Dashboard() {
                       label: "Tasks",
                     },
                   }}
-                  className="h-[300px]"
+                  className="h-[250px] sm:h-[300px]"
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={taskSummaryData}>
@@ -879,44 +880,48 @@ export default function Dashboard() {
         </div>
 
         {/* My Overview Section - Tabbed */}
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mt-4 sm:mt-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">My Overview</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Your personal action items and updates</p>
+              <h2 className="text-base sm:text-lg font-semibold text-slate-900">My Overview</h2>
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Your personal action items and updates</p>
             </div>
           </div>
           <Card className="border-slate-200">
-            <CardHeader className="px-4 py-3 border-b border-slate-200">
+            <CardHeader className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200">
               <CardTitle className="text-sm font-semibold">My Overview</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                <div className="px-4 pt-3">
-                  <TabsList className="grid w-full grid-cols-4 h-9">
-                    <TabsTrigger value="overview" className="text-xs">
-                      Overview
+                <div className="px-2 sm:px-4 pt-2 sm:pt-3">
+                  <TabsList className="grid w-full grid-cols-4 h-8 sm:h-9 gap-1 sm:gap-0">
+                    <TabsTrigger value="overview" className="text-[10px] sm:text-xs px-1 sm:px-2">
+                      <span className="hidden sm:inline">Overview</span>
+                      <span className="sm:hidden">All</span>
                     </TabsTrigger>
-                    <TabsTrigger value="tasks" className="text-xs">
-                      My Tasks
+                    <TabsTrigger value="tasks" className="text-[10px] sm:text-xs px-1 sm:px-2">
+                      <span className="hidden sm:inline">My Tasks</span>
+                      <span className="sm:hidden">Tasks</span>
                       {metrics.myTasks.active > 0 && (
-                        <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0">
+                        <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
                           {metrics.myTasks.active}
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="jobs" className="text-xs">
-                      My Jobs
+                    <TabsTrigger value="jobs" className="text-[10px] sm:text-xs px-1 sm:px-2">
+                      <span className="hidden sm:inline">My Jobs</span>
+                      <span className="sm:hidden">Jobs</span>
                       {metrics.myJobs.total > 0 && (
-                        <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0">
+                        <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
                           {metrics.myJobs.total}
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="callbacks" className="text-xs">
-                      My Callbacks
+                    <TabsTrigger value="callbacks" className="text-[10px] sm:text-xs px-1 sm:px-2">
+                      <span className="hidden sm:inline">My Callbacks</span>
+                      <span className="sm:hidden">Calls</span>
                       {metrics.myCallbacks.total > 0 && (
-                        <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0">
+                        <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
                           {metrics.myCallbacks.total}
                         </Badge>
                       )}
@@ -925,90 +930,90 @@ export default function Dashboard() {
                 </div>
 
                 {/* Overview Tab */}
-                <TabsContent value="overview" className="mt-4">
-                  <CardContent className="p-4">
-                    <div className="space-y-4">
+                <TabsContent value="overview" className="mt-2 sm:mt-4">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-3 sm:space-y-4">
                       <div>
-                        <h3 className="text-sm font-semibold text-slate-900 mb-3">Summary</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <h3 className="text-xs sm:text-sm font-semibold text-slate-900 mb-2 sm:mb-3">Summary</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                           {/* Tasks Summary */}
-                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Clock className="h-4 w-4 text-amber-500" />
-                              <span className="text-xs font-medium text-slate-700">Tasks</span>
+                          <div className="p-2.5 sm:p-3 bg-slate-50 rounded-lg border border-slate-200 min-h-[100px] sm:min-h-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+                              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-medium text-slate-700 truncate">Tasks</span>
                             </div>
-                            <p className="text-2xl font-bold text-slate-900">{metrics.myTasks.active}</p>
-                            <div className="mt-2 space-y-1">
+                            <p className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">{metrics.myTasks.active}</p>
+                            <div className="space-y-1.5">
                               {metrics.myTasks.overdue > 0 && (
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="text-red-600">Overdue</span>
-                                  <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                  <span className="text-red-600 truncate">Overdue</span>
+                                  <Badge variant="destructive" className="text-[9px] sm:text-[10px] px-1 py-0 flex-shrink-0 ml-1">
                                     {metrics.myTasks.overdue}
                                   </Badge>
                                 </div>
                               )}
                               {metrics.myTasks.dueSoon > 0 && (
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="text-amber-600">Due Soon</span>
-                                  <Badge className="bg-amber-500 text-white text-[10px] px-1 py-0">
+                                <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                  <span className="text-amber-600 truncate">Due Soon</span>
+                                  <Badge className="bg-amber-500 text-white text-[9px] sm:text-[10px] px-1 py-0 flex-shrink-0 ml-1">
                                     {metrics.myTasks.dueSoon}
                                   </Badge>
                                 </div>
                               )}
-                              <div className="flex items-center justify-between text-[10px] text-slate-600">
-                                <span>Pending</span>
-                                <span className="font-medium">{metrics.myTasks.pending}</span>
+                              <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-600">
+                                <span className="truncate">Pending</span>
+                                <span className="font-medium flex-shrink-0 ml-1">{metrics.myTasks.pending}</span>
                               </div>
-                              <div className="flex items-center justify-between text-[10px] text-slate-600">
-                                <span>In Progress</span>
-                                <span className="font-medium">{metrics.myTasks.inProgress}</span>
+                              <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-600">
+                                <span className="truncate">In Progress</span>
+                                <span className="font-medium flex-shrink-0 ml-1">{metrics.myTasks.inProgress}</span>
                               </div>
                             </div>
                           </div>
 
                           {/* Jobs Summary */}
-                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Wrench className="h-4 w-4 text-emerald-500" />
-                              <span className="text-xs font-medium text-slate-700">Jobs</span>
+                          <div className="p-2.5 sm:p-3 bg-slate-50 rounded-lg border border-slate-200 min-h-[100px] sm:min-h-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+                              <Wrench className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-medium text-slate-700 truncate">Jobs</span>
                             </div>
-                            <p className="text-2xl font-bold text-slate-900">{metrics.myJobs.total}</p>
-                            <div className="mt-2 space-y-1">
+                            <p className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">{metrics.myJobs.total}</p>
+                            <div className="space-y-1.5">
                               {metrics.myJobs.waitingAssessment > 0 && (
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="text-amber-600">Waiting Assessment</span>
-                                  <Badge className="bg-amber-500 text-white text-[10px] px-1 py-0">
+                                <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                  <span className="text-amber-600 truncate">Waiting</span>
+                                  <Badge className="bg-amber-500 text-white text-[9px] sm:text-[10px] px-1 py-0 flex-shrink-0 ml-1">
                                     {metrics.myJobs.waitingAssessment}
                                   </Badge>
                                 </div>
                               )}
                               {metrics.myJobs.waitingParts > 0 && (
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="text-purple-600">Waiting Parts</span>
-                                  <Badge className="bg-purple-500 text-white text-[10px] px-1 py-0">
+                                <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
+                                  <span className="text-purple-600 truncate">Parts</span>
+                                  <Badge className="bg-purple-500 text-white text-[9px] sm:text-[10px] px-1 py-0 flex-shrink-0 ml-1">
                                     {metrics.myJobs.waitingParts}
                                   </Badge>
                                 </div>
                               )}
-                              <div className="flex items-center justify-between text-[10px] text-slate-600">
-                                <span>In Progress</span>
-                                <span className="font-medium">{metrics.myJobs.inProgress}</span>
+                              <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-600">
+                                <span className="truncate">In Progress</span>
+                                <span className="font-medium flex-shrink-0 ml-1">{metrics.myJobs.inProgress}</span>
                               </div>
                             </div>
                           </div>
 
                           {/* Callbacks Summary */}
-                          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex items-center gap-2 mb-2">
-                              <PhoneCall className="h-4 w-4 text-blue-500" />
-                              <span className="text-xs font-medium text-slate-700">Callbacks</span>
+                          <div className="p-2.5 sm:p-3 bg-slate-50 rounded-lg border border-slate-200 min-h-[100px] sm:min-h-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+                              <PhoneCall className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-medium text-slate-700 truncate">Callbacks</span>
                             </div>
-                            <p className="text-2xl font-bold text-slate-900">{metrics.myCallbacks.total}</p>
+                            <p className="text-xl sm:text-2xl font-bold text-slate-900">{metrics.myCallbacks.total}</p>
                           </div>
 
                           {/* Notifications Summary */}
                           <div 
-                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
+                            className="p-2.5 sm:p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors min-h-[100px] sm:min-h-0"
                             onClick={() => {
                               // Find and click the notifications bell button in the nav bar
                               const bellButton = document.querySelector('[data-notifications-trigger]') as HTMLElement;
@@ -1026,16 +1031,16 @@ export default function Dashboard() {
                               }
                             }}
                           >
-                            <div className="flex items-center gap-2 mb-2">
-                              <MessageSquare className="h-4 w-4 text-indigo-500" />
-                              <span className="text-xs font-medium text-slate-700">Unread Notifications</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+                              <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-500 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-medium text-slate-700 truncate">Unread</span>
                             </div>
                             {notificationsData ? (
-                              <p className="text-2xl font-bold text-slate-900">
+                              <p className="text-xl sm:text-2xl font-bold text-slate-900">
                                 {notificationsData.unreadCount}
                               </p>
                             ) : (
-                              <p className="text-sm text-slate-500">Loading...</p>
+                              <p className="text-xs sm:text-sm text-slate-500">Loading...</p>
                             )}
                           </div>
                         </div>
@@ -1046,23 +1051,23 @@ export default function Dashboard() {
 
                 {/* Tasks Tab */}
                 <TabsContent value="tasks" className="mt-0">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2 sm:space-y-3">
                       {/* Summary Metrics */}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {metrics.myTasks.overdue > 0 && (
-                          <div className="p-2 bg-red-50 rounded border border-red-200">
+                          <div className="p-2.5 sm:p-2 bg-red-50 rounded border border-red-200">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-red-700 font-medium">Overdue</span>
-                              <Badge variant="destructive" className="text-xs">{metrics.myTasks.overdue}</Badge>
+                              <span className="text-xs sm:text-sm text-red-700 font-medium">Overdue</span>
+                              <Badge variant="destructive" className="text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.overdue}</Badge>
                             </div>
                           </div>
                         )}
                         {metrics.myTasks.dueSoon > 0 && (
-                          <div className="p-2 bg-amber-50 rounded border border-amber-200">
+                          <div className="p-2.5 sm:p-2 bg-amber-50 rounded border border-amber-200">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-amber-700 font-medium">Due Soon</span>
-                              <Badge className="bg-amber-500 text-white text-xs">{metrics.myTasks.dueSoon}</Badge>
+                              <span className="text-xs sm:text-sm text-amber-700 font-medium">Due Soon</span>
+                              <Badge className="bg-amber-500 text-white text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.dueSoon}</Badge>
                             </div>
                           </div>
                         )}
@@ -1076,13 +1081,13 @@ export default function Dashboard() {
                               placeholder="Search tasks..."
                               value={taskFilter.search}
                               onChange={(e) => setTaskFilter(prev => ({ ...prev, search: e.target.value }))}
-                              className="h-7 text-xs"
+                              className="h-8 sm:h-9 text-xs sm:text-sm"
                             />
                           </div>
 
                           {/* Task List */}
-                          <ScrollArea className="h-[400px]">
-                            <div className="space-y-2 pr-2">
+                          <ScrollArea className="h-[300px] sm:h-[400px]">
+                            <div className="space-y-2 sm:space-y-2 pr-2">
                               {filteredMyTasks.length > 0 ? (
                                 filteredMyTasks.map((task: any) => {
                                   const dueMeta = getDueDateMeta(task.dueDate);
@@ -1112,19 +1117,19 @@ export default function Dashboard() {
                                       }`}
                                     >
                                       <div
-                                        className="p-2 cursor-pointer"
+                                        className="p-2.5 sm:p-2 cursor-pointer"
                                         onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
                                       >
                                         <div className="flex items-start justify-between gap-2">
                                           <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                              <p className={`text-xs font-medium truncate ${textColor}`}>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-1">
+                                              <p className={`text-xs sm:text-sm font-medium truncate ${textColor}`}>
                                                 {task.title}
                                               </p>
                                               {task.priority && (
                                                 <Badge
                                                   variant="outline"
-                                                  className={`text-[10px] px-1 py-0 ${
+                                                  className={`text-[9px] sm:text-[10px] px-1 py-0 flex-shrink-0 ${
                                                     priorityColors[(task.priority || "medium").toLowerCase()] || priorityColors.medium
                                                   }`}
                                                 >
@@ -1132,18 +1137,18 @@ export default function Dashboard() {
                                                 </Badge>
                                               )}
                                             </div>
-                                            <div className="flex items-center gap-3 text-[10px] text-slate-600">
-                                              {dueMeta.label && <span>{dueMeta.label}</span>}
-                                              <Badge variant="outline" className="text-[10px]">
+                                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px] text-slate-600">
+                                              {dueMeta.label && <span className="whitespace-nowrap">{dueMeta.label}</span>}
+                                              <Badge variant="outline" className="text-[9px] sm:text-[10px]">
                                                 {task.status?.replace(/_/g, " ") || "pending"}
                                               </Badge>
                                             </div>
                                           </div>
-                                          <div className="flex items-center gap-1">
+                                          <div className="flex items-center gap-1 flex-shrink-0">
                                             {isExpanded ? (
-                                              <ChevronUp className="h-3.5 w-3.5 text-slate-500" />
+                                              <ChevronUp className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-slate-500" />
                                             ) : (
-                                              <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                                              <ChevronDown className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-slate-500" />
                                             )}
                                           </div>
                                         </div>
@@ -1151,30 +1156,30 @@ export default function Dashboard() {
 
                                       {/* Expanded Task Details */}
                                       {isExpanded && (
-                                        <div className="border-t border-slate-200 bg-white p-3 space-y-3">
+                                        <div className="border-t border-slate-200 bg-white p-3 sm:p-3 space-y-3">
                                           {expandedTaskDetails && expandedTaskDetails.id === task.id ? (
                                             <>
                                               {expandedTaskDetails.description && (
                                                 <div>
-                                                  <p className="text-[10px] font-medium text-slate-600 mb-1">Description</p>
-                                                  <p className="text-xs text-slate-700 whitespace-pre-wrap">
+                                                  <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Description</p>
+                                                  <p className="text-xs sm:text-sm text-slate-700 whitespace-pre-wrap break-words">
                                                     {expandedTaskDetails.description}
                                                   </p>
                                                 </div>
                                               )}
                                               <Separator />
-                                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs">
                                                 <div>
-                                                  <p className="text-[10px] font-medium text-slate-600 mb-1">Status</p>
-                                                  <Badge variant="outline" className="text-xs">
+                                                  <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Status</p>
+                                                  <Badge variant="outline" className="text-[10px] sm:text-xs">
                                                     {expandedTaskDetails.status?.replace(/_/g, " ") || "pending"}
                                                   </Badge>
                                                 </div>
                                                 <div>
-                                                  <p className="text-[10px] font-medium text-slate-600 mb-1">Priority</p>
+                                                  <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Priority</p>
                                                   <Badge
                                                     variant="outline"
-                                                    className={`text-xs ${
+                                                    className={`text-[10px] sm:text-xs ${
                                                       priorityColors[(expandedTaskDetails.priority || "medium").toLowerCase()] || priorityColors.medium
                                                     }`}
                                                   >
@@ -1183,16 +1188,16 @@ export default function Dashboard() {
                                                 </div>
                                                 {expandedTaskDetails.dueDate && (
                                                   <div>
-                                                    <p className="text-[10px] font-medium text-slate-600 mb-1">Due Date</p>
-                                                    <p className="text-xs text-slate-700">
+                                                    <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Due Date</p>
+                                                    <p className="text-xs sm:text-sm text-slate-700">
                                                       {format(new Date(expandedTaskDetails.dueDate), "MMM d, yyyy")}
                                                     </p>
                                                   </div>
                                                 )}
                                                 {expandedTaskDetails.createdAt && (
                                                   <div>
-                                                    <p className="text-[10px] font-medium text-slate-600 mb-1">Created</p>
-                                                    <p className="text-xs text-slate-700">
+                                                    <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Created</p>
+                                                    <p className="text-xs sm:text-sm text-slate-700">
                                                       {format(new Date(expandedTaskDetails.createdAt), "MMM d, yyyy")}
                                                     </p>
                                                   </div>
@@ -1202,14 +1207,14 @@ export default function Dashboard() {
                                                 <>
                                                   <Separator />
                                                   <div>
-                                                    <p className="text-[10px] font-medium text-slate-600 mb-1">Related</p>
+                                                    <p className="text-[10px] sm:text-xs font-medium text-slate-600 mb-1">Related</p>
                                                     <Link
                                                       href={
                                                         expandedTaskDetails.relatedEntityType === "job"
                                                           ? `/workshop/jobs/${expandedTaskDetails.relatedEntityId}`
                                                           : "#"
                                                       }
-                                                      className="text-xs text-blue-600 hover:underline"
+                                                      className="text-xs sm:text-sm text-blue-600 hover:underline break-all"
                                                     >
                                                       {expandedTaskDetails.relatedEntityType} #{expandedTaskDetails.relatedEntityId}
                                                     </Link>
@@ -1217,26 +1222,27 @@ export default function Dashboard() {
                                                 </>
                                               )}
                                               <Separator />
-                                              <div className="flex gap-2">
+                                              <div className="flex flex-col sm:flex-row gap-2">
                                                 {expandedTaskDetails.status !== "in_progress" && (
                                                   <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="h-7 text-xs flex-1"
+                                                    className="h-9 sm:h-7 text-xs flex-1"
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       updateTaskMutation.mutate({ taskId: task.id, status: "in_progress" });
                                                     }}
                                                   >
                                                     <Play className="h-3 w-3 mr-1" />
-                                                    In Progress
+                                                    <span className="hidden sm:inline">In Progress</span>
+                                                    <span className="sm:hidden">Start</span>
                                                   </Button>
                                                 )}
                                                 {expandedTaskDetails.status !== "completed" && (
                                                   <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="h-7 text-xs flex-1"
+                                                    className="h-9 sm:h-7 text-xs flex-1"
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       updateTaskMutation.mutate({ taskId: task.id, status: "completed" });
@@ -1249,14 +1255,15 @@ export default function Dashboard() {
                                                 <Button 
                                                   size="sm" 
                                                   variant="outline" 
-                                                  className="h-7 text-xs flex-1"
+                                                  className="h-9 sm:h-7 text-xs flex-1"
                                                   onClick={(e) => {
                                                     e.stopPropagation();
                                                     setSelectedTaskIdForDialog(task.id);
                                                     setIsTaskDetailDialogOpen(true);
                                                   }}
                                                 >
-                                                  View Full Details
+                                                  <span className="hidden sm:inline">View Full Details</span>
+                                                  <span className="sm:hidden">Details</span>
                                                   <ChevronRight className="h-3 w-3 ml-1" />
                                                 </Button>
                                               </div>
@@ -1281,14 +1288,14 @@ export default function Dashboard() {
 
                       {metrics.myTasks.active > 0 && (
                         <Link href="/tasks">
-                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs h-7">
+                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
                             View all tasks
-                            <ChevronRight className="h-3 w-3 ml-1" />
+                            <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
                           </Button>
                         </Link>
                       )}
                       {metrics.myTasks.active === 0 && (
-                        <p className="text-xs text-slate-500 italic text-center py-2">No active tasks assigned</p>
+                        <p className="text-xs sm:text-sm text-slate-500 italic text-center py-3 sm:py-2">No active tasks assigned</p>
                       )}
                     </div>
                   </CardContent>
@@ -1296,10 +1303,10 @@ export default function Dashboard() {
 
                 {/* Jobs Tab */}
                 <TabsContent value="jobs" className="mt-0">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2 sm:space-y-3">
                       {metrics.myJobs.total > 0 ? (
-                        <ScrollArea className="h-[500px]">
+                        <ScrollArea className="h-[300px] sm:h-[500px]">
                           <div className="space-y-2 pr-2">
                             {sortedMyJobs.map((job: any) => {
                               const customer = customers.find((c: any) => c.id === job.customerId);
@@ -1315,40 +1322,40 @@ export default function Dashboard() {
                                   href={`/workshop/jobs/${job.id}`}
                                   className="block"
                                 >
-                                  <div className="p-3 bg-slate-50 border border-slate-200 rounded mb-2 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer">
+                                  <div className="p-3 sm:p-3 bg-slate-50 border border-slate-200 rounded mb-2 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer">
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <p className="text-sm font-semibold text-slate-900">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-1">
+                                          <p className="text-sm sm:text-base font-semibold text-slate-900 truncate">
                                             {job.jobId || `Job #${job.id}`}
                                           </p>
-                                          <Badge variant="outline" className="text-[10px]">
+                                          <Badge variant="outline" className="text-[9px] sm:text-[10px] flex-shrink-0 w-fit">
                                             {job.status?.replace(/_/g, " ") || "Unknown"}
                                           </Badge>
                                         </div>
-                                        <p className="text-xs text-slate-700 font-medium mb-1">
+                                        <p className="text-xs sm:text-sm text-slate-700 font-medium mb-1.5 sm:mb-1 truncate">
                                           {customer?.name || job.customerName || "Unknown Customer"}
                                         </p>
                                         {job.description && (
-                                          <p className="text-[10px] text-slate-600 mb-1 line-clamp-2">
+                                          <p className="text-[10px] sm:text-xs text-slate-600 mb-1 line-clamp-2 break-words">
                                             <span className="font-medium">Work:</span> {job.description}
                                           </p>
                                         )}
                                         {job.equipmentDescription && (
-                                          <p className="text-[10px] text-slate-600 mb-1 line-clamp-2">
+                                          <p className="text-[10px] sm:text-xs text-slate-600 mb-1 line-clamp-2 break-words">
                                             <span className="font-medium">Equipment:</span> {job.equipmentDescription}
                                           </p>
                                         )}
                                         {jobCreatedDate && (
-                                          <p className="text-[10px] text-slate-600 mb-1">
+                                          <p className="text-[10px] sm:text-xs text-slate-600 mb-1">
                                             Created: {format(jobCreatedDate, "MMM d, yyyy")}
                                           </p>
                                         )}
                                         {isOldJob && (
-                                          <div className="mt-2 p-1.5 bg-amber-50 border border-amber-200 rounded">
-                                            <p className="text-[10px] text-amber-700 font-medium flex items-center gap-1">
-                                              <AlertCircle className="h-3 w-3" />
-                                              This job was created more than 7 days ago
+                                          <div className="mt-2 p-1.5 sm:p-2 bg-amber-50 border border-amber-200 rounded">
+                                            <p className="text-[9px] sm:text-[10px] text-amber-700 font-medium flex items-center gap-1">
+                                              <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                                              <span className="break-words">This job was created more than 7 days ago</span>
                                             </p>
                                           </div>
                                         )}
@@ -1362,14 +1369,14 @@ export default function Dashboard() {
                           </div>
                         </ScrollArea>
                       ) : (
-                        <p className="text-xs text-slate-500 italic text-center py-4">No jobs assigned</p>
+                        <p className="text-xs sm:text-sm text-slate-500 italic text-center py-4 sm:py-6">No jobs assigned</p>
                       )}
 
                       {metrics.myJobs.total > 0 && (
                         <Link href="/workshop">
-                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs h-7">
+                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
                             View workshop
-                            <ChevronRight className="h-3 w-3 ml-1" />
+                            <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
                           </Button>
                         </Link>
                       )}
@@ -1379,15 +1386,15 @@ export default function Dashboard() {
 
                 {/* Callbacks Tab */}
                 <TabsContent value="callbacks" className="mt-0">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2 sm:space-y-3">
                       {metrics.myCallbacks.total > 0 ? (
-                        <ScrollArea className="h-[500px]">
-                          <div className="space-y-2 pr-2">
+                        <ScrollArea className="h-[300px] sm:h-[500px]">
+                          <div className="space-y-2 sm:space-y-2 pr-2">
                             {metrics.myCallbacks.activeList.map((callback: any) => (
                                 <div
                                   key={callback.id}
-                                  className="p-2 bg-blue-50 border border-blue-200 rounded mb-2 hover:bg-blue-100 transition-colors cursor-pointer"
+                                  className="p-2.5 sm:p-2 bg-blue-50 border border-blue-200 rounded mb-2 hover:bg-blue-100 transition-colors cursor-pointer"
                                   onClick={() => {
                                     setSelectedCallbackForDialog(callback);
                                     setIsCallbackDetailDialogOpen(true);
@@ -1395,31 +1402,37 @@ export default function Dashboard() {
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-blue-900 truncate">
+                                      <p className="text-xs sm:text-sm font-medium text-blue-900 truncate mb-1">
                                         {callback.customerName || "Unknown Customer"}
                                       </p>
-                                      <p className="text-[10px] text-blue-700 mt-0.5 truncate">
+                                      <p className="text-[10px] sm:text-xs text-blue-700 mt-0.5 line-clamp-2 break-words">
                                         {callback.subject || callback.details || "No details"}
                                       </p>
                                       {callback.phoneNumber && (
-                                        <p className="text-[10px] text-blue-600 mt-0.5">{callback.phoneNumber}</p>
+                                        <a 
+                                          href={`tel:${callback.phoneNumber}`}
+                                          className="text-[10px] sm:text-xs text-blue-600 mt-1 block hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {callback.phoneNumber}
+                                        </a>
                                       )}
                                     </div>
-                                    <ChevronRight className="h-3 w-3 text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <ChevronRight className="h-4 w-4 sm:h-3 sm:w-3 text-blue-600 flex-shrink-0 mt-0.5" />
                                   </div>
                                 </div>
                               ))}
                           </div>
                         </ScrollArea>
                       ) : (
-                        <p className="text-xs text-slate-500 italic text-center py-4">No callbacks to do or follow up</p>
+                        <p className="text-xs sm:text-sm text-slate-500 italic text-center py-4 sm:py-6">No callbacks to do or follow up</p>
                       )}
 
                       {metrics.myCallbacks.total > 0 && (
                         <Link href="/callbacks">
-                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs h-7">
+                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
                             View callbacks
-                            <ChevronRight className="h-3 w-3 ml-1" />
+                            <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
                           </Button>
                         </Link>
                       )}

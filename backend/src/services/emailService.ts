@@ -2,6 +2,7 @@ import nodemailer = require('nodemailer');
 import { Resend } from "resend";
 import { storage } from '../storage';
 import { format } from 'date-fns';
+import { InsertEmailHistory } from '@shared/schema';
 
 // Optional mailersend import - only load if package is installed
 let MailerSend: any = null;
@@ -73,7 +74,7 @@ export class EmailService {
       throw new Error("Resend not initialized");
     }
 
-    const fromAddress = `support@boltdown.co.uk`;
+    const fromAddress = `noreply@boltdown.co.uk`;
 
     try {
       const response = await this.resend.emails.send({
@@ -126,7 +127,7 @@ export class EmailService {
   getFromAddress(): string {
     // Return default from address based on configured provider
     if (process.env.RESEND_API_KEY) {
-      return 'support@boltdown.co.uk';
+      return 'noreply@boltdown.co.uk';
     }
     if (process.env.MAILERSEND_API_KEY) {
       return 'info@mooresmowers.co.uk';
@@ -178,6 +179,54 @@ export class EmailService {
   }
 }
 
+/**
+ * Helper function to log emails to email history
+ * Tries to find customer by email address, but logs even if customer not found
+ */
+async function logEmailToHistory(params: {
+  businessId: number;
+  customerEmail: string;
+  subject: string;
+  body: string;
+  emailType: string;
+  sentBy?: number | null;
+  metadata?: any;
+  customerId?: number | null; // Optional - if provided, use it; otherwise try to find by email
+}): Promise<void> {
+  try {
+    let customerId: number | null = params.customerId ?? null;
+
+    // If customerId not provided, try to find customer by email
+    if (!customerId && params.customerEmail) {
+      try {
+        const customer = await storage.getCustomerByEmail(params.customerEmail, params.businessId);
+        if (customer) {
+          customerId = customer.id;
+        }
+      } catch (error) {
+        // If customer lookup fails, continue with null customerId
+        console.warn(`Could not find customer by email ${params.customerEmail}:`, error);
+      }
+    }
+
+    // Log email to history (customerId can be null)
+    // Normalize email to lowercase for consistency
+    await storage.createEmailHistory({
+      businessId: params.businessId,
+      customerId: customerId ?? null,
+      customerEmail: params.customerEmail.toLowerCase(),
+      subject: params.subject,
+      body: params.body,
+      emailType: params.emailType,
+      sentBy: params.sentBy ?? null,
+      metadata: params.metadata ?? null,
+    });
+  } catch (error) {
+    // Don't fail email sending if history logging fails
+    console.error('Failed to log email to history:', error);
+  }
+}
+
 // Export individual functions for backward compatibility
 const emailService = new EmailService();
 
@@ -222,18 +271,33 @@ export async function sendJobBookedEmail(job: any, customer: any, business?: any
     const textContent = generateJobBookedText(job, customer, business);
 
     const subject = `Job Booked - ${job.jobId}`;
+    const businessId = job.businessId || business?.id;
 
     // Prefer Resend if configured
     if (process.env.RESEND_API_KEY) {
       const emailService = new EmailService();
       await emailService.sendEmailWithResend({
-        from: "support@boltdown.co.uk",
+        from: "noreply@boltdown.co.uk",
         to: customer.email,
         subject,
         text: textContent,
         html: emailContent,
       });
       console.log(`✅ Job booked email sent successfully via Resend to ${customer.name} (${customer.email})`);
+      
+      // Log to email history
+      if (businessId) {
+        await logEmailToHistory({
+          businessId,
+          customerEmail: customer.email,
+          subject,
+          body: textContent,
+          emailType: 'job_booked',
+          customerId: customer.id || null,
+          metadata: { jobId: job.jobId, jobId_db: job.id },
+        });
+      }
+      
       return true;
     }
 
@@ -241,13 +305,27 @@ export async function sendJobBookedEmail(job: any, customer: any, business?: any
     if (process.env.MAILERSEND_API_KEY) {
       const emailService = new EmailService();
       await emailService.sendEmailWithMailerSend({
-        from: "support@boltdown.co.uk",
+        from: "noreply@boltdown.co.uk",
         to: customer.email,
         subject,
         text: textContent,
         html: emailContent,
       });
       console.log(`✅ Job booked email sent successfully via MailerSend to ${customer.name} (${customer.email})`);
+      
+      // Log to email history
+      if (businessId) {
+        await logEmailToHistory({
+          businessId,
+          customerEmail: customer.email,
+          subject,
+          body: textContent,
+          emailType: 'job_booked',
+          customerId: customer.id || null,
+          metadata: { jobId: job.jobId, jobId_db: job.id },
+        });
+      }
+      
       return true;
     }
 
@@ -268,6 +346,19 @@ export async function sendJobBookedEmail(job: any, customer: any, business?: any
     console.log(`   • Contact details for customer convenience`);
     console.log(`   • Email size: ${emailContent.length} characters`);
     console.log('============================================\n');
+    
+    // Log to email history even in demo mode
+    if (businessId) {
+      await logEmailToHistory({
+        businessId,
+        customerEmail: customer.email,
+        subject,
+        body: textContent,
+        emailType: 'job_booked',
+        customerId: customer.id || null,
+        metadata: { jobId: job.jobId, jobId_db: job.id },
+      });
+    }
     
     return true;
   } catch (error) {
@@ -322,18 +413,33 @@ export async function sendPartReadyEmail(part: any): Promise<boolean> {
     const textContent = generatePartReadyText(part);
 
     const subject = `Part Ready for Collection - ${part.partName}`;
+    const businessId = part.businessId;
 
     // Prefer Resend if configured
     if (process.env.RESEND_API_KEY) {
       const emailService = new EmailService();
       await emailService.sendEmailWithResend({
-        from: "support@boltdown.co.uk",
+        from: "noreply@boltdown.co.uk",
         to: part.customerEmail,
         subject,
         text: textContent,
         html: emailContent,
       });
       console.log(`✅ Part ready email sent successfully via Resend to ${part.customerName} (${part.customerEmail})`);
+      
+      // Log to email history
+      if (businessId) {
+        await logEmailToHistory({
+          businessId,
+          customerEmail: part.customerEmail,
+          subject,
+          body: textContent,
+          emailType: 'part_ready',
+          customerId: part.customerId ?? null,
+          metadata: { partName: part.partName, partNumber: part.partNumber },
+        });
+      }
+      
       return true;
     }
 
@@ -341,13 +447,27 @@ export async function sendPartReadyEmail(part: any): Promise<boolean> {
     if (process.env.MAILERSEND_API_KEY) {
       const emailService = new EmailService();
       await emailService.sendEmailWithMailerSend({
-        from: "support@boltdown.co.uk",
+        from: "noreply@boltdown.co.uk",
         to: part.customerEmail,
         subject,
         text: textContent,
         html: emailContent,
       });
       console.log(`✅ Part ready email sent successfully via MailerSend to ${part.customerName} (${part.customerEmail})`);
+      
+      // Log to email history
+      if (businessId) {
+        await logEmailToHistory({
+          businessId,
+          customerEmail: part.customerEmail,
+          subject,
+          body: textContent,
+          emailType: 'part_ready',
+          customerId: part.customerId ?? null,
+          metadata: { partName: part.partName, partNumber: part.partNumber },
+        });
+      }
+      
       return true;
     }
 
@@ -368,6 +488,19 @@ export async function sendPartReadyEmail(part: any): Promise<boolean> {
     console.log(`   • Contact details for customer convenience`);
     console.log(`   • Email size: ${emailContent.length} characters`);
     console.log('============================================\n');
+    
+    // Log to email history even in demo mode
+    if (businessId) {
+      await logEmailToHistory({
+        businessId,
+        customerEmail: part.customerEmail,
+        subject,
+        body: textContent,
+        emailType: 'part_ready',
+        customerId: part.customerId ?? null,
+        metadata: { partName: part.partName, partNumber: part.partNumber },
+      });
+    }
     
     return true;
   } catch (error) {
@@ -834,7 +967,7 @@ export async function sendWelcomeEmail(
 }
 
 export async function sendOrderPlacedEmail(
-  order: { orderNumber: string; customerName: string; customerEmail: string | null; orderDate: string; status: string; expectedDeliveryDate?: string | null },
+  order: { orderNumber: string; customerName: string; customerEmail: string | null; orderDate: string; status: string; expectedDeliveryDate?: string | null; businessId?: number; customerId?: number | null },
   orderItems: Array<{ itemName: string; quantity: number; itemType: string }>
 ): Promise<void> {
   if (!order.customerEmail) {
@@ -904,10 +1037,23 @@ export async function sendOrderPlacedEmail(
     text,
     html,
   });
+
+  // Log to email history
+  if (order.businessId) {
+    await logEmailToHistory({
+      businessId: order.businessId,
+      customerEmail: order.customerEmail,
+      subject,
+      body: text,
+      emailType: 'order_placed',
+      customerId: order.customerId ?? null,
+      metadata: { orderNumber: order.orderNumber },
+    });
+  }
 }
 
 export async function sendOrderArrivedEmail(
-  order: { orderNumber: string; customerName: string; customerEmail: string | null; actualDeliveryDate?: string | null },
+  order: { orderNumber: string; customerName: string; customerEmail: string | null; actualDeliveryDate?: string | null; businessId?: number; customerId?: number | null },
   orderItems: Array<{ itemName: string; quantity: number; itemType: string }>
 ): Promise<void> {
   if (!order.customerEmail) {
@@ -966,4 +1112,17 @@ export async function sendOrderArrivedEmail(
     text,
     html,
   });
+
+  // Log to email history
+  if (order.businessId) {
+    await logEmailToHistory({
+      businessId: order.businessId,
+      customerEmail: order.customerEmail,
+      subject,
+      body: text,
+      emailType: 'order_arrived',
+      customerId: order.customerId ?? null,
+      metadata: { orderNumber: order.orderNumber },
+    });
+  }
 }

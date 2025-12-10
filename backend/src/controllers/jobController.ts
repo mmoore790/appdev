@@ -175,6 +175,34 @@ export class JobController {
         return res.status(500).json({ message: "Failed to send email" });
       }
 
+      // Log to email history
+      try {
+        const { storage } = await import("../storage");
+        let customerId: number | null = (job as any).customerId ?? null;
+        
+        // Try to find customer by email if customerId not available
+        if (!customerId) {
+          const customer = await storage.getCustomerByEmail(customerEmail, businessId);
+          if (customer) {
+            customerId = customer.id;
+          }
+        }
+        
+        await storage.createEmailHistory({
+          businessId,
+          customerId: customerId ?? null,
+          customerEmail: customerEmail.toLowerCase(), // Normalize to lowercase for consistency
+          subject,
+          body,
+          emailType: 'manual',
+          sentBy: (req.session as any)?.userId ?? null,
+          metadata: { jobId: (job as any).jobId, jobId_db: id },
+        });
+      } catch (historyError) {
+        // Don't fail email sending if history logging fails
+        console.error('Failed to log email to history:', historyError);
+      }
+
       res.json({ message: "Email sent successfully", to: customerEmail });
     } catch (error) {
       next(error);
