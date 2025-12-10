@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
 import { registerRoutes } from "./routes";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -139,136 +138,78 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint - must be registered early for Cloud Run
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// Error handler middleware - must be registered before routes
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  
-  // Log the full error for debugging
-  console.error("Error handler caught error:", {
-    message: err.message,
-    stack: err.stack,
-    status,
-    originalError: err
-  });
-
-  // If response was already sent, don't send again
-  if (res.headersSent) {
-    return _next(err);
-  }
-
-  // Preserve detailed error info in development
-  const isDevelopment = process.env.NODE_ENV === "development";
-  res.status(status).json({ 
-    message,
-    ...(isDevelopment && {
-      stack: err.stack,
-      error: err
-    })
-  });
-  
-  // Don't re-throw - error is handled
-});
-
-// Initialize server with proper error handling
 (async () => {
-  try {
-    console.log('[Server] Starting initialization...');
-    console.log('[Server] NODE_ENV:', process.env.NODE_ENV);
-    console.log('[Server] PORT:', process.env.PORT);
+  const server = await registerRoutes(app);
+
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
     
-    // Create HTTP server early so we can start listening even if route registration fails
-    const httpServer = createServer(app);
-    
-    // Register routes
-    console.log('[Server] Registering routes...');
-    await registerRoutes(app);
-    console.log('[Server] Routes registered successfully');
-    
-    // Add a direct test job data endpoint that will always return test data
-    app.get('/api/job-test', (req, res) => {
-      res.status(200).send(JSON.stringify({
-        id: 5,
-        jobId: "WS-2025-175",
-        equipmentId: null,
-        equipmentDescription: "Lawn mower - test data",
-        customerId: 3,
-        assignedTo: 3,
-        status: "in_progress",
-        description: "Test job data for demonstration",
-        createdAt: "2025-05-17",
-        completedAt: null,
-        estimatedHours: 2,
-        actualHours: null,
-        taskDetails: "This is test data that shows what job information looks like",
-        customerNotified: false,
-        updates: [
-          {
-            id: 1,
-            jobId: 5,
-            description: "Initial assessment complete",
-            createdAt: "2025-05-17",
-            serviceType: "assessment",
-            technician: 3
-          }
-        ]
-      }));
+    // Log the full error for debugging
+    console.error("Error handler caught error:", {
+      message: err.message,
+      stack: err.stack,
+      status,
+      originalError: err
     });
-    
-    // Get port from environment variable (Cloud Run sets PORT=8080)
-    // Default to 3001 for local development
-    const port = parseInt(process.env.PORT || '3001', 10);
-    
-    if (isNaN(port) || port < 1 || port > 65535) {
-      throw new Error(`Invalid PORT value: ${process.env.PORT}. Must be a number between 1 and 65535.`);
+
+    // If response was already sent, don't send again
+    if (res.headersSent) {
+      return _next(err);
     }
-    
-    console.log(`[Server] Starting server on port ${port}...`);
-    
-    // Start listening on the port
-    httpServer.listen(port, "0.0.0.0", () => {
-      console.log(`✅ Backend server running on port ${port}`);
-      console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
-      console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
-      
-      // Start the scheduler service after server is running
-      try {
-        schedulerService.start();
-        console.log('[Server] Scheduler service started');
-      } catch (schedulerError) {
-        console.error('[Server] Failed to start scheduler service:', schedulerError);
-        // Don't fail the server startup if scheduler fails
-      }
+
+    // Preserve detailed error info in development
+    const isDevelopment = process.env.NODE_ENV === "development";
+    res.status(status).json({ 
+      message,
+      ...(isDevelopment && {
+        stack: err.stack,
+        error: err
+      })
     });
     
-    // Handle server errors
-    httpServer.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${port} is already in use`);
-        process.exit(1);
-      } else {
-        console.error('❌ Server error:', err);
-        process.exit(1);
-      }
-    });
+    // Don't re-throw - error is handled
+  });
+  
+  // Add a direct test job data endpoint that will always return test data
+  app.get('/api/job-test', (req, res) => {
+    res.status(200).send(JSON.stringify({
+      id: 5,
+      jobId: "WS-2025-175",
+      equipmentId: null,
+      equipmentDescription: "Lawn mower - test data",
+      customerId: 3,
+      assignedTo: 3,
+      status: "in_progress",
+      description: "Test job data for demonstration",
+      createdAt: "2025-05-17",
+      completedAt: null,
+      estimatedHours: 2,
+      actualHours: null,
+      taskDetails: "This is test data that shows what job information looks like",
+      customerNotified: false,
+      updates: [
+        {
+          id: 1,
+          jobId: 5,
+          description: "Initial assessment complete",
+          createdAt: "2025-05-17",
+          serviceType: "assessment",
+          technician: 3
+        }
+      ]
+    }));
+  });
+  
+  // The port should be 3001 to match your frontend .env file
+  // Port 5000 was from Replit.
+  // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
+  const port = process.env.PORT || 3001;
+  server.listen(Number(port), "0.0.0.0", () => {
+    console.log(`✅ Backend server running on port ${port}`);
+    console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
     
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    
-    // Exit with error code so Cloud Run knows the container failed
-    process.exit(1);
-  }
+    // Start the scheduler service after server is running
+    schedulerService.start();
+  });
 })();
