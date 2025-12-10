@@ -108,14 +108,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Add user to request type
-declare module 'express-session' {
-  interface SessionData {
-    userId?: number;
-    role?: string;
-    businessId?: number;
-  }
-}
+// Session type augmentation is handled in utils/requestHelpers.ts
+// TypeScript will automatically pick it up during compilation
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -188,7 +182,7 @@ app.use((req, res, next) => {
   });
   
   // Add a direct test job data endpoint that will always return test data
-  app.get('/api/job-test', (req, res) => {
+  app.get('/api/job-test', (req: Request, res: Response) => {
     res.status(200).send(JSON.stringify({
       id: 5,
       jobId: "WS-2025-175",
