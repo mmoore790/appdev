@@ -22,9 +22,7 @@ import { messageController } from "./controllers/messageController";
 import { notificationController } from "./controllers/notificationController";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  console.log("[Routes] Initializing auth routes...");
   await initAuthRoutes(app);
-  console.log("[Routes] Auth routes initialized");
 
   app.get("/api/user", isAuthenticated, (req: Request, res: Response) => {
     res.json((req.session as any).user);
