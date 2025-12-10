@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
-import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -141,7 +140,6 @@ app.use((req, res, next) => {
 });
 
 // Add health check endpoint BEFORE route registration (for Railway/Render health checks)
-// These must be available immediately when server starts listening
 app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ 
     status: "ok", 
@@ -159,31 +157,13 @@ app.get("/", (_req: Request, res: Response) => {
   });
 });
 
-// Create HTTP server immediately so we can start listening ASAP
-const httpServer = createServer(app);
-
 (async () => {
   try {
     console.log('[Startup] Starting server initialization...');
     console.log('[Startup] PORT environment variable:', process.env.PORT || 'not set (using default 3001)');
     console.log('[Startup] NODE_ENV:', process.env.NODE_ENV || 'not set');
     
-    // CRITICAL: Start server listening FIRST, before any async operations
-    // This ensures Railway's health check can pass immediately
-    const port = process.env.PORT || 3001;
-    console.log(`[Startup] Starting server on port ${port} immediately (before routes)...`);
-    console.log(`[Startup] Process PID: ${process.pid}`);
-    console.log(`[Startup] Node version: ${process.version}`);
-    
-    // Start listening immediately - health check endpoints are already registered
-    httpServer.listen(Number(port), "0.0.0.0", () => {
-      console.log(`✅ Backend server running on port ${port}`);
-      console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
-      console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
-      console.log(`[Startup] Server is ready to accept connections (health checks will pass)`);
-    });
-    
-    // Now do async initialization (DB test, route registration) AFTER server is listening
+    // Test database connection before proceeding
     console.log('[Startup] Testing database connection...');
     try {
       const testQuery = await pool.query('SELECT NOW() as current_time');
@@ -195,7 +175,7 @@ const httpServer = createServer(app);
     }
     
     console.log('[Startup] Registering routes...');
-    await registerRoutes(app);
+    const server = await registerRoutes(app);
     console.log('[Startup] Routes registered successfully');
 
     // Add a catch-all route handler for unhandled routes (404)
@@ -275,18 +255,37 @@ const httpServer = createServer(app);
     }));
   });
   
-    // Start the scheduler service after routes are registered
-    try {
-      console.log('[Startup] Starting scheduler service...');
-      schedulerService.start();
-      console.log('[Startup] Scheduler service started');
-    } catch (schedulerError) {
-      console.error("❌ Failed to start scheduler service:", schedulerError);
-      // Don't crash the server if scheduler fails
-    }
+    // The port should be 3001 to match your frontend .env file
+    // Port 5000 was from Replit.
+    // Use Railway's PORT environment variable if available, otherwise default to 3001 for local dev
+    const port = process.env.PORT || 3001;
+    
+    console.log(`[Startup] Starting server on port ${port}...`);
+    console.log(`[Startup] Process PID: ${process.pid}`);
+    console.log(`[Startup] Node version: ${process.version}`);
+    
+    // Start listening immediately - this makes the server available for health checks
+    server.listen(Number(port), "0.0.0.0", () => {
+      console.log(`✅ Backend server running on port ${port}`);
+      console.log(`✅ Server accessible at http://0.0.0.0:${port}`);
+      console.log(`✅ Health check available at http://0.0.0.0:${port}/health`);
+      console.log(`[Startup] Server is ready to accept connections`);
+      
+      // Start the scheduler service after server is running
+      try {
+        console.log('[Startup] Starting scheduler service...');
+        schedulerService.start();
+        console.log('[Startup] Scheduler service started');
+      } catch (schedulerError) {
+        console.error("❌ Failed to start scheduler service:", schedulerError);
+        // Don't crash the server if scheduler fails
+      }
+    });
+    
+    console.log('[Startup] server.listen() called, server should be binding...');
 
     // Handle server errors
-    httpServer.on('error', (error: NodeJS.ErrnoException) => {
+    server.on('error', (error: NodeJS.ErrnoException) => {
       console.error('❌ Server error:', error);
       if (error.code === 'EADDRINUSE') {
         console.error(`Port ${port} is already in use`);
