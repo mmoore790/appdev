@@ -672,164 +672,37 @@ If you believe you received this email in error, please contact us immediately.
 }
 
 function generateJobBookedHTML(job: any, customer: any, business?: any): string {
-  const currentDate = format(new Date(), 'EEEE, MMMM do, yyyy');
-  const createdDate = job.createdAt ? format(new Date(job.createdAt), 'MMMM do, yyyy') : currentDate;
-  const trackerEnabled = business?.jobTrackerEnabled !== false; // Default to true if not set
-  
   // Get company details from business settings, with fallbacks
   const companyName = business?.name || 'Moore Horticulture Equipment';
   const companyEmail = business?.email || 'info@mooresmowers.co.uk';
   const companyPhone = business?.phone || '02897510804';
   const companyAddress = business?.address || '9 Drumalig Road, BT27 6UD';
-  const companyWebsite = business?.website || '';
   
-  // Format status for display
-  const formatStatus = (status: string) => {
-    const statusMap: Record<string, string> = {
-      'waiting_assessment': 'Waiting Assessment',
-      'in_progress': 'In Progress',
-      'completed': 'Completed',
-      'on_hold': 'On Hold',
-      'cancelled': 'Cancelled'
+  // Get equipment make and model
+  const equipmentMake = job.equipmentMake || '';
+  const equipmentModel = job.equipmentModel || '';
+  const equipmentMakeModel = [equipmentMake, equipmentModel].filter(Boolean).join(' ').trim() || job.equipmentDescription || 'equipment';
+  
+  // Get customer name
+  const customerName = customer.name || 'Valued Customer';
+  
+  // Get job number
+  const jobNumber = job.jobId || '';
+  
+  // Escape HTML to prevent XSS
+  const escapeHtml = (text: string | null | undefined): string => {
+    if (!text) return '';
+    const map: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
     };
-    return statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+    return text.replace(/[&<>"']/g, (m) => map[m]);
   };
   
-  // Build job tracker URL if enabled
-  const trackerUrl = trackerEnabled && companyWebsite 
-    ? `${companyWebsite}/job-tracker?jobId=${encodeURIComponent(job.jobId)}&email=${encodeURIComponent(customer.email)}`
-    : '';
-  
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Booking Confirmation - ${job.jobId}</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f5f5f5; }
-        .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #2d5a2d; }
-        .logo { color: #2d5a2d; font-size: 28px; font-weight: bold; margin-bottom: 5px; }
-        .tagline { color: #666; font-size: 14px; }
-        .success-badge { background-color: #d4edda; color: #155724; padding: 12px; border-radius: 6px; margin-bottom: 25px; text-align: center; font-weight: bold; }
-        .job-details { background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 25px; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { font-weight: bold; color: #2d5a2d; }
-        .detail-value { color: #333; text-align: right; }
-        .customer-info { background-color: #e7f3ff; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 4px solid #007bff; }
-        .equipment-info { background-color: #fff3cd; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 4px solid #ffc107; }
-        .next-steps { background-color: #f0f0f0; padding: 20px; border-radius: 6px; margin-bottom: 25px; }
-        .contact-info { background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 4px solid #2d5a2d; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
-        .tracker-button { display: inline-block; padding: 12px 24px; background-color: #2d5a2d; color: white; text-decoration: none; border-radius: 6px; margin-top: 15px; font-weight: bold; }
-        .tracker-button:hover { background-color: #1e3d1e; }
-        .important { color: #dc3545; font-weight: bold; }
-        @media only screen and (max-width: 600px) {
-            .container { padding: 15px; }
-            .detail-row { flex-direction: column; }
-            .detail-value { text-align: left; margin-top: 5px; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">${companyName.toUpperCase()}</div>
-            <div class="tagline">Professional Equipment Sales & Service</div>
-        </div>
-
-        <div class="success-badge">
-            ✓ Job Successfully Booked - Machine Received
-        </div>
-
-        <p>Dear ${customer.name},</p>
-
-        <p>Thank you for choosing ${companyName}. We have successfully received your ${job.equipmentDescription ? 'equipment' : 'machine'} and your service job has been booked into our system.</p>
-
-        <div class="job-details">
-            <h3 style="margin-top: 0; color: #2d5a2d;">Job Details</h3>
-            <div class="detail-row">
-                <span class="detail-label">Job Reference:</span>
-                <span class="detail-value"><strong>${job.jobId}</strong></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Booking Date:</span>
-                <span class="detail-value">${createdDate}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Status:</span>
-                <span class="detail-value">${formatStatus(job.status)}</span>
-            </div>
-            ${job.description ? `
-            <div class="detail-row">
-                <span class="detail-label">Description:</span>
-                <span class="detail-value">${job.description}</span>
-            </div>
-            ` : ''}
-        </div>
-
-        <div class="equipment-info">
-            <h3 style="margin-top: 0; color: #ffc107;">Equipment Received</h3>
-            <p><strong>Equipment Description:</strong><br>
-            ${job.equipmentDescription || 'To be assessed upon inspection'}</p>
-            ${job.taskDetails ? `
-            <p style="margin-top: 10px;"><strong>Work Required:</strong><br>
-            ${job.taskDetails}</p>
-            ` : ''}
-        </div>
-
-        <div class="customer-info">
-            <h3 style="margin-top: 0; color: #007bff;">Customer Information</h3>
-            <p><strong>Name:</strong> ${customer.name}</p>
-            ${customer.phone ? `<p><strong>Phone:</strong> ${customer.phone}</p>` : ''}
-            ${customer.address ? `<p><strong>Address:</strong> ${customer.address}</p>` : ''}
-            <p><strong>Email:</strong> ${customer.email}</p>
-        </div>
-
-        <div class="next-steps">
-            <h3 style="margin-top: 0;">What Happens Next?</h3>
-            <p>Our experienced team will now:</p>
-            <ul>
-                <li>Thoroughly assess your equipment</li>
-                <li>Identify any issues or required maintenance</li>
-                <li>Contact you with a detailed quote for any work needed</li>
-                <li>Keep you updated on the progress of your job</li>
-            </ul>
-            <p class="important">Please keep your Job Reference (${job.jobId}) for future reference.</p>
-        </div>
-
-        ${trackerEnabled && trackerUrl ? `
-        <div style="text-align: center; margin: 25px 0;">
-            <p>Track your job progress online:</p>
-            <a href="${trackerUrl}" class="tracker-button">Track Job Status</a>
-        </div>
-        ` : ''}
-
-        <div class="contact-info">
-            <h3 style="margin-top: 0; color: #2d5a2d;">Contact Us</h3>
-            <p>If you have any questions or need to provide additional information, please don't hesitate to contact us:</p>
-            <p><strong>Phone:</strong> ${companyPhone}<br>
-            <strong>Email:</strong> ${companyEmail}</p>
-            ${companyAddress ? `<p><strong>Address:</strong><br>${companyAddress}</p>` : ''}
-            ${companyWebsite ? `<p><strong>Website:</strong> <a href="${companyWebsite}" style="color: #2d5a2d;">${companyWebsite}</a></p>` : ''}
-        </div>
-
-        <p>Thank you for choosing ${companyName}. We look forward to serving you and getting your equipment back in perfect working order!</p>
-
-        <p>Best regards,<br>
-        <strong>The ${companyName} Team</strong></p>
-
-        <div class="footer">
-            <p>This email was sent automatically from the ${companyName} Management System on ${currentDate}.</p>
-            <p>If you believe you received this email in error, please contact us immediately.</p>
-        </div>
-    </div>
-</body>
-</html>
-  `;
+  return `<!DOCTYPE html><html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta charset="UTF-8" /><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /><!--[if !mso]><!-- --><meta http-equiv="X-UA-Compatible" content="IE=edge" /><!--<![endif]--><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="format-detection" content="telephone=no, date=no, address=no, email=no" /><meta name="x-apple-disable-message-reformatting" /><link href="https://fonts.googleapis.com/css?family=Fira+Sans:ital,wght@0,400;0,800" rel="stylesheet" /><title>Job Confirmation - ${escapeHtml(jobNumber)}</title><!--[if !mso]><!-- --><style>@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5VvmojLazX3dGTP.woff2) format('woff2');unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5Vvk4jLazX3dGTP.woff2) format('woff2');unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5VvmYjLazX3dGTP.woff2) format('woff2');unicode-range:U+0100-024F,U+0259,U+1E00-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5Vvl4jLazX3dA.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eSxf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eQhf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eSBf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0100-024F,U+0259,U+1E00-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eRhf6Xl7Glw.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}</style><!--<![endif]--><style>html,body{margin:0 !important;padding:0 !important;min-height:100% !important;width:100% !important;-webkit-font-smoothing:antialiased;}*{-ms-text-size-adjust:100%;}#outlook a{padding:0;}.ReadMsgBody,.ExternalClass{width:100%;}.ExternalClass,.ExternalClass p,.ExternalClass td,.ExternalClass div,.ExternalClass span,.ExternalClass font{line-height:100%;}table,td,th{mso-table-lspace:0 !important;mso-table-rspace:0 !important;border-collapse:collapse;}u + .body table,u + .body td,u + .body th{will-change:transform;}body,td,th,p,div,li,a,span{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;mso-line-height-rule:exactly;}img{border:0;outline:0;line-height:100%;text-decoration:none;-ms-interpolation-mode:bicubic;}a[x-apple-data-detectors]{color:inherit !important;text-decoration:none !important;}.body .pc-project-body{background-color:transparent !important;}@media (min-width:621px){.pc-lg-hide{display:none;}.pc-lg-bg-img-hide{background-image:none !important;}}</style><style>@media (max-width:620px){.pc-project-body{min-width:0 !important;}.pc-project-container,.pc-component{width:100% !important;}.pc-sm-hide{display:none !important;}.pc-sm-bg-img-hide{background-image:none !important;}.pc-w620-font-size-30px{font-size:30px !important;}.pc-w620-line-height-133pc{line-height:133% !important;}.pc-w620-padding-32-35-32-35{padding:32px 35px !important;}.pc-w620-padding-10-35-10-35{padding:10px 35px !important;}.pc-w620-padding-35-35-35-35{padding:35px !important;}}@media (max-width:520px){.pc-w520-padding-27-30-27-30{padding:27px 30px !important;}.pc-w520-padding-10-30-10-30{padding:10px 30px !important;}.pc-w520-padding-30-30-30-30{padding:30px !important;}}</style><!--[if !mso]><!-- --><style>@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;src:url('https://fonts.gstatic.com/s/firasans/v17/va9B4kDNxMZdWfMOD5VnMK7eSBf8.woff') format('woff'),url('https://fonts.gstatic.com/s/firasans/v17/va9B4kDNxMZdWfMOD5VnMK7eSBf6.woff2') format('woff2');}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:url('https://fonts.gstatic.com/s/firasans/v17/va9E4kDNxMZdWfMOD5VvmYjN.woff') format('woff'),url('https://fonts.gstatic.com/s/firasans/v17/va9E4kDNxMZdWfMOD5VvmYjL.woff2') format('woff2');}</style><!--<![endif]--><!--[if mso]><style type="text/css">.pc-font-alt{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body class="body pc-font-alt" style="width:100% !important;min-height:100% !important;margin:0 !important;padding:0 !important;mso-line-height-rule:exactly;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-variant-ligatures:normal;text-rendering:optimizeLegibility;-moz-osx-font-smoothing:grayscale;background-color:#f4f4f4" bgcolor="#f4f4f4"><table class="pc-project-body" style="table-layout:fixed;width:100%;min-width:600px;background-color:#f4f4f4" bgcolor="#f4f4f4" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td align="center" valign="top" style="width:auto"><table class="pc-project-container" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="padding:20px 0" align="left" valign="top"><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><!--[if !gte mso 9]><!-- --><td valign="top" class="pc-w520-padding-27-30-27-30 pc-w620-padding-32-35-32-35" style="background-image:url('https://cloudfilesdm.com/postcards/wrench-png-10-369652da.png');background-size:50px 50px;background-position:top right;background-repeat:no-repeat;padding:37px 40px;height:unset;background-color:#1B1B1B" bgcolor="#1B1B1B" background="https://cloudfilesdm.com/postcards/wrench-png-10-369652da.png"><!--<![endif]--><!--[if gte mso 9]><td valign="top" align="center" style="background-image:url('https://cloudfilesdm.com/postcards/wrench-png-10-369652da.png');background-size:50px 50px;background-position:top right;background-repeat:no-repeat;background-color:#1B1B1B;border-radius:0" bgcolor="#1B1B1B" background="https://cloudfilesdm.com/postcards/wrench-png-10-369652da.png"><![endif]--><!--[if gte mso 9]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px"><v:fill src="https://cloudfilesdm.com/postcards/wrench-png-10-369652da.png" color="#1B1B1B" type="frame" size="1,1" aspect="atmost"/><v:textbox style="mso-fit-shape-to-text:true" inset="0,0,0,0"><div style="font-size:0;line-height:0"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td colspan="3" height="37" style="line-height:1px;font-size:1px">&nbsp;</td></tr><tr><td width="40" valign="top" style="line-height:1px;font-size:1px">&nbsp;</td><td valign="top" align="left"><![endif]--><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div class="pc-w620-font-size-30px pc-w620-line-height-133pc" style="font-size:36px;line-height:128%;text-align:left;text-align-last:left;color:#fff;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.6px;font-style:normal"><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:36px;line-height:128%;font-weight:800" class="pc-w620-font-size-30px pc-w620-line-height-133pc">Your Job Confirmation</span></div></div></div></td></tr></table><!--[if gte mso 9]></td><td width="40" style="line-height:1px;font-size:1px" valign="top">&nbsp;</td></tr><tr><td colspan="3" height="37" style="line-height:1px;font-size:1px">&nbsp;</td></tr></table></td></tr></table></div><p style="margin:0;mso-hide:all"><o:p xmlns:o="urn:schemas-microsoft-com:office:office">&nbsp;</o:p></p></v:textbox></v:rect><![endif]--></td></tr></table><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td valign="top" class="pc-w520-padding-10-30-10-30 pc-w620-padding-10-35-10-35" style="padding:10px 40px;height:unset;background-color:#fff" bgcolor="#ffffff"><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div style="font-size:15px;line-height:140%;text-align:left;text-align-last:left"><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Hi, ${escapeHtml(customerName)}</span></div><div><br></div><div><br></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">This email confirms that we have accepted the service or repair of your ${escapeHtml(equipmentMakeModel)}.</span></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">You have been assigned Job number ${escapeHtml(jobNumber)}. We will be in touch again when your machine is ready to collect. </span></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Should you require any further assistance, please don't hesistate to get in touch using the Job number provided above.</span></div><div><br></div><div><br></div></div></div></td></tr></table></td></tr></table><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td valign="top" class="pc-w520-padding-30-30-30-30 pc-w620-padding-35-35-35-35" style="padding:40px;height:unset;background-color:#fff" bgcolor="#ffffff"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="left" valign="top"><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%" align="left"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div style="font-size:15px;line-height:140%;text-align:left;text-align-last:left;color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Kind Regards,</span></div><div><br></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyName)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyAddress)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyEmail)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyPhone)}</span></div><div><br></div><div><br></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">THIS EMAIL HAS BEEN SENT BY BOLTDOWN, A WORKSHOP MANAGEMENT SYSTEM. THIS MAILBOX IS NOT MONITORED - DO NOT REPLY TO THIS EMAIL.</span></div></div></div></td></tr></table></td></tr></table></td></tr></table></td></tr></table></td></tr></table></body></html>`;
 }
 
 function generateJobBookedText(job: any, customer: any, business?: any): string {
