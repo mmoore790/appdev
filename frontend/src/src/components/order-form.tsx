@@ -16,12 +16,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
+// UK VAT rate (20%)
+const VAT_RATE = 0.20;
+
 const orderItemSchema = z.object({
   itemName: z.string().min(1, "Item name is required"),
   itemSku: z.string().optional(),
   itemType: z.enum(["part", "machine", "accessory", "service", "consumable", "other"]),
   quantity: z.number().min(1, "Quantity must be at least 1").default(1),
-  unitPrice: z.number().optional(),
+  priceExcludingVat: z.number().optional(),
+  priceIncludingVat: z.number().optional(),
   totalPrice: z.number().optional(),
   supplierName: z.string().optional(),
   supplierSku: z.string().optional(),
@@ -180,7 +184,8 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
         
         // Only include optional fields if they have values
         if (item.itemSku && item.itemSku.trim() !== "") cleanedItem.itemSku = item.itemSku;
-        if (item.unitPrice !== undefined && item.unitPrice !== null) cleanedItem.unitPrice = item.unitPrice;
+        if (item.priceExcludingVat !== undefined && item.priceExcludingVat !== null) cleanedItem.priceExcludingVat = item.priceExcludingVat;
+        if (item.priceIncludingVat !== undefined && item.priceIncludingVat !== null) cleanedItem.priceIncludingVat = item.priceIncludingVat;
         if (item.totalPrice !== undefined && item.totalPrice !== null) cleanedItem.totalPrice = item.totalPrice;
         if (item.supplierName && item.supplierName.trim() !== "") cleanedItem.supplierName = item.supplierName;
         if (item.supplierSku && item.supplierSku.trim() !== "") cleanedItem.supplierSku = item.supplierSku;
@@ -428,7 +433,7 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                       )}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <FormField
                       control={form.control}
                       name={`items.${index}.itemSku`}
@@ -460,19 +465,61 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                         </FormItem>
                       )}
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <FormField
                       control={form.control}
-                      name={`items.${index}.unitPrice`}
+                      name={`items.${index}.priceExcludingVat`}
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Unit Price (£)</FormLabel>
+                          <FormLabel>Price Excluding VAT (£)</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
                               step="0.01"
                               placeholder="0.00"
                               {...field}
-                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                              onChange={(e) => {
+                                const value = e.target.value ? parseFloat(e.target.value) : undefined;
+                                field.onChange(value);
+                                // Auto-calculate price including VAT
+                                if (value !== undefined && value !== null) {
+                                  const includingVat = value * (1 + VAT_RATE);
+                                  form.setValue(`items.${index}.priceIncludingVat`, parseFloat(includingVat.toFixed(2)));
+                                } else {
+                                  form.setValue(`items.${index}.priceIncludingVat`, undefined);
+                                }
+                              }}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`items.${index}.priceIncludingVat`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Price Including VAT (£)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              {...field}
+                              onChange={(e) => {
+                                const value = e.target.value ? parseFloat(e.target.value) : undefined;
+                                field.onChange(value);
+                                // Auto-calculate price excluding VAT
+                                if (value !== undefined && value !== null) {
+                                  const excludingVat = value / (1 + VAT_RATE);
+                                  form.setValue(`items.${index}.priceExcludingVat`, parseFloat(excludingVat.toFixed(2)));
+                                } else {
+                                  form.setValue(`items.${index}.priceExcludingVat`, undefined);
+                                }
+                              }}
                               value={field.value || ""}
                             />
                           </FormControl>
@@ -722,11 +769,27 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                             </div>
                             <div className="text-sm text-neutral-600">
                               Quantity: {item.quantity}
-                              {item.unitPrice && ` × £${item.unitPrice.toFixed(2)}`}
-                              {item.unitPrice && (
-                                <span className="ml-2 font-medium">
-                                  = £{(item.quantity * item.unitPrice).toFixed(2)}
-                                </span>
+                              {(item.priceExcludingVat || item.priceIncludingVat) && (
+                                <>
+                                  {item.priceExcludingVat && (
+                                    <>
+                                      {` × £${item.priceExcludingVat.toFixed(2)} (ex VAT)`}
+                                      {item.priceIncludingVat && ` / £${item.priceIncludingVat.toFixed(2)} (inc VAT)`}
+                                    </>
+                                  )}
+                                  {!item.priceExcludingVat && item.priceIncludingVat && (
+                                    ` × £${item.priceIncludingVat.toFixed(2)} (inc VAT)`
+                                  )}
+                                  {(item.priceExcludingVat || item.priceIncludingVat) && (
+                                    <span className="ml-2 font-medium">
+                                      = £{item.priceIncludingVat 
+                                        ? (item.quantity * item.priceIncludingVat).toFixed(2) 
+                                        : item.priceExcludingVat 
+                                        ? (item.quantity * item.priceExcludingVat * (1 + VAT_RATE)).toFixed(2)
+                                        : "0.00"}
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                             <div className="mt-2">

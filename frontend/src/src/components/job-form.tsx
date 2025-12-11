@@ -178,9 +178,26 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
   });
 
   // Fetch customers for dropdown
-  const { data: customers = [], isLoading: isCustomersLoading } = useQuery({
+  type PaginatedResponse<T> = {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  
+  const { data: customersResponse, isLoading: isCustomersLoading } = useQuery<PaginatedResponse<any>>({
     queryKey: ["/api/customers"],
+    queryFn: async () => {
+      const response = await fetch("/api/customers?page=1&limit=1000", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      return response.json();
+    },
   });
+
+  const customers = customersResponse?.data ?? [];
 
   // Filtered customers for searchable dropdown
   const filteredCustomers = useMemo(() => {

@@ -22,6 +22,14 @@ interface Customer {
   address?: string;
 }
 
+type PaginatedResponse<T> = {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 interface User {
   id: number;
   username: string;
@@ -93,13 +101,24 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
 
   // Fetch customers with search
   const searchTerm = customerSearchQuery.trim();
-  const { data: customers = [] } = useQuery<Customer[]>({
+  const { data: customersResponse } = useQuery<PaginatedResponse<Customer>>({
     queryKey: ['/api/customers', searchTerm],
-    queryFn: () =>
-      api.get<Customer[]>(`/api/customers${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ""}`),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (searchTerm) {
+        params.append("search", searchTerm);
+      }
+      // For the dropdown, we want more results but still limit it
+      params.append("page", "1");
+      params.append("limit", "50");
+      return api.get<PaginatedResponse<Customer>>(`/api/customers?${params.toString()}`);
+    },
   });
 
-  // Filter customers based on search query
+  // Extract customers array from paginated response
+  const customers = customersResponse?.data ?? [];
+  
+  // Filter customers based on search query (backend already filters, but we keep this for client-side refinement)
   const filteredCustomers = customers.filter((customer) => {
     if (!searchTerm) return false;
     const query = searchTerm.toLowerCase();

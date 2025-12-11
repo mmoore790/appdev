@@ -592,7 +592,8 @@ class JobService {
         if (updatedJob.customerId) {
           const customer = await customerRepository.findById(updatedJob.customerId, businessId);
           if (customer?.email) {
-            await sendJobCompletedEmail(customer.email, updatedJob);
+            const business = await storage.getBusiness(businessId);
+            await sendJobCompletedEmail(updatedJob, customer, business);
             console.log(`Job ready for pickup email sent for job ${updatedJob.jobId} to ${customer.email}`);
           }
         }

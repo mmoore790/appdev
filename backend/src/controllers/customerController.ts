@@ -28,8 +28,11 @@ export class CustomerController {
     try {
       const businessId = getBusinessIdFromRequest(req);
       const search = req.query.search ? String(req.query.search) : undefined;
-      const customers = await customerService.listCustomers(businessId, search);
-      res.json(customers);
+      const page = req.query.page ? Math.max(1, parseInt(String(req.query.page), 10)) : 1;
+      const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10))) : 25;
+      
+      const result = await customerService.listCustomers(businessId, search, page, limit);
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -198,7 +201,9 @@ export class CustomerController {
     try {
       const businessId = getBusinessIdFromRequest(req);
       const search = req.query.search ? String(req.query.search) : undefined;
-      const customers = await customerService.listCustomers(businessId, search);
+      // For export, fetch all customers (no pagination)
+      const result = await customerService.listCustomers(businessId, search, 1, 10000);
+      const customers = result.data;
 
       // Generate CSV
       const headers = ["Name", "Email", "Phone", "Address", "Notes"];

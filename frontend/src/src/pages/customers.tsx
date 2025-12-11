@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -26,6 +26,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Plus, Search, MoreVertical, Trash2, Download, Mail, Phone, Package } from "lucide-react";
 import { useLocation } from "wouter";
@@ -40,8 +49,17 @@ type Customer = {
   matchReason?: string | null;
 };
 
+type PaginatedResponse = {
+  data: Customer[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
@@ -54,12 +72,29 @@ export default function CustomersPage() {
   const { toast } = useToast();
 
   const searchTerm = search.trim();
+  const limit = 25;
 
-  const { data: customers = [], isLoading, isError, error } = useQuery<Customer[]>({
-    queryKey: ["/api/customers", searchTerm],
-    queryFn: () =>
-      api.get(`/api/customers${searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ""}`),
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const { data: paginatedResponse, isLoading, isError, error } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/customers", searchTerm, currentPage],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (searchTerm) {
+        params.append("search", searchTerm);
+      }
+      params.append("page", String(currentPage));
+      params.append("limit", String(limit));
+      return api.get(`/api/customers?${params.toString()}`);
+    },
   });
+
+  const customers = paginatedResponse?.data ?? [];
+  const totalPages = paginatedResponse?.totalPages ?? 0;
+  const total = paginatedResponse?.total ?? 0;
 
   const closeDialogs = () => {
     setIsCreateDialogOpen(false);
@@ -425,6 +460,107 @@ export default function CustomersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {!isLoading && !isError && totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between px-2">
+          <div className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, total)} of {total} customers
+          </div>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage > 1) {
+                      setCurrentPage(currentPage - 1);
+                    }
+                  }}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              
+              {(() => {
+                const pages: (number | "ellipsis")[] = [];
+                
+                if (totalPages <= 7) {
+                  // Show all pages if 7 or fewer
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                  }
+                } else {
+                  // Always show first page
+                  pages.push(1);
+                  
+                  if (currentPage <= 4) {
+                    // Near the start: 1 2 3 4 5 ... last
+                    for (let i = 2; i <= 5; i++) {
+                      pages.push(i);
+                    }
+                    pages.push("ellipsis");
+                    pages.push(totalPages);
+                  } else if (currentPage >= totalPages - 3) {
+                    // Near the end: 1 ... (n-4) (n-3) (n-2) (n-1) n
+                    pages.push("ellipsis");
+                    for (let i = totalPages - 4; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                  } else {
+                    // In the middle: 1 ... (current-1) current (current+1) ... last
+                    pages.push("ellipsis");
+                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                      pages.push(i);
+                    }
+                    pages.push("ellipsis");
+                    pages.push(totalPages);
+                  }
+                }
+                
+                return pages.map((item, index) => {
+                  if (item === "ellipsis") {
+                    return (
+                      <PaginationItem key={`ellipsis-${index}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  
+                  return (
+                    <PaginationItem key={item}>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(item);
+                        }}
+                        isActive={currentPage === item}
+                        className="cursor-pointer"
+                      >
+                        {item}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                });
+              })()}
+              
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage < totalPages) {
+                      setCurrentPage(currentPage + 1);
+                    }
+                  }}
+                  className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
       <Dialog
         open={isEditDialogOpen}

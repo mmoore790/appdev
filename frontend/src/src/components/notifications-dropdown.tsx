@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, MessageSquare, CheckSquare, Briefcase, PhoneCall, Loader2, X, Calendar } from 'lucide-react';
+import { Bell, MessageSquare, CheckSquare, Briefcase, PhoneCall, Loader2, X, Calendar, Package } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface Notification {
   id: string;
-  type: 'message' | 'task' | 'job' | 'callback' | 'calendar';
+  type: 'message' | 'task' | 'job' | 'callback' | 'calendar' | 'order';
   title: string;
   description: string;
   link: string;
@@ -153,6 +153,8 @@ export function NotificationsDropdown() {
         return <PhoneCall className="h-4 w-4" />;
       case 'calendar':
         return <Calendar className="h-4 w-4" />;
+      case 'order':
+        return <Package className="h-4 w-4" />;
       default:
         return <Bell className="h-4 w-4" />;
     }
@@ -173,6 +175,8 @@ export function NotificationsDropdown() {
         return 'text-purple-600';
       case 'calendar':
         return 'text-indigo-600';
+      case 'order':
+        return 'text-orange-600';
       default:
         return 'text-slate-600';
     }

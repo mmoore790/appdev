@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useReactToPrint } from "react-to-print";
 import {
   ArrowLeft,
   Calendar,
@@ -26,6 +27,7 @@ import { WorkshopActivity } from "@/components/workshop-activity";
 import { StatusTimeline } from "@/components/status-timeline";
 import { OrderForm } from "@/components/order-form";
 import { CustomerActions } from "@/components/customer-actions";
+import { PrintJobOverview } from "@/components/print-job-overview";
 import { formatDate, getStatusColor, cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -115,6 +117,7 @@ export default function WorkshopJobDetail() {
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const printOverviewRef = useRef<HTMLDivElement>(null);
 
   const {
     data: job,
@@ -164,6 +167,41 @@ export default function WorkshopJobDetail() {
   });
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ["/api/users"],
+  });
+
+  // Fetch company info for print overview
+  const { data: companyInfo } = useQuery<any>({
+    queryKey: ["/api/business/me"],
+  });
+
+  // Print overview handler
+  const handlePrintOverview = useReactToPrint({
+    contentRef: printOverviewRef,
+    documentTitle: `Job Overview - ${job?.jobId || "Unknown"}`,
+    pageStyle: `
+      @page {
+        size: A4;
+        margin: 15mm;
+      }
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+          font-size: 12pt;
+          line-height: 1.4;
+        }
+        .print\\:text-sm {
+          font-size: 10pt !important;
+        }
+        .print\\:text-xs {
+          font-size: 9pt !important;
+        }
+        .print\\:break-inside-avoid {
+          break-inside: avoid !important;
+        }
+      }
+    `,
   });
 
   const resolveUserName = (userId?: number | null) => {
@@ -529,7 +567,7 @@ export default function WorkshopJobDetail() {
         <ArrowLeft size={16} />
         Back to workshop
       </Button>
-      <Button variant="outline" className="gap-2">
+      <Button variant="outline" className="gap-2" onClick={handlePrintOverview} disabled={!job}>
         <Printer size={16} />
         Print overview
       </Button>
@@ -1300,6 +1338,19 @@ export default function WorkshopJobDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Hidden print overview component */}
+      {job && (
+        <div className="hidden">
+          <PrintJobOverview
+            ref={printOverviewRef}
+            job={job}
+            orders={orders}
+            services={services}
+            companyInfo={companyInfo}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -1543,7 +1594,16 @@ function OrderDetailsDialog({ order, isOpen, onClose }: OrderDetailsDialogProps)
                         )}
                       </div>
                       <div className="text-right">
-                        {item.unitPrice && (
+                        {(item.priceExcludingVat || item.priceIncludingVat) && (
+                          <div className="text-xs text-neutral-500">
+                            {item.priceExcludingVat && `£${item.priceExcludingVat.toFixed(2)} (ex VAT)`}
+                            {item.priceExcludingVat && item.priceIncludingVat && ` / `}
+                            {item.priceIncludingVat && `£${item.priceIncludingVat.toFixed(2)} (inc VAT)`}
+                            {!item.priceExcludingVat && item.priceIncludingVat && `£${item.priceIncludingVat.toFixed(2)} (inc VAT)`}
+                            {' each'}
+                          </div>
+                        )}
+                        {!item.priceExcludingVat && !item.priceIncludingVat && item.unitPrice && (
                           <div className="text-xs text-neutral-500">£{item.unitPrice.toFixed(2)} each</div>
                         )}
                         {item.totalPrice && (

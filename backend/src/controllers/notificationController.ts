@@ -26,19 +26,45 @@ export class NotificationController {
       const notifications = await notificationRepository.findByUser(userId, businessId, unreadOnly);
 
       // Add relative time and format
-      const enrichedNotifications = notifications.slice(0, 50).map(notif => ({
-        id: `notification-${notif.id}`,
-        type: notif.type,
-        title: notif.title,
-        description: notif.description || "",
-        link: notif.link || this.getDefaultLink(notif.type, notif.entityId),
-        timestamp: notif.createdAt,
-        priority: notif.priority as "high" | "normal",
-        icon: notif.type,
-        entityId: notif.entityId,
-        isRead: notif.isRead,
-        relativeTime: formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true }),
-      }));
+      const enrichedNotifications = notifications.slice(0, 50).map(notif => {
+        // Normalize task links - convert /tasks/:id to /tasks?taskId=:id format
+        let link = notif.link || this.getDefaultLink(notif.type, notif.entityId);
+        if (notif.type === 'task') {
+          // Convert old /tasks/:id format to new query parameter format
+          if (link.startsWith('/tasks/') && link !== '/tasks') {
+            const taskId = link.replace('/tasks/', '');
+            link = `/tasks?taskId=${taskId}`;
+          } else if (link === '/tasks' && notif.entityId) {
+            // If link is just /tasks but we have entityId, add it as query param
+            link = `/tasks?taskId=${notif.entityId}`;
+          }
+        }
+        // Normalize order links - convert /orders/:id to /orders?orderId=:id format
+        if (notif.type === 'order') {
+          // Convert old /orders/:id format to new query parameter format
+          if (link.startsWith('/orders/') && link !== '/orders') {
+            const orderId = link.replace('/orders/', '');
+            link = `/orders?orderId=${orderId}`;
+          } else if (link === '/orders' && notif.entityId) {
+            // If link is just /orders but we have entityId, add it as query param
+            link = `/orders?orderId=${notif.entityId}`;
+          }
+        }
+        
+        return {
+          id: `notification-${notif.id}`,
+          type: notif.type,
+          title: notif.title,
+          description: notif.description || "",
+          link,
+          timestamp: notif.createdAt,
+          priority: notif.priority as "high" | "normal",
+          icon: notif.type,
+          entityId: notif.entityId,
+          isRead: notif.isRead,
+          relativeTime: formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true }),
+        };
+      });
 
       // Count unread
       const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -53,14 +79,16 @@ export class NotificationController {
     }
   }
 
-  private getDefaultLink(type: string, entityId: number): string {
+  private getDefaultLink(type: string, entityId: number | null): string {
     switch (type) {
       case "job":
         return `/workshop/jobs/${entityId}`;
       case "callback":
         return `/callbacks`;
       case "task":
-        return `/tasks`;
+        return entityId ? `/tasks?taskId=${entityId}` : `/tasks`;
+      case "order":
+        return entityId ? `/orders?orderId=${entityId}` : `/orders`;
       case "calendar":
         return `/calendar`;
       case "message":

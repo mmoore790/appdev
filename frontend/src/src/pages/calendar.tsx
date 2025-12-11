@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, startOfDay, addMinutes, addDays, startOfWeek, endOfWeek, isSameDay, parseISO, addHours, setHours, setMinutes, startOfToday, nextMonday } from "date-fns";
+import { format, startOfDay, addMinutes, addDays, startOfWeek, endOfWeek, isSameDay, parseISO, addHours, setHours, setMinutes, startOfToday } from "date-fns";
 import {
   DndContext,
   DragEndEvent,
@@ -11,7 +11,7 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
-import { Calendar as CalendarIcon, Clock, Plus, X, Edit2, Trash2, Briefcase, CalendarDays, Users, AlertCircle, CheckCircle2, Zap, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LayoutGrid, LayoutList } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, X, Edit2, Trash2, Briefcase, CalendarDays, Users, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, LayoutGrid, LayoutList } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -85,6 +85,9 @@ function DraggableJobCard({ job, onSchedule }: { job: Job; onSchedule: (job: Job
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm text-slate-900 truncate">{job.jobId}</div>
+            {job.customerName && (
+              <div className="text-xs text-slate-500 mt-0.5 truncate">{job.customerName}</div>
+            )}
             <div className="text-xs text-slate-600 mt-1 line-clamp-2">{job.description}</div>
             <Badge variant="outline" className="mt-2 text-xs">
               {job.status.replace(/_/g, " ")}
@@ -280,7 +283,6 @@ function ScheduleEventDialog({
   const [duration, setDuration] = useState(60);
   const [notes, setNotes] = useState("");
   const [title, setTitle] = useState("");
-  const [quickSchedule, setQuickSchedule] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -318,23 +320,8 @@ function ScheduleEventDialog({
       
       // Reset notes
       setNotes("");
-      setQuickSchedule(null);
     }
   }, [job, open, initialDate, initialTime, initialUserId]);
-
-  // Quick schedule options
-  const quickScheduleOptions = [
-    { label: "Today Morning (9 AM)", value: "today-morning", time: "09:00", date: startOfToday() },
-    { label: "Today Afternoon (2 PM)", value: "today-afternoon", time: "14:00", date: startOfToday() },
-    { label: "Tomorrow Morning (9 AM)", value: "tomorrow-morning", time: "09:00", date: addDays(startOfToday(), 1) },
-    { label: "Next Monday (9 AM)", value: "next-monday", time: "09:00", date: nextMonday(startOfToday()) },
-  ];
-
-  const handleQuickSchedule = (option: typeof quickScheduleOptions[0]) => {
-    setSelectedDate(option.date);
-    setSelectedTime(option.time);
-    setQuickSchedule(option.value);
-  };
 
   // Check availability for selected users
   const checkAvailability = useCallback((userId: number, startDateTime: Date, durationMinutes: number) => {
@@ -395,7 +382,6 @@ function ScheduleEventDialog({
     setDuration(60);
     setNotes("");
     setTitle("");
-    setQuickSchedule(null);
     onOpenChange(false);
   };
 
@@ -490,28 +476,6 @@ function ScheduleEventDialog({
             </div>
           )}
 
-          {/* Quick Schedule Options */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-2 block">
-              Quick Schedule
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {quickScheduleOptions.map((option) => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  variant={quickSchedule === option.value ? "default" : "outline"}
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => handleQuickSchedule(option)}
-                >
-                  <Zap className="h-3 w-3 mr-2" />
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
           {/* Staff Selection */}
           <div>
             <label className="text-sm font-medium text-slate-700 mb-2 block flex items-center gap-2">
@@ -568,47 +532,44 @@ function ScheduleEventDialog({
             </div>
           </div>
 
-          {/* Date Selection */}
+          {/* Date & Time Selection - Combined */}
           <div>
             <label className="text-sm font-medium text-slate-700 mb-2 block">
-              Date
+              Date & Time
             </label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(selectedDate, "PPP")}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {format(selectedDate, "MMM d, yyyy")}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
                   onSelect={(date) => {
                     if (date) {
                       setSelectedDate(date);
-                      setQuickSchedule(null);
                     }
                   }}
-                  disabled={(date) => date < startOfToday()}
+                      disabled={(date) => date < startOfToday()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="flex-1">
+                <Input
+                  type="time"
+                  value={selectedTime}
+                  onChange={(e) => {
+                    setSelectedTime(e.target.value);
+                  }}
                 />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Time Selection */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-2 block">
-              Start Time
-            </label>
-            <Input
-              type="time"
-              value={selectedTime}
-              onChange={(e) => {
-                setSelectedTime(e.target.value);
-                setQuickSchedule(null);
-              }}
-            />
+              </div>
+            </div>
           </div>
 
           {/* Duration */}
@@ -943,47 +904,49 @@ function EventFormDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-slate-700">Start Date & Time *</label>
-            <Input
-              type="datetime-local"
-              value={(() => {
-                try {
-                  if (!safeStartTime || isNaN(safeStartTime.getTime())) {
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Start Date & Time *</label>
+              <Input
+                type="datetime-local"
+                value={(() => {
+                  try {
+                    if (!safeStartTime || isNaN(safeStartTime.getTime())) {
+                      return "";
+                    }
+                    return format(safeStartTime, "yyyy-MM-dd'T'HH:mm");
+                  } catch (error) {
+                    console.error("Error formatting start date:", error);
                     return "";
                   }
-                  return format(safeStartTime, "yyyy-MM-dd'T'HH:mm");
-                } catch (error) {
-                  console.error("Error formatting start date:", error);
-                  return "";
-                }
-              })()}
-              onChange={handleStartTimeChange}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">End Date & Time *</label>
-            <Input
-              type="datetime-local"
-              value={(() => {
-                try {
-                  if (!safeEndTime || isNaN(safeEndTime.getTime())) {
+                })()}
+                onChange={handleStartTimeChange}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">End Date & Time *</label>
+              <Input
+                type="datetime-local"
+                value={(() => {
+                  try {
+                    if (!safeEndTime || isNaN(safeEndTime.getTime())) {
+                      return "";
+                    }
+                    return format(safeEndTime, "yyyy-MM-dd'T'HH:mm");
+                  } catch (error) {
+                    console.error("Error formatting end date:", error);
                     return "";
                   }
-                  return format(safeEndTime, "yyyy-MM-dd'T'HH:mm");
-                } catch (error) {
-                  console.error("Error formatting end date:", error);
-                  return "";
-                }
-              })()}
-              onChange={handleEndTimeChange}
-              className="mt-1"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Duration: {Math.round((safeEndTime.getTime() - safeStartTime.getTime()) / (1000 * 60))} minutes
-            </p>
+                })()}
+                onChange={handleEndTimeChange}
+                className="mt-1"
+              />
+            </div>
           </div>
+          <p className="text-xs text-slate-500 -mt-2">
+            Duration: {Math.round((safeEndTime.getTime() - safeStartTime.getTime()) / (1000 * 60))} minutes
+          </p>
           <div>
             <label className="text-sm font-medium text-slate-700">Title *</label>
             <Input

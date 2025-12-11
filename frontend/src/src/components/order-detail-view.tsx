@@ -58,6 +58,8 @@ interface OrderItem {
   itemCategory?: string;
   quantity: number;
   unitPrice?: number;
+  priceExcludingVat?: number;
+  priceIncludingVat?: number;
   totalPrice?: number;
   supplierName?: string;
   supplierSku?: string;
@@ -297,7 +299,18 @@ export function OrderDetailView({
                         <div className="text-neutral-600">Quantity</div>
                         <div className="font-medium">{item.quantity}</div>
                       </div>
-                      {item.unitPrice && (
+                      {(item.priceExcludingVat || item.priceIncludingVat) && (
+                        <div>
+                          <div className="text-neutral-600">Price</div>
+                          <div className="font-medium">
+                            {item.priceExcludingVat && `£${item.priceExcludingVat.toFixed(2)} (ex VAT)`}
+                            {item.priceExcludingVat && item.priceIncludingVat && ` / `}
+                            {item.priceIncludingVat && `£${item.priceIncludingVat.toFixed(2)} (inc VAT)`}
+                            {!item.priceExcludingVat && item.priceIncludingVat && `£${item.priceIncludingVat.toFixed(2)} (inc VAT)`}
+                          </div>
+                        </div>
+                      )}
+                      {!item.priceExcludingVat && !item.priceIncludingVat && item.unitPrice && (
                         <div>
                           <div className="text-neutral-600">Unit Price</div>
                           <div className="font-medium">£{item.unitPrice.toFixed(2)}</div>

@@ -429,7 +429,7 @@ export class NotificationService implements NotificationProvider {
       entityType: 'task',
       entityId: taskId,
       priority: priority || 'medium',
-      link: `/tasks/${taskId}`,
+      link: `/tasks?taskId=${taskId}`,
       metadata: null,
     });
   }
@@ -454,7 +454,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'task',
         entityId: taskId,
         priority: priority || 'medium',
-        link: `/tasks/${taskId}`,
+        link: `/tasks?taskId=${taskId}`,
         metadata: null,
       });
     }
@@ -470,7 +470,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'task',
         entityId: taskId,
         priority: priority || 'medium',
-        link: `/tasks/${taskId}`,
+        link: `/tasks?taskId=${taskId}`,
         metadata: null,
       });
     }

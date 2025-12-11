@@ -130,19 +130,33 @@ export class TaskService {
     }
 
     // Create notification if task is assigned
-    if (task.assignedTo) {
+    // Check explicitly for null/undefined to avoid issues with falsy values like 0
+    if (task.assignedTo != null && task.assignedTo !== undefined) {
       try {
-        await notificationService.notifyTaskAssignment(
-          task.id,
-          task.title,
-          task.assignedTo,
-          task.businessId,
-          task.priority,
-          task.dueDate || undefined
-        );
+        const assignedUserId = typeof task.assignedTo === 'string' 
+          ? parseInt(task.assignedTo, 10) 
+          : task.assignedTo;
+        
+        // Only send notification if we have a valid user ID (greater than 0)
+        if (Number.isFinite(assignedUserId) && assignedUserId > 0) {
+          await notificationService.notifyTaskAssignment(
+            task.id,
+            task.title,
+            assignedUserId,
+            task.businessId,
+            task.priority,
+            task.dueDate || undefined
+          );
+          console.log(`[TaskService] Notification sent for task ${task.id} assigned to user ${assignedUserId}`);
+        } else {
+          console.log(`[TaskService] Skipping notification - invalid assignedTo value: ${task.assignedTo}`);
+        }
       } catch (error) {
         console.error("Error creating task assignment notification:", error);
+        // Don't fail task creation if notification fails
       }
+    } else {
+      console.log(`[TaskService] No notification sent - task ${task.id} has no assignee`);
     }
 
     console.log("[TaskService] createTask - Returning task:", task.id);
@@ -155,8 +169,10 @@ export class TaskService {
       return undefined;
     }
 
-    // Check if assignment changed
-    const assignmentChanged = data.assignedTo !== undefined && data.assignedTo !== currentTask.assignedTo;
+    // Check if assignment changed - handle both assignment and unassignment
+    // Use != instead of !== to handle null/undefined comparison correctly
+    const assignmentChanged = data.assignedTo !== undefined && 
+      (data.assignedTo != currentTask.assignedTo);
 
     const preparedUpdate = this.prepareTaskUpdate(data, currentTask);
     if (Object.keys(preparedUpdate).length === 0) {

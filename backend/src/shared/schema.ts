@@ -1163,7 +1163,9 @@ export const orderItems = pgTable("order_items", {
   
   // Quantity and pricing
   quantity: integer("quantity").notNull().default(1),
-  unitPrice: integer("unit_price"), // Store in pence for precision
+  unitPrice: integer("unit_price"), // Store in pence for precision (deprecated, use priceExcludingVat)
+  priceExcludingVat: integer("price_excluding_vat"), // Store in pence for precision
+  priceIncludingVat: integer("price_including_vat"), // Store in pence for precision
   totalPrice: integer("total_price"), // Store in pence for precision
   
   // Supplier information (can override order-level supplier)
@@ -1192,12 +1194,16 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
   quantity: true,
   isOrdered: true,
   unitPrice: true,
+  priceExcludingVat: true,
+  priceIncludingVat: true,
   totalPrice: true,
   supplierName: true,
   supplierSku: true,
   notes: true,
 }).extend({
-  unitPrice: z.number().optional(), // Accept decimal values (converted to pence server-side)
+  unitPrice: z.number().optional(), // Accept decimal values (converted to pence server-side) - deprecated
+  priceExcludingVat: z.number().optional(), // Accept decimal values (converted to pence server-side)
+  priceIncludingVat: z.number().optional(), // Accept decimal values (converted to pence server-side)
   totalPrice: z.number().optional(),
   itemType: z.enum(["part", "machine", "accessory", "service", "consumable", "other"]),
 }).partial({
@@ -1205,6 +1211,8 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).pick({
   orderId: true, // Added server-side after order creation
   itemSku: true,
   unitPrice: true,
+  priceExcludingVat: true,
+  priceIncludingVat: true,
   isOrdered: true,
   totalPrice: true,
   supplierName: true,

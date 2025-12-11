@@ -90,7 +90,8 @@ export interface IStorage {
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, customer: Partial<InsertCustomer>, businessId: number): Promise<Customer | undefined>;
   deleteCustomer(id: number, businessId: number): Promise<boolean>;
-  getAllCustomers(businessId: number): Promise<Customer[]>;
+  getAllCustomers(businessId: number, limit?: number, offset?: number): Promise<Customer[]>;
+  countAllCustomers(businessId: number): Promise<number>;
   
   // Email history operations
   createEmailHistory(emailHistory: InsertEmailHistory): Promise<EmailHistory>;
@@ -221,7 +222,8 @@ export interface IStorage {
   // Universal Order Management operations
   getOrder(id: number, businessId: number): Promise<Order | undefined>;
   getOrderByNumber(orderNumber: string, businessId: number): Promise<Order | undefined>;
-  getAllOrders(businessId: number): Promise<Order[]>;
+  getAllOrders(businessId: number, limit?: number, offset?: number): Promise<Order[]>;
+  countAllOrders(businessId: number): Promise<number>;
   getOrdersByStatus(status: string, businessId: number): Promise<Order[]>;
   getOrdersByCustomer(customerId: number, businessId: number): Promise<Order[]>;
   getOrdersByJob(jobId: number, businessId: number): Promise<Order[]>;
@@ -666,8 +668,27 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
-  async getAllCustomers(businessId: number): Promise<Customer[]> {
-    return await db.select().from(customers).where(eq(customers.businessId, businessId));
+  async getAllCustomers(businessId: number, limit?: number, offset?: number): Promise<Customer[]> {
+    const baseQuery = db.select().from(customers).where(eq(customers.businessId, businessId));
+    
+    if (offset !== undefined && limit !== undefined) {
+      return await baseQuery.offset(offset).limit(limit);
+    } else if (limit !== undefined) {
+      return await baseQuery.limit(limit);
+    } else if (offset !== undefined) {
+      return await baseQuery.offset(offset);
+    }
+    
+    return await baseQuery;
+  }
+
+  async countAllCustomers(businessId: number): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(customers)
+      .where(eq(customers.businessId, businessId));
+    
+    return result[0]?.count ?? 0;
   }
 
   async getCustomerByEmail(email: string, businessId: number): Promise<Customer | undefined> {
@@ -2426,10 +2447,26 @@ export class DatabaseStorage implements IStorage {
     return order;
   }
 
-  async getAllOrders(businessId: number): Promise<Order[]> {
-    return await db.select().from(orders)
+  async getAllOrders(businessId: number, limit?: number, offset?: number): Promise<Order[]> {
+    let query = db.select().from(orders)
       .where(eq(orders.businessId, businessId))
       .orderBy(desc(orders.createdAt));
+    
+    if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+    if (offset !== undefined) {
+      query = query.offset(offset);
+    }
+    
+    return await query;
+  }
+
+  async countAllOrders(businessId: number): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(eq(orders.businessId, businessId));
+    return Number(result[0]?.count || 0);
   }
 
   async getOrdersByStatus(status: string, businessId: number): Promise<Order[]> {
@@ -2644,6 +2681,8 @@ export class DatabaseStorage implements IStorage {
       businessId: itemData.businessId,
       orderId: itemData.orderId,
       unitPrice: itemData.unitPrice ? Math.round(itemData.unitPrice * 100) : undefined,
+      priceExcludingVat: itemData.priceExcludingVat ? Math.round(itemData.priceExcludingVat * 100) : undefined,
+      priceIncludingVat: itemData.priceIncludingVat ? Math.round(itemData.priceIncludingVat * 100) : undefined,
       totalPrice: itemData.totalPrice ? Math.round(itemData.totalPrice * 100) : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -2661,6 +2700,12 @@ export class DatabaseStorage implements IStorage {
 
     if (itemData.unitPrice !== undefined) {
       processedData.unitPrice = itemData.unitPrice ? Math.round(itemData.unitPrice * 100) : null;
+    }
+    if (itemData.priceExcludingVat !== undefined) {
+      processedData.priceExcludingVat = itemData.priceExcludingVat ? Math.round(itemData.priceExcludingVat * 100) : null;
+    }
+    if (itemData.priceIncludingVat !== undefined) {
+      processedData.priceIncludingVat = itemData.priceIncludingVat ? Math.round(itemData.priceIncludingVat * 100) : null;
     }
     if (itemData.totalPrice !== undefined) {
       processedData.totalPrice = itemData.totalPrice ? Math.round(itemData.totalPrice * 100) : null;

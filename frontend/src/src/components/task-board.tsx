@@ -103,6 +103,8 @@ interface TaskBoardProps {
   tasks: any[];
   users?: any[];
   isLoading?: boolean;
+  initialTaskId?: number | null;
+  onTaskDialogClose?: () => void;
 }
 
 interface StatusConfig {
@@ -480,6 +482,8 @@ export function TaskBoard({
   tasks,
   users = [],
   isLoading = false,
+  initialTaskId = null,
+  onTaskDialogClose,
 }: TaskBoardProps) {
   const sanitizedTasks = useMemo(
     () => (Array.isArray(tasks) ? tasks : []),
@@ -973,6 +977,14 @@ export function TaskBoard({
   const openEditDialog = (taskId: number) => {
     setDialogState({ isOpen: true, mode: "edit", taskId });
   };
+
+  // Open dialog when initialTaskId is provided (e.g., from notification link)
+  useEffect(() => {
+    if (initialTaskId && !dialogState.isOpen && Number.isFinite(initialTaskId)) {
+      openEditDialog(initialTaskId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTaskId]);
 
   const requestArchiveTask = (task: any) =>
     setPendingAction({ type: "archive", task });
@@ -1706,6 +1718,10 @@ export function TaskBoard({
               isOpen: false,
               taskId: undefined,
             }));
+            // Call callback to clean up URL if provided
+            if (onTaskDialogClose) {
+              onTaskDialogClose();
+            }
           }
         }}
       >
@@ -1725,6 +1741,9 @@ export function TaskBoard({
                   taskId: undefined,
                 }));
                 queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                if (onTaskDialogClose) {
+                  onTaskDialogClose();
+                }
               }}
             />
           ) : dialogState.mode === "edit" && dialogState.taskId ? (
@@ -1738,6 +1757,9 @@ export function TaskBoard({
                   taskId: undefined,
                 }));
                 queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                if (onTaskDialogClose) {
+                  onTaskDialogClose();
+                }
               }}
             />
           ) : null}

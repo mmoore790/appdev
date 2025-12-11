@@ -4,6 +4,7 @@
 //
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Search, LayoutGrid, List } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ const TASK_STAFF_FILTER_KEY = "tasks:staffFilter";
 
 export default function Tasks() {
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
   const [assignedToFilter, setAssignedToFilter] = useState(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(TASK_STAFF_FILTER_KEY);
@@ -46,6 +48,11 @@ export default function Tasks() {
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [showArchived, setShowArchived] = useState(false);
+  
+  // Get taskId from URL parameters
+  const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const taskIdFromUrl = urlParams.get("taskId");
+  const initialTaskId = taskIdFromUrl ? parseInt(taskIdFromUrl, 10) : null;
   
   // Load default view from localStorage on mount
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -302,6 +309,15 @@ export default function Tasks() {
                 tasks={filteredTasks}
                 users={users}
                 isLoading={isLoading}
+                initialTaskId={initialTaskId}
+                onTaskDialogClose={() => {
+                  // Remove taskId from URL when dialog closes
+                  if (taskIdFromUrl) {
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.delete("taskId");
+                    setLocation(newUrl.pathname + newUrl.search, { replace: true });
+                  }
+                }}
               />
             ) : (
               <TaskListTable

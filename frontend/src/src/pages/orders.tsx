@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,15 @@ import {
   Filter,
   X
 } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { format, isAfter, subDays, startOfDay, endOfDay } from "date-fns";
 import { OrderForm } from "@/components/order-form";
 import { OrderDetailView } from "@/components/order-detail-view";
@@ -107,6 +117,8 @@ interface OrderItem {
   itemCategory?: string;
   quantity: number;
   unitPrice?: number;
+  priceExcludingVat?: number;
+  priceIncludingVat?: number;
   totalPrice?: number;
   supplierName?: string;
   supplierSku?: string;
@@ -126,6 +138,7 @@ type SortDirection = 'asc' | 'desc';
 export default function Orders() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
@@ -147,10 +160,28 @@ export default function Orders() {
     to: Date | null;
   }>({ from: null, to: null });
 
-  // Fetch all orders
-  const { data: orders = [], isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
+
+  // Fetch orders with pagination
+  const { data: ordersResponse, isLoading } = useQuery<{
+    data: Order[];
+    pagination: {
+      page: number;
+      limit: number;
+      totalCount: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
+  }>({
+    queryKey: ["/api/orders", currentPage],
+    queryFn: () => apiRequest("GET", `/api/orders?page=${currentPage}&limit=${itemsPerPage}`),
   });
+
+  const orders = ordersResponse?.data || [];
+  const pagination = ordersResponse?.pagination;
 
   // Fetch order items for selected order
   const { data: orderItems = [] } = useQuery<OrderItem[]>({
@@ -164,12 +195,58 @@ export default function Orders() {
     enabled: !!selectedOrder?.id && historyDialogOpen,
   });
 
+  // Handle orderId from URL params - auto-select order when navigating from notification
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const orderIdParam = searchParams.get('orderId');
+    
+    if (orderIdParam && !selectedOrder) {
+      const orderId = parseInt(orderIdParam, 10);
+      if (!isNaN(orderId)) {
+        // First try to find in current orders list
+        const order = orders.find(o => o.id === orderId);
+        if (order) {
+          setSelectedOrder(order);
+          setDetailsDialogOpen(true);
+          // Clean up URL by removing the query parameter
+          searchParams.delete('orderId');
+          const newSearch = searchParams.toString();
+          const newUrl = newSearch ? `${location.split('?')[0]}?${newSearch}` : location.split('?')[0];
+          navigate(newUrl, { replace: true });
+        } else if (orders.length > 0 && !isLoading) {
+          // Order not found in current page, fetch it directly
+          apiRequest("GET", `/api/orders/${orderId}`)
+            .then((fetchedOrder) => {
+              if (fetchedOrder) {
+                setSelectedOrder(fetchedOrder as Order);
+                setDetailsDialogOpen(true);
+                // Clean up URL by removing the query parameter
+                searchParams.delete('orderId');
+                const newSearch = searchParams.toString();
+                const newUrl = newSearch ? `${location.split('?')[0]}?${newSearch}` : location.split('?')[0];
+                navigate(newUrl, { replace: true });
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to fetch order:', error);
+              // Clean up URL even if order not found
+              searchParams.delete('orderId');
+              const newSearch = searchParams.toString();
+              const newUrl = newSearch ? `${location.split('?')[0]}?${newSearch}` : location.split('?')[0];
+              navigate(newUrl, { replace: true });
+            });
+        }
+      }
+    }
+  }, [orders, selectedOrder, location, navigate, isLoading]);
+
   // Status update mutation
   const statusUpdateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: OrderStatusUpdateFormData }) =>
       apiRequest("POST", `/api/orders/${id}/status`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setCurrentPage(1);
       setStatusDialogOpen(false);
       toast({
         title: "Success",
@@ -191,6 +268,7 @@ export default function Orders() {
       apiRequest("POST", `/api/orders/${id}/notify`, { type }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setCurrentPage(1);
       toast({
         title: "Success",
         description: "Customer notification sent successfully",
@@ -210,6 +288,7 @@ export default function Orders() {
     mutationFn: (id: number) => apiRequest("DELETE", `/api/orders/${id}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setCurrentPage(1);
       toast({
         title: "Success",
         description: "Order deleted successfully",
@@ -230,6 +309,7 @@ export default function Orders() {
       apiRequest("PUT", `/api/orders/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setCurrentPage(1);
       if (selectedOrder) {
         queryClient.invalidateQueries({ queryKey: [`/api/orders/${selectedOrder.id}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/orders/${selectedOrder.id}/items`] });
@@ -356,6 +436,15 @@ export default function Orders() {
     setSearchQuery("");
     setStatusFilter("all");
     setDateRangeFilter({ from: null, to: null });
+    setCurrentPage(1);
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && pagination && page <= pagination.totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   // Check if any filters are active
@@ -441,6 +530,7 @@ export default function Orders() {
             <OrderForm
               onSuccess={() => {
                 setCreateDialogOpen(false);
+                setCurrentPage(1);
                 queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
               }}
               onCancel={() => setCreateDialogOpen(false)}
@@ -451,7 +541,10 @@ export default function Orders() {
       </div>
 
       {/* Tabs for Open/Completed Orders */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "open" | "completed")}>
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setActiveTab(value as "open" | "completed");
+        setCurrentPage(1);
+      }}>
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="open">
             Open Orders
@@ -484,12 +577,18 @@ export default function Orders() {
                   <Input
                     placeholder="Search by order number, customer, supplier..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
                     className="pl-10"
                   />
                 </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(value) => {
+                setStatusFilter(value);
+                setCurrentPage(1);
+              }}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
@@ -542,6 +641,7 @@ export default function Orders() {
                       onChange={(e) => {
                         const date = e.target.value ? new Date(e.target.value) : null;
                         setDateRangeFilter(prev => ({ ...prev, from: date }));
+                        setCurrentPage(1);
                       }}
                     />
                   </div>
@@ -556,6 +656,7 @@ export default function Orders() {
                       onChange={(e) => {
                         const date = e.target.value ? new Date(e.target.value) : null;
                         setDateRangeFilter(prev => ({ ...prev, to: date }));
+                        setCurrentPage(1);
                       }}
                     />
                   </div>
@@ -569,7 +670,10 @@ export default function Orders() {
       {/* Orders Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Orders ({filteredOrders.length})</CardTitle>
+          <CardTitle>
+            Orders
+            {pagination ? ` (${pagination.totalCount} total, showing ${filteredOrders.length} on this page)` : ` (${filteredOrders.length})`}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -744,6 +848,70 @@ export default function Orders() {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  className={!pagination.hasPreviousPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (pagination.hasPreviousPage) {
+                      handlePageChange(currentPage - 1);
+                    }
+                  }}
+                />
+              </PaginationItem>
+              {Array.from({ length: Math.min(7, pagination.totalPages) }, (_, i) => {
+                let pageNumber: number;
+                if (pagination.totalPages <= 7) {
+                  pageNumber = i + 1;
+                } else if (currentPage <= 4) {
+                  pageNumber = i + 1;
+                } else if (currentPage >= pagination.totalPages - 3) {
+                  pageNumber = pagination.totalPages - 6 + i;
+                } else {
+                  pageNumber = currentPage - 3 + i;
+                }
+                
+                return (
+                  <PaginationItem key={pageNumber}>
+                    <PaginationLink
+                      isActive={currentPage === pageNumber}
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePageChange(pageNumber);
+                      }}
+                    >
+                      {pageNumber}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+              <PaginationItem>
+                <PaginationNext
+                  className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (pagination.hasNextPage) {
+                      handlePageChange(currentPage + 1);
+                    }
+                  }}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+          <div className="text-center text-sm text-muted-foreground mt-2">
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, pagination.totalCount)} of {pagination.totalCount} orders
+          </div>
+        </div>
+      )}
 
       {/* Status Update Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={(open) => {

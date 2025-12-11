@@ -12,8 +12,12 @@ export class OrderRepository {
     return this.store.getOrderByNumber(orderNumber, businessId);
   }
 
-  findAll(businessId: number): Promise<Order[]> {
-    return this.store.getAllOrders(businessId);
+  findAll(businessId: number, limit?: number, offset?: number): Promise<Order[]> {
+    return this.store.getAllOrders(businessId, limit, offset);
+  }
+
+  countAll(businessId: number): Promise<number> {
+    return this.store.countAllOrders(businessId);
   }
 
   findByStatus(status: string, businessId: number): Promise<Order[]> {

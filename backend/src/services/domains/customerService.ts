@@ -1,6 +1,7 @@
 import { InsertCustomer } from "@shared/schema";
 import { customerRepository, equipmentRepository } from "../../repositories";
 import { getActivityDescription, logActivity } from "../activityService";
+import { PaginatedResult } from "../../repositories/customerRepository";
 
 type CustomerWithMatchReason = {
   id: number;
@@ -14,13 +15,32 @@ type CustomerWithMatchReason = {
 };
 
 class CustomerService {
-  async listCustomers(businessId: number, search?: string): Promise<CustomerWithMatchReason[]> {
-    const customers = await customerRepository.findAll(businessId);
-
+  async listCustomers(
+    businessId: number, 
+    search?: string,
+    page: number = 1,
+    limit: number = 25
+  ): Promise<PaginatedResult<CustomerWithMatchReason>> {
+    // When searching, we need to fetch all customers to search through equipment
+    // When not searching, we can use server-side pagination
     if (!search) {
-      return customers.map(c => ({ ...c, matchReason: null }));
+      const offset = (page - 1) * limit;
+      const [customers, total] = await Promise.all([
+        customerRepository.findAll(businessId, limit, offset),
+        customerRepository.countAll(businessId)
+      ]);
+
+      return {
+        data: customers.map(c => ({ ...c, matchReason: null })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      };
     }
 
+    // With search, fetch all customers (needed for equipment search)
+    const allCustomers = await customerRepository.findAll(businessId);
     const term = search.toLowerCase();
     const searchTerm = search.trim();
     
@@ -61,7 +81,7 @@ class CustomerService {
     }
     
     // Filter customers by name, email, phone, or equipment match
-    const filteredCustomers = customers.filter((customer) => {
+    const filteredCustomers = allCustomers.filter((customer) => {
       const matchesName = customer.name.toLowerCase().includes(term);
       const matchesEmail = !!customer.email && customer.email.toLowerCase().includes(term);
       const matchesPhone = !!customer.phone && customer.phone.includes(searchTerm);
@@ -70,14 +90,26 @@ class CustomerService {
       return matchesName || matchesEmail || matchesPhone || matchesEquipment;
     });
     
-    // Add match reasons for equipment matches
-    return filteredCustomers.map((customer) => {
+    // Add match reasons and apply pagination
+    const customersWithReasons = filteredCustomers.map((customer) => {
       const matchReason = customerMatchReasons.get(customer.id);
       return {
         ...customer,
         matchReason: matchReason ? `has ${matchReason} registered` : null,
       };
     });
+
+    const total = customersWithReasons.length;
+    const offset = (page - 1) * limit;
+    const paginatedData = customersWithReasons.slice(offset, offset + limit);
+
+    return {
+      data: paginatedData,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   }
 
   getCustomerById(id: number, businessId: number) {

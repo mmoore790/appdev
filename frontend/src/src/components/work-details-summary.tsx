@@ -27,9 +27,26 @@ export function WorkDetailsSummary({ jobId, services }: WorkDetailsSummaryProps)
   });
 
   // Fetch customers for customer name
-  const { data: customers = [] } = useQuery<Customer[]>({
+  type PaginatedResponse<T> = {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  
+  const { data: customersResponse } = useQuery<PaginatedResponse<Customer>>({
     queryKey: ["/api/customers"],
+    queryFn: async () => {
+      const response = await fetch("/api/customers?page=1&limit=1000", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      return response.json();
+    },
   });
+
+  const customers = customersResponse?.data ?? [];
 
   // Fetch users for technician name
   const { data: users = [] } = useQuery<User[]>({

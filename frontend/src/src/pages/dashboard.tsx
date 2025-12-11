@@ -149,18 +149,50 @@ export default function Dashboard() {
     queryKey: ["/api/callbacks"],
   });
 
-  const { data: orders = [], isLoading: ordersLoading } = useQuery<any[]>({
+  // Orders API returns paginated response
+  type PaginatedResponse<T> = {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    pagination?: {
+      totalPages: number;
+      currentPage: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
+  };
+
+  const { data: ordersResponse, isLoading: ordersLoading } = useQuery<PaginatedResponse<any>>({
     queryKey: ["/api/orders"],
+    queryFn: async () => {
+      const response = await fetch("/api/orders?page=1&limit=1000", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch orders");
+      return response.json();
+    },
   });
+  const orders = ordersResponse?.data ?? [];
 
   const { data: notificationsData } = useQuery<{ notifications: any[]; unreadCount: number; totalCount: number }>({
     queryKey: ["/api/notifications"],
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  const { data: customers = [] } = useQuery<any[]>({
+  // Customers API returns paginated response
+  const { data: customersResponse } = useQuery<PaginatedResponse<any>>({
     queryKey: ["/api/customers"],
+    queryFn: async () => {
+      const response = await fetch("/api/customers?page=1&limit=1000", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      return response.json();
+    },
   });
+  const customers = customersResponse?.data ?? [];
 
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ["/api/users"],

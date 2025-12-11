@@ -20,6 +20,8 @@ function formatOrderItem(item: any) {
   return {
     ...item,
     unitPrice: item.unitPrice != null ? item.unitPrice / 100 : null,
+    priceExcludingVat: item.priceExcludingVat != null ? item.priceExcludingVat / 100 : null,
+    priceIncludingVat: item.priceIncludingVat != null ? item.priceIncludingVat / 100 : null,
     totalPrice: item.totalPrice != null ? item.totalPrice / 100 : null,
   };
 }
@@ -62,8 +64,28 @@ export class OrderController {
   private async listOrders(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getBusinessIdFromRequest(req);
-      const orders = await orderService.listOrders(businessId);
-      res.json(orders.map(formatOrder));
+      const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+      const limit = req.query.limit ? Math.min(25, Math.max(1, Number(req.query.limit))) : 25;
+      const offset = (page - 1) * limit;
+      
+      const [orders, totalCount] = await Promise.all([
+        orderService.listOrders(businessId, limit, offset),
+        orderService.countOrders(businessId),
+      ]);
+      
+      const totalPages = Math.ceil(totalCount / limit);
+      
+      res.json({
+        data: orders.map(formatOrder),
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      });
     } catch (error) {
       next(error);
     }
@@ -246,6 +268,8 @@ export class OrderController {
             if (item.itemSku) itemWithBusinessId.itemSku = item.itemSku;
             if (item.itemCategory) itemWithBusinessId.itemCategory = item.itemCategory;
             if (item.unitPrice !== undefined) itemWithBusinessId.unitPrice = item.unitPrice;
+            if (item.priceExcludingVat !== undefined) itemWithBusinessId.priceExcludingVat = item.priceExcludingVat;
+            if (item.priceIncludingVat !== undefined) itemWithBusinessId.priceIncludingVat = item.priceIncludingVat;
             if (item.totalPrice !== undefined) itemWithBusinessId.totalPrice = item.totalPrice;
             if (item.supplierName) itemWithBusinessId.supplierName = item.supplierName;
             if (item.supplierSku) itemWithBusinessId.supplierSku = item.supplierSku;

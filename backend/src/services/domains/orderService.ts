@@ -21,8 +21,12 @@ export const ORDER_STATUSES = {
 export type OrderStatus = typeof ORDER_STATUSES[keyof typeof ORDER_STATUSES];
 
 class OrderService {
-  async listOrders(businessId: number) {
-    return orderRepository.findAll(businessId);
+  async listOrders(businessId: number, limit?: number, offset?: number) {
+    return orderRepository.findAll(businessId, limit, offset);
+  }
+
+  async countOrders(businessId: number) {
+    return orderRepository.countAll(businessId);
   }
 
   async listOrdersByStatus(status: string, businessId: number) {
