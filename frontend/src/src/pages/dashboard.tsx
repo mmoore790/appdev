@@ -137,17 +137,20 @@ export default function Dashboard() {
     queryKey: ["/api/analytics/summary"],
   });
 
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery<any[]>({
+  const { data: tasksData, isLoading: tasksLoading } = useQuery<any[]>({
     queryKey: ["/api/tasks"],
   });
+  const tasks = Array.isArray(tasksData) ? tasksData : [];
 
-  const { data: jobs = [] } = useQuery<any[]>({
+  const { data: jobsData } = useQuery<any[]>({
     queryKey: ["/api/jobs"],
   });
+  const jobs = Array.isArray(jobsData) ? jobsData : [];
 
-  const { data: callbacks = [] } = useQuery<any[]>({
+  const { data: callbacksData } = useQuery<any[]>({
     queryKey: ["/api/callbacks"],
   });
+  const callbacks = Array.isArray(callbacksData) ? callbacksData : [];
 
   // Orders API returns paginated response
   type PaginatedResponse<T> = {
@@ -174,7 +177,7 @@ export default function Dashboard() {
       return response.json();
     },
   });
-  const orders = ordersResponse?.data ?? [];
+  const orders = Array.isArray(ordersResponse?.data) ? ordersResponse.data : [];
 
   const { data: notificationsData } = useQuery<{ notifications: any[]; unreadCount: number; totalCount: number }>({
     queryKey: ["/api/notifications"],
@@ -369,18 +372,24 @@ export default function Dashboard() {
 
   // Calculate additional metrics
   const metrics = useMemo(() => {
-    const pendingCallbacks = callbacks.filter((cb: any) => cb.status === "pending").length;
+    // Ensure all data is arrays to prevent filter errors
+    const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    const safeJobs = Array.isArray(jobs) ? jobs : [];
+    const safeTasks = Array.isArray(tasks) ? tasks : [];
+    
+    const pendingCallbacks = safeCallbacks.filter((cb: any) => cb.status === "pending").length;
     // Count open orders: orders that are not marked as completed
-    const openOrders = orders.filter((order: any) => 
+    const openOrders = safeOrders.filter((order: any) => 
       order.status !== "completed"
     ).length;
     
-    const completedJobs = jobs.filter((j: any) => j.status === "completed").length;
-    const totalJobs = jobs.length;
+    const completedJobs = safeJobs.filter((j: any) => j.status === "completed").length;
+    const totalJobs = safeJobs.length;
     const completionRate = totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0;
     
     // Count pending tasks: todo (pending), in progress, or in review
-    const pendingTasksCount = tasks.filter((t: any) => {
+    const pendingTasksCount = safeTasks.filter((t: any) => {
       const status = (t.status || "").toLowerCase();
       return (
         status === "pending" ||
@@ -395,9 +404,9 @@ export default function Dashboard() {
 
     // User-specific metrics for "My Overview"
     const userId = user?.id;
-    const myTasks = userId ? tasks.filter((t: any) => t.assignedTo === userId) : [];
-    const myJobs = userId ? jobs.filter((j: any) => j.assignedTo === userId) : [];
-    const myCallbacks = userId ? callbacks.filter((cb: any) => cb.assignedTo === userId) : [];
+    const myTasks = userId ? safeTasks.filter((t: any) => t.assignedTo === userId) : [];
+    const myJobs = userId ? safeJobs.filter((j: any) => j.assignedTo === userId) : [];
+    const myCallbacks = userId ? safeCallbacks.filter((cb: any) => cb.assignedTo === userId) : [];
 
     // My Tasks breakdown
     const myPendingTasks = myTasks.filter((t: any) => {
@@ -460,16 +469,16 @@ export default function Dashboard() {
     
     // Count tasks by status - using actual status values from the system
     const tasksByStatus = {
-      todo: tasks.filter((t: any) => 
+      todo: safeTasks.filter((t: any) => 
         t.status === "pending" || t.status === "todo"
       ).length,
-      in_progress: tasks.filter((t: any) => 
+      in_progress: safeTasks.filter((t: any) => 
         t.status === "in_progress" || t.status === "inprogress"
       ).length,
-      in_review: tasks.filter((t: any) => 
+      in_review: safeTasks.filter((t: any) => 
         t.status === "review" || t.status === "in review"
       ).length,
-      completed: tasks.filter((t: any) => 
+      completed: safeTasks.filter((t: any) => 
         t.status === "completed" || t.status === "done"
       ).length,
     };
@@ -477,10 +486,10 @@ export default function Dashboard() {
     const jobsByStatusData = analytics.jobsByStatus || [];
     
     // Calculate additional job statuses from jobs data
-    const waitingOnPartsCount = jobs.filter((j: any) => 
+    const waitingOnPartsCount = safeJobs.filter((j: any) => 
       j.status === "waiting_parts" || j.status === "parts_ordered"
     ).length;
-    const readyCount = jobs.filter((j: any) => 
+    const readyCount = safeJobs.filter((j: any) => 
       j.status === "ready_for_pickup"
     ).length;
     
@@ -556,7 +565,8 @@ export default function Dashboard() {
   const sortedMyJobs = useMemo(() => {
     const userId = user?.id;
     if (!userId) return [];
-    const userJobs = jobs.filter((j: any) => {
+    const safeJobs = Array.isArray(jobs) ? jobs : [];
+    const userJobs = safeJobs.filter((j: any) => {
       if (j.assignedTo !== userId) return false;
       const status = (j.status || "").toLowerCase();
       // Exclude completed jobs
@@ -577,7 +587,8 @@ export default function Dashboard() {
 
     // Only show tasks assigned to user that are NOT completed
     // Only show: todo, pending, in_progress, in progress, inprogress, review, in review
-    let filtered = tasks.filter((t: any) => {
+    const safeTasks = Array.isArray(tasks) ? tasks : [];
+    let filtered = safeTasks.filter((t: any) => {
       if (t.assignedTo !== userId) return false;
       
       const status = (t.status || "").toLowerCase();
