@@ -2448,18 +2448,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllOrders(businessId: number, limit?: number, offset?: number): Promise<Order[]> {
-    let query = db.select().from(orders)
+    const baseQuery = db.select().from(orders)
       .where(eq(orders.businessId, businessId))
       .orderBy(desc(orders.createdAt));
     
-    if (limit !== undefined) {
-      query = query.limit(limit);
-    }
-    if (offset !== undefined) {
-      query = query.offset(offset);
+    if (offset !== undefined && limit !== undefined) {
+      return await baseQuery.offset(offset).limit(limit);
+    } else if (limit !== undefined) {
+      return await baseQuery.limit(limit);
+    } else if (offset !== undefined) {
+      return await baseQuery.offset(offset);
     }
     
-    return await query;
+    return await baseQuery;
   }
 
   async countAllOrders(businessId: number): Promise<number> {
