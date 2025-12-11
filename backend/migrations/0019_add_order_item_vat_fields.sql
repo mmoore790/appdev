@@ -13,3 +13,5 @@ WHERE "unit_price" IS NOT NULL AND "price_excluding_vat" IS NULL;
 UPDATE "order_items" 
 SET "price_including_vat" = ROUND("price_excluding_vat" * 1.20)
 WHERE "price_excluding_vat" IS NOT NULL AND "price_including_vat" IS NULL;
+
+

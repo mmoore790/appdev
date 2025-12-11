@@ -58,3 +58,5 @@ CREATE INDEX IF NOT EXISTS "idx_job_notes_job_id" ON "job_notes" ("job_id", "bus
 CREATE INDEX IF NOT EXISTS "idx_job_attachments_job_id" ON "job_attachments" ("job_id", "business_id");
 
 
+
+

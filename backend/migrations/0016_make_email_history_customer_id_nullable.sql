@@ -4,3 +4,5 @@
 ALTER TABLE "email_history" 
 ALTER COLUMN "customer_id" DROP NOT NULL;
 
+
+

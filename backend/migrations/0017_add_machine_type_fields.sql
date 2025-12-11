@@ -6,3 +6,5 @@ ADD COLUMN "equipment_make" TEXT,
 ADD COLUMN "equipment_model" TEXT,
 ADD COLUMN "robotic_mower_pin_code" TEXT;
 
+
+

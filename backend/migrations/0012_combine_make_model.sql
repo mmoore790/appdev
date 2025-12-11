@@ -21,3 +21,5 @@ ALTER TABLE equipment
   DROP COLUMN IF EXISTS model;
 
 
+
+

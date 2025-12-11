@@ -483,7 +483,7 @@ export default function Dashboard() {
       ).length,
     };
 
-    const jobsByStatusData = analytics.jobsByStatus || [];
+    const jobsByStatusData = Array.isArray(analytics.jobsByStatus) ? analytics.jobsByStatus : [];
     
     // Calculate additional job statuses from jobs data
     const waitingOnPartsCount = safeJobs.filter((j: any) => 
