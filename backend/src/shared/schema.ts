@@ -56,6 +56,44 @@ export const insertBusinessSchema = createInsertSchema(businesses).pick({
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
 export type Business = typeof businesses.$inferSelect;
 
+// Subscriptions (for marketing site subscription purchases)
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  businessId: integer("business_id"),
+  planName: text("plan_name"),
+  status: text("status").notNull().default("pending"), // pending, active, cancelled, past_due, trialing
+  email: text("email").notNull(),
+  currentPeriodStart: timestamp("current_period_start", { mode: 'string' }),
+  currentPeriodEnd: timestamp("current_period_end", { mode: 'string' }),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'string' }),
+  accountCreated: boolean("account_created").notNull().default(false), // Track if account has been created
+}, (table) => {
+  return {
+    emailIdx: index("IDX_subscriptions_email").on(table.email),
+    stripeCustomerIdIdx: index("IDX_subscriptions_stripe_customer_id").on(table.stripeCustomerId),
+    stripeSubscriptionIdIdx: index("IDX_subscriptions_stripe_subscription_id").on(table.stripeSubscriptionId),
+    businessIdIdx: index("IDX_subscriptions_business_id").on(table.businessId),
+  };
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).pick({
+  stripeSubscriptionId: true,
+  stripeCustomerId: true,
+  businessId: true,
+  planName: true,
+  status: true,
+  email: true,
+  currentPeriodStart: true,
+  currentPeriodEnd: true,
+  accountCreated: true,
+});
+
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+
 // Platform Announcements
 export const announcements = pgTable("announcements", {
   id: serial("id").primaryKey(),

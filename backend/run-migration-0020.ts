@@ -8,15 +8,11 @@ async function runMigration() {
   
   try {
     console.log("📖 Reading migration file...");
-    const migrationPath = join(__dirname, "migrations", "0011_add_asset_tracking.sql");
+    const migrationPath = join(__dirname, "migrations", "0020_add_subscriptions_table.sql");
     const migrationSQL = readFileSync(migrationPath, "utf-8");
 
     console.log("🚀 Executing migration...");
-    console.log("⚠️  This will add asset tracking fields to equipment table:");
-    console.log("   - make and model fields");
-    console.log("   - warranty_duration_months and warranty_expiry_date fields");
-    console.log("   - Make type_id nullable");
-    console.log("   - Create unique index on serial_number per business\n");
+    console.log("⚠️  This will create the subscriptions table for tracking subscription purchases\n");
 
     // Execute the entire migration as one transaction
     await client.query("BEGIN");
@@ -27,8 +23,9 @@ async function runMigration() {
       
       await client.query("COMMIT");
       console.log("\n✅ Migration completed successfully!");
-      console.log("✅ Asset tracking fields added to equipment table");
-      console.log("✅ Unique index created on serial_number per business");
+      console.log("✅ Subscriptions table created");
+      console.log("✅ Indexes created for efficient lookups");
+      console.log("✅ Foreign key constraint added to businesses table");
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -49,9 +46,4 @@ async function runMigration() {
 }
 
 runMigration();
-
-
-
-
-
 

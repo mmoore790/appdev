@@ -267,7 +267,15 @@ export const initAuthRoutes = (app: any) => {
         return res.status(500).json({ message: "Authentication error" });
       }
 
-
+      // Check if user has guest role (no active subscription)
+      if (user.role === "guest") {
+        console.log(`Guest user attempted login: ${user.email}`);
+        return res.status(403).json({ 
+          message: "Subscription not active",
+          code: "SUBSCRIPTION_REQUIRED",
+          supportEmail: "support@boltdown.co.uk"
+        });
+      }
 
       // Create session
       req.session.userId = user.id;

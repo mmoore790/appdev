@@ -56,6 +56,31 @@ export default function LoginPage() {
 
       if (!response.ok) {
         const result = await response.json().catch(() => ({ message: `HTTP ${response.status}: ${response.statusText}` }));
+        
+        // Check if this is a subscription required error
+        if (result?.code === "SUBSCRIPTION_REQUIRED" || (response.status === 403 && result?.message?.includes("Subscription"))) {
+          const supportEmail = result?.supportEmail || "support@boltdown.co.uk";
+          
+          // Display subscription error message
+          setError(`A subscription is not active on your account. Redirecting to boltdown.co.uk... Support: ${supportEmail}`);
+          
+          // Show toast notification
+          toast({
+            title: "Subscription Required",
+            description: `Your account requires an active subscription. Redirecting to boltdown.co.uk. For support, contact ${supportEmail}`,
+            variant: "destructive",
+            duration: 3000,
+          });
+          
+          // Redirect to boltdown.co.uk after a short delay
+          setTimeout(() => {
+            window.location.href = "https://boltdown.co.uk";
+          }, 3000);
+          
+          setIsLoading(false);
+          return;
+        }
+        
         throw new Error(result?.message || "Login failed");
       }
       

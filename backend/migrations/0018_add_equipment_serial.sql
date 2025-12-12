@@ -5,3 +5,5 @@ ADD COLUMN "equipment_serial" TEXT;
 
 
 
+
+

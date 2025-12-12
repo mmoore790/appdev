@@ -30,6 +30,7 @@ import CalendarPage from "@/pages/calendar";
 import MasterDashboard from "@/pages/master-dashboard";
 import Messages from "@/pages/messages";
 import GettingStarted from "@/pages/getting-started";
+import OnboardingSetup from "@/pages/onboarding-setup";
 import { useAuth } from "./hooks/useAuth";
 
 // Protected route component
@@ -109,6 +110,7 @@ function Router() {
     <Switch>
       {/* Public routes */}
       <Route path="/login" component={Login} />
+      <Route path="/onboarding/setup-account" component={OnboardingSetup} />
       {/* Registration is now master-only - removed public route */}
       <Route path="/job-tracker" component={JobTracker} />
       <Route path="/track" component={JobTracker} /> {/* Alternative URL for job tracking */}
@@ -202,7 +204,7 @@ function DefaultLanding() {
 function AuthAwareLayout() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
-  const publicRoutes = ['/login']; // Registration removed - now master-only
+  const publicRoutes = ['/login', '/onboarding/setup-account']; // Registration removed - now master-only
   const customerPortalRoutes = ['/job-tracker', '/order-tracker', '/track-order', '/payments/success', '/payments/cancel']; // Customer-facing pages
   
   const isPublicRoute = publicRoutes.includes(location);

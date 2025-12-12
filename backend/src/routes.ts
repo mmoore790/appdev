@@ -20,6 +20,7 @@ import { announcementController } from "./controllers/announcementController";
 import { businessController } from "./controllers/businessController";
 import { messageController } from "./controllers/messageController";
 import { notificationController } from "./controllers/notificationController";
+import { subscriptionController } from "./controllers/subscriptionController";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await initAuthRoutes(app);
@@ -48,6 +49,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/business", businessController.router);
   app.use("/api/messages", messageController.router);
   app.use("/api/notifications", notificationController.router);
+  app.use("/api/subscriptions", subscriptionController.router);
 
   app.get("/callback", (req: Request, res: Response) => {
     const { session_id } = req.query;
