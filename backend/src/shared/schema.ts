@@ -229,10 +229,10 @@ export const customers = pgTable("customers", {
 
 // Updated customer schema to make only name required
 export const insertCustomerSchema = createInsertSchema(customers, {
-  email: z.string().optional(),
-  phone: z.string().optional(), 
-  address: z.string().optional(),
-  notes: z.string().optional()
+  email: z.string().nullish(),
+  phone: z.string().nullish(), 
+  address: z.string().nullish(),
+  notes: z.string().nullish()
 }).pick({
   name: true,
   email: true,

@@ -340,9 +340,9 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
       try {
         const newCustomer = await apiRequest<Customer>('POST', '/api/customers', {
           name: wizardData.customerName,
-          email: wizardData.customerEmail || null,
-          phone: wizardData.customerPhone || null,
-          address: wizardData.customerAddress || null
+          email: wizardData.customerEmail?.trim() || null,
+          phone: wizardData.customerPhone?.trim() || null,
+          address: wizardData.customerAddress?.trim() || null
         });
         jobData.customerId = newCustomer.id;
       } catch (error) {
@@ -371,8 +371,8 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
             
             <div className="space-y-4">
               <div>
-                <Label htmlFor="customer-name" className="text-base font-medium required">
-                  Customer Name *
+                <Label htmlFor="customer-name" className="text-base font-medium">
+                  Customer Name <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative mt-2" ref={customerDropdownRef}>
                   <Input
@@ -618,7 +618,7 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
             <div className="space-y-4">
               <div>
                 <Label htmlFor="machine-type" className="text-base font-medium">
-                  What is the machine?
+                  What is the machine? <span className="text-red-500">*</span>
                 </Label>
                 <Select
                   value={wizardData.machineType}
@@ -640,13 +640,18 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                 
                 {/* Show free text input when "other" is selected */}
                 {wizardData.machineType === "other" && (
-                  <Input
-                    id="machine-type-other"
-                    placeholder="Enter machine type"
-                    value={wizardData.machineTypeOther}
-                    onChange={(e) => updateWizardData("machineTypeOther", e.target.value)}
-                    className="mt-2"
-                  />
+                  <div>
+                    <Label htmlFor="machine-type-other" className="text-base font-medium">
+                      Machine Type <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="machine-type-other"
+                      placeholder="Enter machine type"
+                      value={wizardData.machineTypeOther}
+                      onChange={(e) => updateWizardData("machineTypeOther", e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
                 )}
               </div>
               
@@ -721,8 +726,8 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
             
             <div className="space-y-4">
               <div>
-                <Label htmlFor="job-description" className="text-base font-medium required">
-                  Work Description *
+                <Label htmlFor="job-description" className="text-base font-medium">
+                  Work Description <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
                   id="job-description"

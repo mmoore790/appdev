@@ -381,9 +381,9 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
           // Create customer data with proper defaults
           const customerData = {
             name: customCustomerName.trim(),
-            email: data.customerEmail?.trim() || " ", // Use provided email or space character
-            phone: data.customerPhone?.trim() || " ", // Use provided phone or space character
-          address: data.customerAddress?.trim() || " ", // Space character to avoid empty string validation issues
+            email: data.customerEmail?.trim() || null,
+            phone: data.customerPhone?.trim() || null,
+            address: data.customerAddress?.trim() || null,
             notes: "Auto-created from job form"
           };
           
@@ -477,7 +477,7 @@ export function JobForm({ jobId, editMode = false, readOnly = false, onComplete,
             name: customCustomerName.trim(),
             email: data.customerEmail?.trim() || " ", // Use provided email or space character
             phone: data.customerPhone?.trim() || " ", // Use provided phone or space character
-              address: data.customerAddress?.trim() || " ", // Space character to avoid empty string validation issues
+              address: data.customerAddress?.trim() || null,
             notes: "Auto-created from job form"
           };
           
