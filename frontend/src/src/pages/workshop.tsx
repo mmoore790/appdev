@@ -61,9 +61,9 @@ export default function Workshop() {
 
   const [dateRange, setDateRange] = useState(() => {
     const today = new Date();
-    const thirtyOneDaysAgo = subDays(today, 31);
+    const oneYearAgo = subDays(today, 365);
     return {
-      from: thirtyOneDaysAgo,
+      from: oneYearAgo,
       to: today,
     };
   });
@@ -286,12 +286,12 @@ export default function Workshop() {
                   <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                   <span className="hidden sm:inline">
                     {dateRange?.from && dateRange?.to
-                      ? `${format(dateRange.from, "MMM dd")} – ${format(dateRange.to, "MMM dd, yyyy")}`
+                      ? `${format(dateRange.from, "MMM dd, yyyy")} – ${format(dateRange.to, "MMM dd, yyyy")}`
                       : "Select dates"}
                   </span>
                   <span className="sm:hidden">
                     {dateRange?.from && dateRange?.to
-                      ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                      ? `${format(dateRange.from, "MMM d, yyyy")} – ${format(dateRange.to, "MMM d, yyyy")}`
                       : "Dates"}
                   </span>
                 </Button>
@@ -350,6 +350,19 @@ export default function Workshop() {
                       }}
                     >
                       Last 90 days
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const today = new Date();
+                        setDateRange({
+                          from: subDays(today, 365),
+                          to: today,
+                        });
+                      }}
+                    >
+                      Last year
                     </Button>
                   </div>
                 </div>

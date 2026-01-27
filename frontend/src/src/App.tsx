@@ -15,6 +15,7 @@ import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import ForgotPassword from "@/pages/forgot-password";
 import Register from "@/pages/register";
 import Account from "@/pages/account";
 import Customers from "@/pages/customers";
@@ -110,6 +111,7 @@ function Router() {
     <Switch>
       {/* Public routes */}
       <Route path="/login" component={Login} />
+      <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/onboarding/setup-account" component={OnboardingSetup} />
       {/* Registration is now master-only - removed public route */}
       <Route path="/job-tracker" component={JobTracker} />
@@ -204,7 +206,7 @@ function DefaultLanding() {
 function AuthAwareLayout() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
-  const publicRoutes = ['/login', '/onboarding/setup-account']; // Registration removed - now master-only
+  const publicRoutes = ['/login', '/forgot-password', '/onboarding/setup-account']; // Registration removed - now master-only
   const customerPortalRoutes = ['/job-tracker', '/order-tracker', '/track-order', '/payments/success', '/payments/cancel']; // Customer-facing pages
   
   const isPublicRoute = publicRoutes.includes(location);

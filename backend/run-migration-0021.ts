@@ -8,12 +8,10 @@ async function runMigration() {
   
   try {
     console.log("📖 Reading migration file...");
-    const migrationPath = join(__dirname, "migrations", "0022_add_onboarding_status.sql");
+    const migrationPath = join(__dirname, "migrations", "0021_add_password_reset_codes.sql");
     const migrationSQL = readFileSync(migrationPath, "utf-8");
 
-    console.log("🚀 Executing migration...");
-    console.log("⚠️  This will add onboarding status columns to the users table.");
-    console.log("⚠️  This is a safe migration that only adds new columns.\n");
+    console.log("🚀 Executing migration 0021_add_password_reset_codes...");
 
     // Execute the entire migration as one transaction
     await client.query("BEGIN");
@@ -24,10 +22,8 @@ async function runMigration() {
       
       await client.query("COMMIT");
       console.log("\n✅ Migration completed successfully!");
-      console.log("✅ onboarding_completed_at column added");
-      console.log("✅ onboarding_welcome_dismissed_at column added");
-      console.log("✅ onboarding_setup_completed_at column added");
-      console.log("✅ onboarding_checklist column added");
+      console.log("✅ Password reset codes table created");
+      console.log("✅ Indexes created");
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

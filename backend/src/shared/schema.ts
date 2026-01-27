@@ -192,6 +192,11 @@ export const users = pgTable("users", {
   jobNotifications: boolean("job_notifications").notNull().default(true),
   // Getting Started dismissal
   gettingStartedDismissedAt: timestamp("getting_started_dismissed_at", { mode: 'string' }),
+  // Onboarding status tracking
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { mode: 'string' }),
+  onboardingWelcomeDismissedAt: timestamp("onboarding_welcome_dismissed_at", { mode: 'string' }),
+  onboardingSetupCompletedAt: timestamp("onboarding_setup_completed_at", { mode: 'string' }),
+  onboardingChecklist: json("onboarding_checklist").$type<Record<string, boolean>>().default({}),
 }, (table) => {
   return {
     usernameBusinessIdx: index("IDX_user_username_business").on(table.username, table.businessId),
@@ -211,6 +216,10 @@ export const insertUserSchema = createInsertSchema(users).pick({
   jobNotifications: true,
   businessId: true,
   gettingStartedDismissedAt: true,
+  onboardingCompletedAt: true,
+  onboardingWelcomeDismissedAt: true,
+  onboardingSetupCompletedAt: true,
+  onboardingChecklist: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1306,3 +1315,32 @@ export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHist
 
 export type InsertOrderStatusHistory = z.infer<typeof insertOrderStatusHistorySchema>;
 export type OrderStatusHistory = typeof orderStatusHistory.$inferSelect;
+
+// Password Reset Codes
+export const passwordResetCodes = pgTable("password_reset_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  businessId: integer("business_id").notNull(),
+  code: text("code").notNull(), // 6-digit verification code
+  email: text("email").notNull(), // Email address the code was sent to
+  expiresAt: timestamp("expires_at", { mode: 'string' }).notNull(), // Code expiration time (15 minutes)
+  usedAt: timestamp("used_at", { mode: 'string' }), // When the code was used (null if not used)
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    codeIdx: index("IDX_password_reset_code").on(table.code),
+    userIdIdx: index("IDX_password_reset_user_id").on(table.userId),
+    emailIdx: index("IDX_password_reset_email").on(table.email),
+  };
+});
+
+export const insertPasswordResetCodeSchema = createInsertSchema(passwordResetCodes).pick({
+  userId: true,
+  businessId: true,
+  code: true,
+  email: true,
+  expiresAt: true,
+});
+
+export type InsertPasswordResetCode = z.infer<typeof insertPasswordResetCodeSchema>;
+export type PasswordResetCode = typeof passwordResetCodes.$inferSelect;

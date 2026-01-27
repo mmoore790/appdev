@@ -71,6 +71,9 @@ import { TaskForm } from "@/components/task-form";
 import { CustomerForm } from "@/components/customer-form";
 import { JobWizard } from "@/components/job-wizard";
 import { ProductTour } from "@/components/product-tour";
+import { WelcomeModal } from "@/components/onboarding/welcome-modal";
+import { GuidedSetup } from "@/components/onboarding/guided-setup";
+import { OnboardingChecklist } from "@/components/onboarding/onboarding-checklist";
 
 // Define types for analytics data
 interface AnalyticsSummaryData {
@@ -93,6 +96,10 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isTourOpen, setIsTourOpen] = useState(false);
+  
+  // Onboarding states
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showGuidedSetup, setShowGuidedSetup] = useState(false);
   
   // Dialog states
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
@@ -197,9 +204,17 @@ export default function Dashboard() {
   });
   const customers = customersResponse?.data ?? [];
 
-  const { data: users = [] } = useQuery<any[]>({
+  const { data: users = [], isLoading: isUsersLoading } = useQuery<any[]>({
     queryKey: ["/api/users"],
   });
+
+  // Determine if this is the first user for the current business (used to gate business-level onboarding)
+  // We wait until users have loaded to avoid briefly showing onboarding for non-first users.
+  const isFirstBusinessUser =
+    !!user &&
+    !isUsersLoading &&
+    Array.isArray(users) &&
+    users.filter((u: any) => u.businessId === (user as any)?.businessId).length <= 1;
 
   // Fetch business information
   const { data: businessData } = useQuery<{
@@ -351,24 +366,64 @@ export default function Dashboard() {
 
 
 
-  // Auto-open the product tour the first time this user lands on the dashboard
+  // Determine if user has completed setup (used in multiple places)
+  const hasCompletedSetup = Boolean((user as any)?.onboardingSetupCompletedAt);
+
+  // Check if user needs onboarding
   useEffect(() => {
-    if (!user) return;
+    // Don't run onboarding logic until we know whether this user is the first in the business
+    if (!user || isUsersLoading) return;
 
-    // If the user has dismissed the more detailed Getting Started page in the past,
-    // respect that and don't force the tour.
-    const hasDismissedGettingStarted = Boolean(
-      (user as any).gettingStartedDismissedAt
-    );
+    const hasCompletedOnboarding = Boolean((user as any).onboardingCompletedAt);
+    const hasDismissedWelcome = Boolean((user as any).onboardingWelcomeDismissedAt);
 
-    const storageKey = `product_tour_seen_${user.id}`;
-    const hasSeenTour = localStorage.getItem(storageKey) === "true";
+    // If setup is completed for this user, or this is NOT the first business user,
+    // hide all business-level onboarding elements
+    if (hasCompletedSetup || !isFirstBusinessUser) {
+      setShowWelcomeModal(false);
+      setShowGuidedSetup(false);
+      // Clear any saved onboarding step from localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("guided_setup_current_step");
+      }
+    } else {
+      // Check if user is in the middle of guided setup (has saved step)
+      const savedStep = typeof window !== "undefined" 
+        ? localStorage.getItem("guided_setup_current_step") 
+        : null;
+      const savedStepNum = savedStep ? parseInt(savedStep, 10) : 0;
+      const isInGuidedSetup = savedStepNum > 0 && savedStepNum <= 5;
 
-    if (!hasSeenTour && !hasDismissedGettingStarted) {
-      setIsTourOpen(true);
-      localStorage.setItem(storageKey, "true");
+      // Show welcome modal on first login if onboarding not completed
+      if (!hasCompletedOnboarding && !hasDismissedWelcome && !isInGuidedSetup) {
+        setShowWelcomeModal(true);
+      }
+
+      // Auto-open guided setup if user is in the middle of it (including step 5)
+      if (isInGuidedSetup && !hasCompletedSetup) {
+        setShowGuidedSetup(true);
+      }
     }
-  }, [user]);
+
+    // Auto-open the product tour the first time this user lands on the dashboard
+    // Only if they've completed onboarding
+    if (hasCompletedOnboarding) {
+      const hasDismissedGettingStarted = Boolean(
+        (user as any).gettingStartedDismissedAt
+      );
+
+      const storageKey = `product_tour_seen_${user.id}`;
+      const hasSeenTour = localStorage.getItem(storageKey) === "true";
+
+      if (!hasSeenTour && !hasDismissedGettingStarted) {
+        setIsTourOpen(true);
+        localStorage.setItem(storageKey, "true");
+      }
+    }
+  }, [user, hasCompletedSetup, isUsersLoading, isFirstBusinessUser]);
+
+  // Determine if user is new (only first user in a business should see full onboarding)
+  const isNewUser = !!(user && isFirstBusinessUser && !(user as any).onboardingCompletedAt && !hasCompletedSetup);
 
   // Calculate additional metrics
   const metrics = useMemo(() => {
@@ -698,6 +753,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-5 pb-4 sm:pb-6">
+      {/* Onboarding Checklist for New Users */}
+      {isNewUser && (
+        <OnboardingChecklist />
+      )}
+
       {/* Header Section - Clean and Simple */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200">
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -755,33 +815,83 @@ export default function Dashboard() {
         {/* Key Metrics - Large and Prominent */}
         <div>
           <div className="flex items-center justify-between mb-2 sm:mb-3">
-            <h2 className="text-base sm:text-lg font-semibold text-slate-900">Operations Snapshot</h2>
-            <Link href="/analytics">
-              <Button variant="ghost" size="sm" className="text-xs h-7 sm:h-8">
-                <BarChart3 className="h-3.5 w-3.5 mr-1 sm:mr-1.5" />
-                <span className="hidden sm:inline">Analytics</span>
-              </Button>
-            </Link>
+            <h2 className="text-base sm:text-lg font-semibold text-slate-900">
+              {isNewUser ? "Next Steps" : "Operations Snapshot"}
+            </h2>
+            {!isNewUser && (
+              <Link href="/analytics">
+                <Button variant="ghost" size="sm" className="text-xs h-7 sm:h-8">
+                  <BarChart3 className="h-3.5 w-3.5 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Analytics</span>
+                </Button>
+              </Link>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-            <Card className="border-slate-200 hover:border-emerald-300 transition-colors">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Active Jobs</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
-                      {analyticsLoading ? "..." : analytics.activeJobs}
-                    </p>
+          {isNewUser ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <Card className="border-emerald-200 bg-emerald-50/50">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-lg bg-emerald-500 flex items-center justify-center">
+                        <Wrench className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900">Create Your First Job</h3>
+                        <p className="text-sm text-slate-600">Get started by creating a job in your workshop</p>
+                      </div>
+                    </div>
+                    <Link href="/workshop">
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
+                        Go to Workshop
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
-                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0 ml-2">
-                    <Wrench className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                </CardContent>
+              </Card>
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-lg bg-blue-500 flex items-center justify-center">
+                        <Users className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900">Add Your First Customer</h3>
+                        <p className="text-sm text-slate-600">Start building your customer database</p>
+                      </div>
+                    </div>
+                    <Link href="/customers">
+                      <Button variant="outline" className="w-full border-blue-300 text-blue-700 hover:bg-blue-100">
+                        Go to Customers
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
-                </div>
-                <Link href="/workshop" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-emerald-600 hover:text-emerald-700 font-medium">
-                  View workshop →
-                </Link>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+              <Card className="border-slate-200 hover:border-emerald-300 transition-colors">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs text-slate-600 mb-0.5 sm:mb-1">Active Jobs</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
+                        {analyticsLoading ? "..." : analytics.activeJobs}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0 ml-2">
+                      <Wrench className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                    </div>
+                  </div>
+                  <Link href="/workshop" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-emerald-600 hover:text-emerald-700 font-medium">
+                    View workshop →
+                  </Link>
+                </CardContent>
+              </Card>
             <Card className="border-slate-200 hover:border-amber-300 transition-colors">
               <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center justify-between">
@@ -837,9 +947,12 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+          )}
         </div>
 
-        {/* Charts Section */}
+        {/* Charts Section - Hide for new users */}
+        {!isNewUser && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           {/* Job Status Distribution */}
           <Card className="border-slate-200">
@@ -921,6 +1034,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+        </>
+        )}
 
         {/* My Overview Section - Tabbed */}
         <div className="mt-4 sm:mt-6">
@@ -1487,6 +1602,29 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Onboarding Modals - Only show if setup not completed AND this is the first user for the business */}
+      {!hasCompletedSetup && isFirstBusinessUser && (
+        <>
+          <WelcomeModal
+            open={showWelcomeModal}
+            onOpenChange={setShowWelcomeModal}
+            onStartSetup={() => setShowGuidedSetup(true)}
+            userName={user?.fullName || user?.username}
+          />
+          <GuidedSetup
+            open={showGuidedSetup}
+            onOpenChange={setShowGuidedSetup}
+            onComplete={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+              toast({
+                title: "Setup complete!",
+                description: "You're all set to start using Boltdown.",
+              });
+            }}
+          />
+        </>
+      )}
 
       {/* Product Tour */}
       <ProductTour

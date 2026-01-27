@@ -1,15 +1,16 @@
 import { NextFunction, Request, Response } from "express";
 import { storage } from "./storage";
 import * as bcrypt from 'bcryptjs';
-import { InsertRegistrationRequest, InsertUser, users } from "@shared/schema";
+import { InsertRegistrationRequest, InsertUser, users, InsertPasswordResetCode } from "@shared/schema";
 import { tokenStorage } from "./tokenStorage";
 import {
   sendRegistrationApprovalEmail,
-  sendRegistrationRejectionEmail
+  sendRegistrationRejectionEmail,
+  sendPasswordResetCodeEmail
 } from "./services/emailService";
 import { logActivity } from "./services/activityService";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 
 // Middleware to check if user is authenticated with token fallback
@@ -412,11 +413,27 @@ export const initAuthRoutes = (app: any) => {
         return res.status(401).json({ message: "User not found" });
       }
 
+      // Determine how many users exist for this business so we can adjust onboarding
+      // behaviour for additional users (only the first user should see full business onboarding).
+      let businessUserCount = 1;
+      let isFirstUserForBusiness = true;
+      try {
+        const allUsersForBusiness = await storage.getAllUsers(businessId);
+        businessUserCount = Array.isArray(allUsersForBusiness) ? allUsersForBusiness.length : 1;
+        isFirstUserForBusiness = businessUserCount <= 1;
+      } catch (countError) {
+        console.warn("Failed to fetch business user count for onboarding logic:", countError);
+      }
+
       // Don't return password
       const { password, ...userInfo } = user;
 
       console.log(`/api/auth/me - Successfully returned user info for: ${user.username}`);
-      return res.status(200).json(userInfo);
+      return res.status(200).json({
+        ...userInfo,
+        businessUserCount,
+        isFirstUserForBusiness,
+      });
     } catch (error) {
       console.error("Error fetching current user:", error);
       return res.status(500).json({ message: "An error occurred" });
@@ -530,6 +547,137 @@ export const initAuthRoutes = (app: any) => {
   });
 
   // Dismiss getting started page
+  // Onboarding endpoints
+  app.post("/api/auth/dismiss-onboarding-welcome", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as number;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const businessId = req.session.businessId as number;
+      if (!businessId) {
+        return res.status(400).json({ message: "Business ID is required" });
+      }
+
+      const updateData: Partial<InsertUser> = {
+        onboardingWelcomeDismissedAt: new Date().toISOString()
+      };
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { password, ...userInfo } = updatedUser;
+      res.json({ success: true, user: userInfo });
+    } catch (error) {
+      console.error("Error dismissing onboarding welcome:", error);
+      res.status(500).json({ message: "Failed to dismiss welcome" });
+    }
+  });
+
+  app.post("/api/auth/complete-onboarding-setup", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as number;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const businessId = req.session.businessId as number;
+      if (!businessId) {
+        return res.status(400).json({ message: "Business ID is required" });
+      }
+
+      const updateData: Partial<InsertUser> = {
+        onboardingSetupCompletedAt: new Date().toISOString()
+      };
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { password, ...userInfo } = updatedUser;
+      res.json({ success: true, user: userInfo });
+    } catch (error) {
+      console.error("Error completing onboarding setup:", error);
+      res.status(500).json({ message: "Failed to complete setup" });
+    }
+  });
+
+  app.post("/api/auth/update-onboarding-checklist", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as number;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const businessId = req.session.businessId as number;
+      if (!businessId) {
+        return res.status(400).json({ message: "Business ID is required" });
+      }
+
+      const { updates } = req.body;
+      if (!updates || typeof updates !== 'object') {
+        return res.status(400).json({ message: "Invalid updates" });
+      }
+
+      // Get current user to merge checklist
+      const user = await storage.getUser(userId, businessId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const currentChecklist = (user.onboardingChecklist as Record<string, boolean>) || {};
+      const newChecklist = { ...currentChecklist, ...updates };
+
+      const updateData: Partial<InsertUser> = {
+        onboardingChecklist: newChecklist as any
+      };
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { password, ...userInfo } = updatedUser;
+      res.json({ success: true, checklist: newChecklist, user: userInfo });
+    } catch (error) {
+      console.error("Error updating onboarding checklist:", error);
+      res.status(500).json({ message: "Failed to update checklist" });
+    }
+  });
+
+  app.post("/api/auth/complete-onboarding", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as number;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const businessId = req.session.businessId as number;
+      if (!businessId) {
+        return res.status(400).json({ message: "Business ID is required" });
+      }
+
+      const updateData: Partial<InsertUser> = {
+        onboardingCompletedAt: new Date().toISOString()
+      };
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { password, ...userInfo } = updatedUser;
+      res.json({ success: true, user: userInfo });
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      res.status(500).json({ message: "Failed to complete onboarding" });
+    }
+  });
+
   app.post("/api/auth/dismiss-getting-started", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId as number;
@@ -629,6 +777,261 @@ export const initAuthRoutes = (app: any) => {
     } catch (error) {
       console.error('Error changing password:', error);
       return res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Request password reset
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { emailOrUsername } = req.body;
+
+      if (!emailOrUsername) {
+        return res.status(400).json({ message: "Email or username is required" });
+      }
+
+      // Try to find user by email first (case-insensitive, including inactive users)
+      let user: any;
+      try {
+        // Search by email - case-insensitive and don't filter by isActive for password reset
+        const normalizedInput = emailOrUsername.trim();
+        const [userByEmail] = await db.select().from(users).where(
+          sql`LOWER(${users.email}) = LOWER(${normalizedInput})`
+        ).limit(1);
+        user = userByEmail;
+      } catch (dbError) {
+        console.error("Database error when searching by email:", dbError);
+      }
+      
+      // If not found by email, try username (case-sensitive, including inactive users)
+      if (!user) {
+        try {
+          const [userByUsername] = await db.select().from(users).where(
+            eq(users.username, emailOrUsername.trim())
+          ).limit(1);
+          user = userByUsername;
+        } catch (dbError) {
+          console.error("Database error when searching by username:", dbError);
+        }
+      }
+
+      // Validate that user exists
+      if (!user || !user.email) {
+        return res.status(404).json({ 
+          message: "No account found with that email or username." 
+        });
+      }
+
+      // Check if user is active
+      if (user.isActive === false) {
+        return res.status(403).json({ 
+          message: "This account is inactive. Please contact support." 
+        });
+      }
+
+      // Generate 6-digit code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Set expiration to 15 minutes from now
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // Create password reset code record
+      const resetCodeData: InsertPasswordResetCode = {
+        userId: user.id,
+        businessId: user.businessId,
+        code: code,
+        email: user.email,
+        expiresAt: expiresAt.toISOString(),
+      };
+
+      await storage.createPasswordResetCode(resetCodeData);
+
+      // Get business information for email template
+      let business: any = null;
+      try {
+        business = await storage.getBusiness(user.businessId);
+      } catch (businessError) {
+        console.warn(`Failed to fetch business info for password reset:`, businessError);
+      }
+
+      // Send email with reset code
+      try {
+        await sendPasswordResetCodeEmail(user.email, user.fullName, code, business);
+        console.log(`Password reset code sent to ${user.email}`);
+      } catch (emailError) {
+        console.error("Failed to send password reset email:", emailError);
+        // Continue even if email fails - don't reveal this to user
+      }
+
+      return res.status(200).json({ 
+        message: "Password reset code has been sent to your email address." 
+      });
+    } catch (error) {
+      console.error('Error in forgot password:', error);
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+      }
+      return res.status(500).json({ 
+        message: "An error occurred. Please try again later.",
+        ...(process.env.NODE_ENV === "development" && error instanceof Error && {
+          error: error.message,
+          stack: error.stack
+        })
+      });
+    }
+  });
+
+      // Verify reset code
+  app.post("/api/auth/verify-reset-code", async (req: Request, res: Response) => {
+    try {
+      const { code, emailOrUsername } = req.body;
+
+      if (!code || !emailOrUsername) {
+        return res.status(400).json({ message: "Code and email or username are required" });
+      }
+
+      // Find the reset code
+      const resetCode = await storage.getPasswordResetCode(code);
+
+      if (!resetCode) {
+        return res.status(400).json({ message: "Invalid or expired reset code" });
+      }
+
+      // Verify the email/username matches (case-insensitive for email, including inactive users)
+      let user: any;
+      try {
+        const normalizedInput = emailOrUsername.trim();
+        const [userByEmail] = await db.select().from(users).where(
+          sql`LOWER(${users.email}) = LOWER(${normalizedInput})`
+        ).limit(1);
+        user = userByEmail;
+      } catch (dbError) {
+        console.error("Database error when searching by email:", dbError);
+      }
+      
+      if (!user) {
+        try {
+          const [userByUsername] = await db.select().from(users).where(
+            eq(users.username, emailOrUsername.trim())
+          ).limit(1);
+          user = userByUsername;
+        } catch (dbError) {
+          console.error("Database error when searching by username:", dbError);
+        }
+      }
+
+      if (!user || user.id !== resetCode.userId || user.email?.toLowerCase() !== resetCode.email?.toLowerCase()) {
+        return res.status(400).json({ message: "Invalid reset code" });
+      }
+
+      return res.status(200).json({ 
+        message: "Code verified successfully",
+        userId: user.id,
+        businessId: user.businessId
+      });
+    } catch (error) {
+      console.error('Error verifying reset code:', error);
+      return res.status(500).json({ message: "An error occurred. Please try again later." });
+    }
+  });
+
+  // Reset password with new password
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { code, emailOrUsername, newPassword } = req.body;
+
+      if (!code || !emailOrUsername || !newPassword) {
+        return res.status(400).json({ 
+          message: "Code, email or username, and new password are required" 
+        });
+      }
+
+      // Validate password: at least 7 characters and at least one number
+      if (newPassword.length < 7) {
+        return res.status(400).json({ 
+          message: "Password must be at least 7 characters long" 
+        });
+      }
+
+      if (!/\d/.test(newPassword)) {
+        return res.status(400).json({ 
+          message: "Password must contain at least one number" 
+        });
+      }
+
+      // Find the reset code
+      const resetCode = await storage.getPasswordResetCode(code);
+
+      if (!resetCode) {
+        return res.status(400).json({ message: "Invalid or expired reset code" });
+      }
+
+      // Verify the email/username matches (case-insensitive for email, including inactive users)
+      let user: any;
+      try {
+        const normalizedInput = emailOrUsername.trim();
+        const [userByEmail] = await db.select().from(users).where(
+          sql`LOWER(${users.email}) = LOWER(${normalizedInput})`
+        ).limit(1);
+        user = userByEmail;
+      } catch (dbError) {
+        console.error("Database error when searching by email:", dbError);
+      }
+      
+      if (!user) {
+        try {
+          const [userByUsername] = await db.select().from(users).where(
+            eq(users.username, emailOrUsername.trim())
+          ).limit(1);
+          user = userByUsername;
+        } catch (dbError) {
+          console.error("Database error when searching by username:", dbError);
+        }
+      }
+
+      if (!user || user.id !== resetCode.userId || user.email?.toLowerCase() !== resetCode.email?.toLowerCase()) {
+        return res.status(400).json({ message: "Invalid reset code" });
+      }
+
+      // Hash and update the new password
+      const hashedPassword = await hashPassword(newPassword);
+      const updatedUser = await storage.updateUser(user.id, {
+        password: hashedPassword
+      });
+
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update password" });
+      }
+
+      // Mark reset code as used
+      await storage.markPasswordResetCodeAsUsed(code);
+
+      // Log password reset activity
+      try {
+        await logActivity({
+          businessId: user.businessId,
+          userId: user.id,
+          activityType: 'password_reset',
+          description: `User reset their password via forgot password flow`,
+          entityType: 'user',
+          entityId: user.id,
+          metadata: {
+            resetTime: new Date().toISOString()
+          }
+        });
+      } catch (activityError) {
+        console.error("Error logging password reset activity:", activityError);
+        // Don't fail if activity logging fails
+      }
+
+      return res.status(200).json({ message: "Password reset successfully" });
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      return res.status(500).json({ message: "Failed to reset password" });
     }
   });
 

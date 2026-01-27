@@ -29,7 +29,8 @@ import {
   notificationDismissals, NotificationDismissal,
   orders, Order, InsertOrder,
   orderItems, OrderItem, InsertOrderItem,
-  orderStatusHistory, OrderStatusHistory, InsertOrderStatusHistory
+  orderStatusHistory, OrderStatusHistory, InsertOrderStatusHistory,
+  passwordResetCodes, PasswordResetCode, InsertPasswordResetCode
 } from "@shared/schema";
 
 import { formatDistanceToNow } from "date-fns";
@@ -279,6 +280,12 @@ export interface IStorage {
   updateThread(threadId: number, businessId: number, data: Partial<InsertMessageThread>): Promise<MessageThread | undefined>;
   getThreadParticipants(threadId: number, businessId: number): Promise<User[]>;
   getUserThreads(userId: number, businessId: number): Promise<Array<{ thread: MessageThread; participants: User[]; lastMessage: Message; unreadCount: number }>>;
+  
+  // Password Reset Code operations
+  createPasswordResetCode(resetData: InsertPasswordResetCode): Promise<PasswordResetCode>;
+  getPasswordResetCode(code: string): Promise<PasswordResetCode | undefined>;
+  markPasswordResetCodeAsUsed(code: string): Promise<boolean>;
+  deleteExpiredPasswordResetCodes(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3475,6 +3482,45 @@ export class DatabaseStorage implements IStorage {
 
     console.log(`getUserThreads: Returning ${result.length} groups`);
     return result;
+  }
+
+  // Password Reset Code operations
+  async createPasswordResetCode(resetData: InsertPasswordResetCode): Promise<PasswordResetCode> {
+    const [resetCode] = await db.insert(passwordResetCodes).values(resetData).returning();
+    return resetCode;
+  }
+
+  async getPasswordResetCode(code: string): Promise<PasswordResetCode | undefined> {
+    const [resetCode] = await db
+      .select()
+      .from(passwordResetCodes)
+      .where(and(
+        eq(passwordResetCodes.code, code),
+        isNull(passwordResetCodes.usedAt),
+        gte(passwordResetCodes.expiresAt, new Date().toISOString())
+      ))
+      .limit(1);
+    return resetCode;
+  }
+
+  async markPasswordResetCodeAsUsed(code: string): Promise<boolean> {
+    const result = await db
+      .update(passwordResetCodes)
+      .set({ usedAt: new Date().toISOString() })
+      .where(eq(passwordResetCodes.code, code));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async deleteExpiredPasswordResetCodes(): Promise<number> {
+    const result = await db
+      .delete(passwordResetCodes)
+      .where(
+        or(
+          lt(passwordResetCodes.expiresAt, new Date().toISOString()),
+          isNotNull(passwordResetCodes.usedAt)
+        )
+      );
+    return result.rowCount || 0;
   }
 }
 

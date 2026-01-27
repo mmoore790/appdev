@@ -260,6 +260,93 @@ export async function sendRegistrationRejectionEmail(to: string, fullName: strin
   return false;
 }
 
+export async function sendPasswordResetCodeEmail(to: string, fullName: string, code: string, business?: any): Promise<boolean> {
+  try {
+    const emailService = new EmailService();
+    const fromAddress = emailService.getFromAddress();
+    
+    const emailContent = generatePasswordResetHTML(fullName, code, business);
+    const textContent = generatePasswordResetText(fullName, code, business);
+    
+    const subject = "Password Reset Code";
+
+    await emailService.sendGenericEmail({
+      from: fromAddress,
+      to: to,
+      subject,
+      text: textContent,
+      html: emailContent,
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Error in sendPasswordResetCodeEmail:', error);
+    return false;
+  }
+}
+
+function generatePasswordResetHTML(fullName: string, code: string, business?: any): string {
+  // Get company details from business settings, with fallbacks
+  const companyName = business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = business?.phone || '02897510804';
+  const companyAddress = business?.address || '9 Drumalig Road, BT27 6UD';
+  
+  // Get customer name
+  const customerName = fullName || 'Valued Customer';
+  
+  // Escape HTML to prevent XSS
+  const escapeHtml = (text: string | null | undefined): string => {
+    if (!text) return '';
+    const map: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
+  };
+  
+  return `<!DOCTYPE html><html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta charset="UTF-8" /><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /><!--[if !mso]><!-- --><meta http-equiv="X-UA-Compatible" content="IE=edge" /><!--<![endif]--><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="format-detection" content="telephone=no, date=no, address=no, email=no" /><meta name="x-apple-disable-message-reformatting" /><link href="https://fonts.googleapis.com/css?family=Fira+Sans:ital,wght@0,400;0,800" rel="stylesheet" /><title>Password Reset Code</title><!--[if !mso]><!-- --><style>@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5VvmojLazX3dGTP.woff2) format('woff2');unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5Vvk4jLazX3dGTP.woff2) format('woff2');unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5VvmYjLazX3dGTP.woff2) format('woff2');unicode-range:U+0100-024F,U+0259,U+1E00-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:local('Fira Sans Regular'),local('FiraSans-Regular'),url(https://fonts.gstatic.com/s/firasans/v10/va9E4kDNxMZdWfMOD5Vvl4jLazX3dA.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eSxf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0460-052F,U+1C80-1C88,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eQhf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eSBf6Xl7Gl3LX.woff2) format('woff2');unicode-range:U+0100-024F,U+0259,U+1E00-1EFF,U+2020,U+20A0-20AB,U+20AD-20CF,U+2113,U+2C60-2C7F,U+A720-A7FF;}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;font-display:swap;src:local('Fira Sans ExtraBold'),local('FiraSans-ExtraBold'),url(https://fonts.gstatic.com/s/firasans/v10/va9B4kDNxMZdWfMOD5VnMK7eRhf6Xl7Glw.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}</style><!--<![endif]--><style>html,body{margin:0 !important;padding:0 !important;min-height:100% !important;width:100% !important;-webkit-font-smoothing:antialiased;}*{-ms-text-size-adjust:100%;}#outlook a{padding:0;}.ReadMsgBody,.ExternalClass{width:100%;}.ExternalClass,.ExternalClass p,.ExternalClass td,.ExternalClass div,.ExternalClass span,.ExternalClass font{line-height:100%;}table,td,th{mso-table-lspace:0 !important;mso-table-rspace:0 !important;border-collapse:collapse;}u + .body table,u + .body td,u + .body th{will-change:transform;}body,td,th,p,div,li,a,span{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;mso-line-height-rule:exactly;}img{border:0;outline:0;line-height:100%;text-decoration:none;-ms-interpolation-mode:bicubic;}a[x-apple-data-detectors]{color:inherit !important;text-decoration:none !important;}.body .pc-project-body{background-color:transparent !important;}@media (min-width:621px){.pc-lg-hide{display:none;}.pc-lg-bg-img-hide{background-image:none !important;}}</style><style>@media (max-width:620px){.pc-project-body{min-width:0 !important;}.pc-project-container,.pc-component{width:100% !important;}.pc-sm-hide{display:none !important;}.pc-sm-bg-img-hide{background-image:none !important;}.pc-w620-font-size-30px{font-size:30px !important;}.pc-w620-line-height-133pc{line-height:133% !important;}.pc-w620-padding-32-35-32-35{padding:32px 35px !important;}.pc-w620-padding-10-35-10-35{padding:10px 35px !important;}.pc-w620-padding-35-35-35-35{padding:35px !important;}}@media (max-width:520px){.pc-w520-padding-27-30-27-30{padding:27px 30px !important;}.pc-w520-padding-10-30-10-30{padding:10px 30px !important;}.pc-w520-padding-30-30-30-30{padding:30px !important;}}</style><!--[if !mso]><!-- --><style>@font-face{font-family:'Fira Sans';font-style:normal;font-weight:800;src:url('https://fonts.gstatic.com/s/firasans/v17/va9B4kDNxMZdWfMOD5VnMK7eSBf8.woff') format('woff'),url('https://fonts.gstatic.com/s/firasans/v17/va9B4kDNxMZdWfMOD5VnMK7eSBf6.woff2') format('woff2');}@font-face{font-family:'Fira Sans';font-style:normal;font-weight:400;src:url('https://fonts.gstatic.com/s/firasans/v17/va9E4kDNxMZdWfMOD5VvmYjN.woff') format('woff'),url('https://fonts.gstatic.com/s/firasans/v17/va9E4kDNxMZdWfMOD5VvmYjL.woff2') format('woff2');}</style><!--<![endif]--><!--[if mso]><style type="text/css">.pc-font-alt{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body class="body pc-font-alt" style="width:100% !important;min-height:100% !important;margin:0 !important;padding:0 !important;mso-line-height-rule:exactly;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-variant-ligatures:normal;text-rendering:optimizeLegibility;-moz-osx-font-smoothing:grayscale;background-color:#f4f4f4" bgcolor="#f4f4f4"><table class="pc-project-body" style="table-layout:fixed;width:100%;min-width:600px;background-color:#f4f4f4" bgcolor="#f4f4f4" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td align="center" valign="top" style="width:auto"><table class="pc-project-container" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="padding:20px 0" align="left" valign="top"><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><!--[if !gte mso 9]><!-- --><td valign="top" class="pc-w520-padding-27-30-27-30 pc-w620-padding-32-35-32-35" style="padding:37px 40px;height:unset;background-color:#1B1B1B" bgcolor="#1B1B1B"><!--<![endif]--><!--[if gte mso 9]><td valign="top" align="center" style="background-color:#1B1B1B;border-radius:0" bgcolor="#1B1B1B"><![endif]--><!--[if gte mso 9]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px"><v:fill color="#1B1B1B" type="frame"/><v:textbox style="mso-fit-shape-to-text:true" inset="0,0,0,0"><div style="font-size:0;line-height:0"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td colspan="3" height="37" style="line-height:1px;font-size:1px">&nbsp;</td></tr><tr><td width="40" valign="top" style="line-height:1px;font-size:1px">&nbsp;</td><td valign="top" align="left"><![endif]--><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div class="pc-w620-font-size-30px pc-w620-line-height-133pc" style="font-size:36px;line-height:128%;text-align:left;text-align-last:left;color:#fff;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.6px;font-style:normal"><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:36px;line-height:128%;font-weight:800" class="pc-w620-font-size-30px pc-w620-line-height-133pc">Password Reset Code</span></div></div></div></td></tr></table><!--[if gte mso 9]></td><td width="40" style="line-height:1px;font-size:1px" valign="top">&nbsp;</td></tr><tr><td colspan="3" height="37" style="line-height:1px;font-size:1px">&nbsp;</td></tr></table></td></tr></table></div><p style="margin:0;mso-hide:all"><o:p xmlns:o="urn:schemas-microsoft-com:office:office">&nbsp;</o:p></p></v:textbox></v:rect><![endif]--></td></tr></table><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td valign="top" class="pc-w520-padding-10-30-10-30 pc-w620-padding-10-35-10-35" style="padding:10px 40px;height:unset;background-color:#fff" bgcolor="#ffffff"><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div style="font-size:15px;line-height:140%;text-align:left;text-align-last:left"><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Hi, ${escapeHtml(customerName)}</span></div><div><br></div><div><br></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">We received a request to reset your password. Use the code below to verify your identity and create a new password:</span></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal;text-align:center;padding:20px 0"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:32px;line-height:140%;font-weight:800;letter-spacing:8px;font-family:'Courier New',monospace;color:#1B1B1B">${code}</span></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">This code will expire in 15 minutes. If you didn't request a password reset, please ignore this email.</span></div><div><br></div><div style="color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Enter this code on the password reset page to continue with resetting your password.</span></div><div><br></div><div><br></div></div></div></td></tr></table></td></tr></table><table class="pc-component" style="width:600px;max-width:600px" width="600" align="center" border="0" cellspacing="0" cellpadding="0" role="presentation"><tr><td valign="top" class="pc-w520-padding-30-30-30-30 pc-w620-padding-35-35-35-35" style="padding:40px;height:unset;background-color:#fff" bgcolor="#ffffff"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="left" valign="top"><table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%" align="left"><tr><td valign="top" align="left"><div class="pc-font-alt" style="text-decoration:none"><div style="font-size:15px;line-height:140%;text-align:left;text-align-last:left;color:#333;font-family:'Fira Sans',Arial,Helvetica,sans-serif;letter-spacing:-0.2px;font-style:normal"><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">Kind Regards,</span></div><div><br></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyName)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyAddress)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyEmail)}</span></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">${escapeHtml(companyPhone)}</span></div><div><br></div><div><br></div><div style="font-family:'Fira Sans',Arial,Helvetica,sans-serif"><span style="font-family:'Fira Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:140%;font-weight:400">THIS EMAIL HAS BEEN SENT BY BOLTDOWN, A WORKSHOP MANAGEMENT SYSTEM. THIS MAILBOX IS NOT MONITORED - DO NOT REPLY TO THIS EMAIL.</span></div></div></div></td></tr></table></td></tr></table></td></tr></table></td></tr></table></td></tr></table></body></html>`;
+}
+
+function generatePasswordResetText(fullName: string, code: string, business?: any): string {
+  // Get company details from business settings, with fallbacks
+  const companyName = business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = business?.phone || '02897510804';
+  const companyAddress = business?.address || '9 Drumalig Road, BT27 6UD';
+  
+  // Get customer name
+  const customerName = fullName || 'Valued Customer';
+  
+  return `
+${companyName.toUpperCase()}
+PASSWORD RESET CODE
+
+Dear ${customerName},
+
+We received a request to reset your password. Use the code below to verify your identity and create a new password:
+
+${code}
+
+IMPORTANT: This code will expire in 15 minutes. If you didn't request a password reset, please ignore this email.
+
+Enter this code on the password reset page to continue with resetting your password.
+
+If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+
+Kind Regards,
+${companyName}
+${companyAddress}
+${companyEmail}
+${companyPhone}
+
+THIS EMAIL HAS BEEN SENT BY BOLTDOWN, A WORKSHOP MANAGEMENT SYSTEM. THIS MAILBOX IS NOT MONITORED - DO NOT REPLY TO THIS EMAIL.
+  `.trim();
+}
+
 export async function sendJobBookedEmail(job: any, customer: any, business?: any): Promise<boolean> {
   try {
     if (!customer.email) {
