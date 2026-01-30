@@ -8,3 +8,4 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "onboarding_setup_completed_at" tim
 -- Add onboarding checklist progress (stored as JSON)
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "onboarding_checklist" jsonb DEFAULT '{}'::jsonb;
 
+

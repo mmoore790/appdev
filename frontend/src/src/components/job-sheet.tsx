@@ -583,11 +583,11 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm text-xs sm:text-sm">
       {/* Header with Print Button */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 px-3 sm:px-4 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 border-b border-gray-200">
         <div className="min-w-0 flex-1">
-          <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">Job Sheet</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-1">Job Sheet</h2>
           <p className="text-xs sm:text-sm text-gray-500">Work Completed Report</p>
           {lastUpdateTime && (
             <p className="text-[10px] sm:text-xs text-gray-400 mt-1">Last updated: {formatDate(lastUpdateTime)}</p>

@@ -24,3 +24,4 @@ WHERE "cost" IS NOT NULL AND "cost_excluding_vat" IS NULL;
 
 
 
+

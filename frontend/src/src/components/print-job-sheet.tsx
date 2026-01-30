@@ -173,7 +173,8 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
             margin: "0 auto", 
             padding: "15mm",
             backgroundColor: "white",
-            color: "#1a1a1a"
+            color: "#1a1a1a",
+            fontSize: "10px"
           }}>
             {/* Header with Logo and Company Details */}
             <div style={{ 
@@ -203,7 +204,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                   }}>
                     {business?.name || "Company Name"}
                   </h1>
-                  <div style={{ fontSize: "11px", color: "#000", lineHeight: "1.6" }}>
+                  <div style={{ fontSize: "10px", color: "#000", lineHeight: "1.6" }}>
                     {business?.address && <div>{business.address}</div>}
                     <div style={{ display: "flex", gap: "12px", marginTop: "4px", flexWrap: "wrap" }}>
                       {business?.phone && <span>Tel: {business.phone}</span>}
@@ -247,7 +248,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                 display: "grid", 
                 gridTemplateColumns: "repeat(3, 1fr)", 
                 gap: "12px",
-                fontSize: "11px",
+                fontSize: "10px",
                 lineHeight: "1.5"
               }}>
                 <div>
@@ -299,7 +300,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                 <table style={{ 
                   width: "100%", 
                   borderCollapse: "collapse", 
-                  fontSize: "11px",
+                  fontSize: "10px",
                   border: "1px solid #000"
                 }}>
                   <thead>
@@ -364,7 +365,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                 <table style={{ 
                   width: "100%", 
                   borderCollapse: "collapse", 
-                  fontSize: "11px",
+                  fontSize: "10px",
                   border: "1px solid #000"
                 }}>
                   <thead>
@@ -429,7 +430,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                   backgroundColor: "#fff", 
                   borderRadius: "6px", 
                   border: "1px solid #000",
-                  fontSize: "11px", 
+                  fontSize: "10px", 
                   lineHeight: "1.7",
                   color: "#000"
                 }}>
@@ -446,7 +447,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                 marginTop: "20px",
                 marginBottom: "20px",
                 textAlign: "right",
-                fontSize: "12px"
+                fontSize: "11px"
               }}>
                 <div style={{ marginBottom: "4px" }}>
                   <span style={{ fontWeight: "600", color: "#000" }}>Total (Ex VAT): </span>
@@ -464,7 +465,7 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
               marginTop: "30px", 
               paddingTop: "15px", 
               borderTop: "1px solid #000", 
-              fontSize: "9px", 
+              fontSize: "8px", 
               color: "#000", 
               textAlign: "center",
               lineHeight: "1.5"

@@ -11,3 +11,4 @@ ADD COLUMN "robotic_mower_pin_code" TEXT;
 
 
 
+

@@ -18,3 +18,4 @@ WHERE "price_excluding_vat" IS NOT NULL AND "price_including_vat" IS NULL;
 
 
 
+
