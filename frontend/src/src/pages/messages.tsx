@@ -167,6 +167,20 @@ export default function Messages() {
     queryKey: ['/api/messages/support-info'],
   });
 
+  // Auto-select BoltDown support when navigating with ?support=true
+  useEffect(() => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    if (params.get('support') === 'true' && supportInfo?.masterUser && user?.role !== 'master') {
+      setSelectedUserId(supportInfo.masterUser.id);
+      setSelectedUserBusinessId(null);
+      setSelectedThreadId(null);
+      // Clear the param from URL for cleaner UX
+      const url = new URL(window.location.href);
+      url.searchParams.delete('support');
+      window.history.replaceState({}, '', url.pathname);
+    }
+  }, [supportInfo?.masterUser, user?.role]);
+
   // Fetch jobs for attachment
   const { data: jobs = [] } = useQuery<any[]>({
     queryKey: ['/api/jobs'],

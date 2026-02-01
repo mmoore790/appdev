@@ -16,7 +16,6 @@ import {
   Wrench,
   CheckSquare,
   Users,
-  DollarSign,
   MessageSquare,
   PhoneCall,
   BarChart3,
@@ -88,10 +87,17 @@ export default function GettingStarted() {
       link: "/workshop",
     },
     {
+      icon: <Package className="h-6 w-6" />,
+      title: "Orders & Job Tracker",
+      description:
+        "View and track all orders and jobs in one place. Monitor progress, filter by status, and keep on top of workload.",
+      link: "/orders",
+    },
+    {
       icon: <CheckSquare className="h-6 w-6" />,
       title: "Task Board",
       description:
-        "Create tasks, assign them to staff members, set priorities, and track completion. Organize your workflow efficiently.",
+        "Create tasks, assign them to staff members, set priorities, and track completion. Organise your workflow efficiently.",
       link: "/tasks",
     },
     {
@@ -102,17 +108,10 @@ export default function GettingStarted() {
       link: "/customers",
     },
     {
-      icon: <DollarSign className="h-6 w-6" />,
-      title: "Payment Processing",
-      description:
-        "Send payment requests to customers via email. Accept payments through Stripe with automatic job status updates.",
-      link: "/workshop",
-    },
-    {
       icon: <MessageSquare className="h-6 w-6" />,
       title: "Internal Messaging",
       description:
-        "Communicate with your team members through the built-in messaging system. Share updates and coordinate work.",
+        "Communicate with your team members through the built-in messaging system. Share updates and co-ordinate work.",
       link: "/messages",
     },
     {
@@ -176,19 +175,18 @@ export default function GettingStarted() {
           <p className="text-slate-700 leading-relaxed">
             This workshop operations system is designed to streamline your entire
             operation. From job creation and tracking to customer management and
-            payment processing, everything you need is right at your fingertips.
+            team co-ordination, everything you need is right at your fingertips.
           </p>
           <p className="text-slate-700 leading-relaxed">
             The system helps you manage workshop jobs efficiently, track equipment
-            service history, coordinate tasks among staff members, process customer
-            payments, and maintain clear communication with both your team and
-            customers.
+            service history, co-ordinate tasks amongst staff members, and maintain
+            clear communication with both your team and customers.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <Badge variant="secondary">Job Tracking</Badge>
             <Badge variant="secondary">Equipment Management</Badge>
-            <Badge variant="secondary">Customer Portal</Badge>
-            <Badge variant="secondary">Payment Processing</Badge>
+            <Badge variant="secondary">Customer Records</Badge>
+            <Badge variant="secondary">Orders & Tracker</Badge>
             <Badge variant="secondary">Task Management</Badge>
             <Badge variant="secondary">Analytics & Reports</Badge>
           </div>
@@ -203,7 +201,7 @@ export default function GettingStarted() {
             Need Help Getting Started?
           </CardTitle>
           <CardDescription>
-            Book a personalized demonstration to learn how to use the system
+            Book a personalised demonstration to learn how to use the system
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -223,7 +221,7 @@ export default function GettingStarted() {
         <CardHeader>
           <CardTitle className="text-2xl">System Features & How to Use Them</CardTitle>
           <CardDescription>
-            Explore what's available and learn how to get started with each feature
+            Explore what’s available and learn how to get started with each feature
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -315,7 +313,15 @@ export default function GettingStarted() {
                   Track Job Progress
                 </h4>
                 <p className="text-slate-600 text-sm">
-                  Update job statuses as work progresses, add job updates, record work
+                  From the{" "}
+                  <Link href="/workshop" className="text-emerald-600 hover:underline">
+                    Workshop
+                  </Link>{" "}
+                  or{" "}
+                  <Link href="/orders" className="text-emerald-600 hover:underline">
+                    Orders
+                  </Link>{" "}
+                  view, update job statuses as work progresses, add job updates, record work
                   completed, and track time spent on each job.
                 </p>
               </div>
@@ -349,12 +355,18 @@ export default function GettingStarted() {
               </div>
               <div>
                 <h4 className="font-semibold text-slate-900 mb-1">
-                  Process Payments
+                  View Orders & Schedule
                 </h4>
                 <p className="text-slate-600 text-sm">
-                  Once a job is complete, you can send payment requests to customers.
-                  They can pay online through Stripe, and payments are automatically
-                  recorded.
+                  Use the{" "}
+                  <Link href="/orders" className="text-emerald-600 hover:underline">
+                    Orders
+                  </Link>{" "}
+                  page to monitor all jobs and the{" "}
+                  <Link href="/calendar" className="text-emerald-600 hover:underline">
+                    Calendar
+                  </Link>{" "}
+                  to schedule work and track time entries.
                 </p>
               </div>
             </div>
@@ -371,7 +383,7 @@ export default function GettingStarted() {
           <p className="text-slate-700 mb-4">
             You can always access help and documentation from the Help option in your
             profile dropdown menu. This getting started page will be hidden after you
-            dismiss it, but help is always available when you need it.
+            dismiss it, but help is available whenever you need it.
           </p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleBookDemo}>

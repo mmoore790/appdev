@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Link, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -236,7 +236,11 @@ function AuthAwareLayout() {
             <img src={logLogo} alt="BoltDown Logo" className="h-7 sm:h-8 md:h-10 w-auto" />
             <div className="flex flex-col items-center gap-0.5 sm:gap-1 text-black text-[9px] sm:text-[10px] md:text-xs">
               <p>BoltDown UK © 2026</p>
-              <p className="break-all">support@boltdown.co.uk</p>
+              <p>
+                <Link href="/messages?support=true" className="text-emerald-600 hover:text-emerald-700 font-medium hover:underline">Chat to us</Link>
+                {' · '}
+                <a href="mailto:support@boltdown.co.uk" className="text-emerald-600 hover:text-emerald-700 font-medium hover:underline">support@boltdown.co.uk</a>
+              </p>
             </div>
           </div>
         </footer>
