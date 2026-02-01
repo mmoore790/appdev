@@ -49,9 +49,10 @@ export class BusinessController {
     try {
       const businessId = getBusinessIdFromRequest(req);
       const parsed = updateBusinessSchema.parse(req.body) as Record<string, unknown>;
-      // Only master dashboard can change subscription and user limit; strip them from business profile updates
+      // Only master dashboard can change subscription, user limit, and text credits; strip them from business profile updates
       delete parsed.subscriptionTier;
       delete parsed.userLimit;
+      delete parsed.textCredits;
       const updates = parsed as Parameters<typeof storage.updateBusiness>[1];
 
       const updated = await storage.updateBusiness(businessId, updates);

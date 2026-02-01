@@ -16,6 +16,10 @@ export class MessageRepository {
     return this.store.getConversation(userId1, userId2, businessId);
   }
 
+  getSupportConversation(masterUserId: number, otherUserId: number): Promise<Message[]> {
+    return this.store.getSupportConversation(masterUserId, otherUserId);
+  }
+
   getGroupConversation(threadId: number, userId: number, businessId: number): Promise<Message[]> {
     return this.store.getGroupConversation(threadId, userId, businessId);
   }

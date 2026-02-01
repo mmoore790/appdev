@@ -63,6 +63,7 @@ export interface IStorage {
   
   // User operations
   getUser(id: number, businessId: number): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>; // Get any user by ID (for cross-business e.g. BoltDown support)
   getUserByUsername(username: string, businessId: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>; // Find user by email (email should be unique)
   getUserByUsernameAcrossAllBusinesses(username: string): Promise<User | undefined>; // Find user by username across all businesses (for login)
@@ -275,8 +276,10 @@ export interface IStorage {
   getMessage(id: number, businessId: number): Promise<Message | undefined>;
   getMessagesByUser(userId: number, businessId: number): Promise<Message[]>;
   getConversation(userId1: number, userId2: number, businessId: number): Promise<Message[]>;
+  getSupportConversation(masterUserId: number, otherUserId: number): Promise<Message[]>;
   getGroupConversation(threadId: number, userId: number, businessId: number): Promise<Message[]>;
   getAllConversations(userId: number, businessId: number): Promise<Array<{ otherUser: User; lastMessage: Message; unreadCount: number }>>;
+  getSupportConversations(masterUserId: number): Promise<Array<{ otherUser: User; lastMessage: Message; unreadCount: number }>>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageAsRead(id: number, userId: number, businessId: number): Promise<Message | undefined>;
   markConversationAsRead(userId: number, otherUserId: number, businessId: number): Promise<number>;
@@ -522,6 +525,11 @@ export class DatabaseStorage implements IStorage {
       and(eq(users.id, id), eq(users.businessId, businessId))
     );
     return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return user ?? undefined;
   }
 
   async getUserByUsername(username: string, businessId: number): Promise<User | undefined> {
@@ -3123,6 +3131,104 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getSupportConversation(masterUserId: number, otherUserId: number): Promise<Message[]> {
+    const otherUser = await this.getUserById(otherUserId);
+    if (!otherUser) return [];
+    return this.getConversation(masterUserId, otherUserId, otherUser.businessId);
+  }
+
+  async getSupportConversations(masterUserId: number): Promise<Array<{ otherUser: User; lastMessage: Message; unreadCount: number }>> {
+    const sentMessages = await db.select({
+      otherUserId: messages.recipientId,
+      lastMessage: messages,
+      businessId: messages.businessId,
+    })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.senderId, masterUserId),
+          isNull(messages.deletedAt),
+          isNotNull(messages.recipientId)
+        )
+      )
+      .orderBy(desc(messages.createdAt));
+
+    const receivedMessages = await db.select({
+      otherUserId: messages.senderId,
+      lastMessage: messages,
+      businessId: messages.businessId,
+    })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.recipientId, masterUserId),
+          isNull(messages.deletedAt),
+          isNotNull(messages.senderId)
+        )
+      )
+      .orderBy(desc(messages.createdAt));
+
+    const conversationMap = new Map<number, { lastMessage: Message; unreadCount: number }>();
+    for (const msg of receivedMessages) {
+      if (!msg.otherUserId) continue;
+      const existing = conversationMap.get(msg.otherUserId);
+      if (!existing || new Date(msg.lastMessage.createdAt) > new Date(existing.lastMessage.createdAt)) {
+        conversationMap.set(msg.otherUserId, {
+          lastMessage: msg.lastMessage,
+          unreadCount: msg.lastMessage.isRead ? 0 : 1,
+        });
+      } else if (!msg.lastMessage.isRead) {
+        existing.unreadCount += 1;
+      }
+    }
+    for (const msg of sentMessages) {
+      if (!msg.otherUserId) continue;
+      const existing = conversationMap.get(msg.otherUserId);
+      if (!existing || new Date(msg.lastMessage.createdAt) > new Date(existing.lastMessage.createdAt)) {
+        conversationMap.set(msg.otherUserId, {
+          lastMessage: msg.lastMessage,
+          unreadCount: existing?.unreadCount ?? 0,
+        });
+      }
+    }
+
+    const unreadCounts = await db.select({
+      senderId: messages.senderId,
+      count: sql<number>`count(*)`.as('count'),
+    })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.recipientId, masterUserId),
+          eq(messages.isRead, false),
+          isNull(messages.deletedAt),
+          isNotNull(messages.senderId)
+        )
+      )
+      .groupBy(messages.senderId);
+
+    const unreadMap = new Map<number, number>();
+    for (const c of unreadCounts) {
+      if (c.senderId) unreadMap.set(c.senderId, Number(c.count));
+    }
+
+    const result: Array<{ otherUser: User; lastMessage: Message; unreadCount: number }> = [];
+    for (const [otherUserId, data] of conversationMap.entries()) {
+      const otherUser = await this.getUserById(otherUserId);
+      if (otherUser && otherUser.role !== 'master') {
+        result.push({
+          otherUser,
+          lastMessage: data.lastMessage,
+          unreadCount: unreadMap.get(otherUserId) ?? 0,
+        });
+      }
+    }
+    result.sort((a, b) =>
+      new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+    );
+    return result;
+  }
+
   async getGroupConversation(threadId: number, userId: number, businessId: number): Promise<Message[]> {
     console.log('Storage: getGroupConversation called with:', { threadId, userId, businessId });
     
@@ -3255,10 +3361,11 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Fetch user details for each conversation partner
+    // Fetch user details for each conversation partner (use getUserById for cross-business e.g. BoltDown support)
     const result: Array<{ otherUser: User; lastMessage: Message; unreadCount: number }> = [];
     for (const [otherUserId, data] of conversationMap.entries()) {
-      const otherUser = await this.getUser(otherUserId, businessId);
+      let otherUser = await this.getUser(otherUserId, businessId);
+      if (!otherUser) otherUser = await this.getUserById(otherUserId);
       if (otherUser) {
         result.push({
           otherUser,

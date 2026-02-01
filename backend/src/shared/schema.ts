@@ -36,6 +36,7 @@ export const businesses = pgTable("businesses", {
   // Subscription tier (Starter, Pro, Pro Plus) and user limit set at onboarding
   subscriptionTier: text("subscription_tier"),
   userLimit: integer("user_limit"),
+  textCredits: integer("text_credits").notNull().default(0),
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: 'string' }),
   isActive: boolean("is_active").notNull().default(true),
@@ -56,6 +57,7 @@ export const insertBusinessSchema = createInsertSchema(businesses).pick({
   hourlyLabourFee: true,
   subscriptionTier: true,
   userLimit: true,
+  textCredits: true,
 });
 
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;

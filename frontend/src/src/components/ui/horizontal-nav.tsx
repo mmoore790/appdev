@@ -19,6 +19,7 @@ import {
   Shield,
   Bell,
   HelpCircle,
+  Mail,
   Rocket
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
     };
   }, [mobileMenuOpen]);
 
+  const messageRoles: UserRole[] = ["master", ...operationalRoles];
   // Primary navigation items (always visible)
   const primaryNavItems: NavItem[] = [
     { path: "/master", label: "Master", icon: <Shield size={16} />, allowedRoles: ["master"] },
@@ -126,6 +128,7 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
     { path: "/customers", label: "Customers", icon: <Users size={16} />, allowedRoles: operationalRoles },
     { path: "/orders", label: "Orders", icon: <Package size={16} />, allowedRoles: operationalRoles },
     { path: "/calendar", label: "Calendar", icon: <Calendar size={16} />, allowedRoles: operationalRoles },
+    { path: "/messages", label: "Messages", icon: <Mail size={16} />, allowedRoles: messageRoles },
   ];
 
   // Add Getting Started to navigation if it should be shown (after Dashboard)

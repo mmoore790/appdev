@@ -80,6 +80,7 @@ interface Conversation {
     id: number;
     fullName: string;
     avatarUrl: string | null;
+    businessId?: number;
   };
   lastMessage: Message;
   unreadCount: number;
@@ -102,6 +103,8 @@ interface User {
   id: number;
   fullName: string;
   avatarUrl: string | null;
+  businessId?: number;
+  role?: string;
 }
 
 export default function Messages() {
@@ -110,6 +113,7 @@ export default function Messages() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserBusinessId, setSelectedUserBusinessId] = useState<number | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [messageContent, setMessageContent] = useState('');
@@ -152,9 +156,15 @@ export default function Messages() {
     console.log('[Messages] Groups loading:', groupsLoading);
   }, [groups, groupsLoading]);
 
-  // Fetch users for new message dialog
+  // Fetch users for new message dialog (master gets all users for support chats)
   const { data: users = [] } = useQuery<User[]>({
-    queryKey: ['/api/users'],
+    queryKey: user?.role === 'master' ? ['/api/master/users'] : ['/api/users'],
+  });
+  const usersForNewMessage = (users ?? []).filter((u) => u.id !== user?.id && u.role !== 'master');
+
+  // Support info for BoltDown support chat
+  const { data: supportInfo } = useQuery<{ masterUser: { id: number; fullName: string; avatarUrl: string | null } | null }>({
+    queryKey: ['/api/messages/support-info'],
   });
 
   // Fetch jobs for attachment
@@ -167,13 +177,22 @@ export default function Messages() {
     queryKey: ['/api/tasks'],
   });
 
+  const isMaster = user?.role === 'master';
+
   // Fetch messages for selected conversation (direct or group)
   const { data: messages = [], isLoading: messagesLoading, error: messagesError, refetch: refetchMessages } = useQuery<Message[]>({
     queryKey: selectedThreadId 
       ? ['/api/messages/groups', selectedThreadId]
-      : ['/api/messages/conversation', selectedUserId],
-    enabled: !!selectedUserId || !!selectedThreadId,
-    refetchInterval: 10000, // Refetch every 10 seconds
+      : ['/api/messages/conversation', selectedUserId, isMaster ? selectedUserBusinessId : null],
+    queryFn: async () => {
+      if (selectedThreadId) {
+        return apiRequest('GET', `/api/messages/groups/${selectedThreadId}`);
+      }
+      const url = `/api/messages/conversation/${selectedUserId}${isMaster && selectedUserBusinessId ? `?businessId=${selectedUserBusinessId}` : ''}`;
+      return apiRequest('GET', url);
+    },
+    enabled: (!!selectedUserId || !!selectedThreadId) && (!isMaster || !selectedUserId || !!selectedUserBusinessId || !!selectedThreadId) && !(isMaster && selectedUserId && !selectedUserBusinessId && !selectedThreadId),
+    refetchInterval: 10000,
   });
 
   // Debug logging
@@ -202,8 +221,8 @@ export default function Messages() {
 
   // Mark conversation as read when viewing
   const markAsReadMutation = useMutation({
-    mutationFn: ({ userId }: { userId: number }) =>
-      apiRequest('PUT', `/api/messages/conversation/${userId}/read`),
+    mutationFn: ({ userId, businessId }: { userId: number; businessId?: number }) =>
+      apiRequest('PUT', `/api/messages/conversation/${userId}/read${isMaster && businessId ? `?businessId=${businessId}` : ''}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
       queryClient.invalidateQueries({ queryKey: ['/api/messages/conversation', selectedUserId] });
@@ -306,9 +325,9 @@ export default function Messages() {
   // Handle selecting a conversation
   useEffect(() => {
     if (selectedUserId) {
-      markAsReadMutation.mutate({ userId: selectedUserId });
+      markAsReadMutation.mutate({ userId: selectedUserId, businessId: selectedUserBusinessId ?? undefined });
     }
-  }, [selectedUserId]);
+  }, [selectedUserId, selectedUserBusinessId]);
 
   // Mark group as read when viewing
   const markGroupAsReadMutation = useMutation({
@@ -400,9 +419,10 @@ export default function Messages() {
   };
 
 
-  const handleStartNewMessage = (userId: number) => {
+  const handleStartNewMessage = (userId: number, businessId?: number) => {
     setNewMessageUserId(userId);
     setSelectedUserId(userId);
+    setSelectedUserBusinessId(businessId ?? null);
     setSelectedRecipients([]);
     setSelectedThreadId(null);
     setNewMessageDialogOpen(false);
@@ -491,7 +511,12 @@ export default function Messages() {
   };
 
   const selectedConversation = conversations.find(c => c.otherUser.id === selectedUserId);
-  const selectedUser = selectedUserId ? users.find(u => u.id === selectedUserId) : null;
+  const isBoltDownSupport = supportInfo?.masterUser && selectedUserId === supportInfo.masterUser.id;
+  const selectedUser = selectedUserId
+    ? (users.find(u => u.id === selectedUserId) ?? selectedConversation?.otherUser ?? (isBoltDownSupport && supportInfo?.masterUser
+        ? { id: supportInfo.masterUser.id, fullName: 'BoltDown support', avatarUrl: supportInfo.masterUser.avatarUrl }
+        : null))
+    : null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-200px)]">
@@ -652,8 +677,7 @@ export default function Messages() {
                       </div>
                       <ScrollArea className="h-[400px]">
                         <div className="space-y-1">
-                          {users
-                            .filter(u => u.id !== user?.id)
+                          {usersForNewMessage
                             .filter(u => 
                               !userSearchQuery || 
                               u.fullName.toLowerCase().includes(userSearchQuery.toLowerCase())
@@ -677,7 +701,7 @@ export default function Messages() {
                                       }
                                     } else {
                                       // Direct message mode: start conversation immediately
-                                      handleStartNewMessage(userOption.id);
+                                      handleStartNewMessage(userOption.id, userOption.businessId);
                                     }
                                   }}
                                   className={cn(
@@ -721,8 +745,8 @@ export default function Messages() {
                                 </button>
                               );
                             })}
-                          {users.filter(u => u.id !== user?.id && 
-                            (!userSearchQuery || u.fullName.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                          {usersForNewMessage.filter(u =>
+                            !userSearchQuery || u.fullName.toLowerCase().includes(userSearchQuery.toLowerCase())
                           ).length === 0 && (
                             <div className="text-center py-8 text-muted-foreground text-sm">
                               No team members found
@@ -877,6 +901,7 @@ export default function Messages() {
                       key={conv.otherUser.id}
                       onClick={() => {
                         setSelectedUserId(conv.otherUser.id);
+                        setSelectedUserBusinessId(conv.otherUser.businessId ?? null);
                         setSelectedThreadId(null);
                       }}
                       className={cn(
@@ -898,7 +923,7 @@ export default function Messages() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                             {conv.lastMessage.content}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
@@ -947,7 +972,7 @@ export default function Messages() {
                               'No members'
                             )}
                           </p>
-                          <p className="text-sm text-muted-foreground truncate">
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                             {group.lastMessage.content}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
@@ -976,11 +1001,11 @@ export default function Messages() {
                         <Users className="h-5 w-5 text-primary" />
                       </div>
                     ) : (
-                      // Direct message
+                      // Direct message (use selectedConversation.otherUser for BoltDown support - master not in users list)
                       <Avatar className="h-10 w-10 flex-shrink-0">
-                    <AvatarImage src={selectedUser?.avatarUrl || undefined} />
-                    <AvatarFallback>{selectedUser ? getInitials(selectedUser.fullName) : 'U'}</AvatarFallback>
-                  </Avatar>
+                        <AvatarImage src={(selectedUser ?? selectedConversation?.otherUser)?.avatarUrl || undefined} />
+                        <AvatarFallback>{(selectedUser ?? selectedConversation?.otherUser) ? getInitials((selectedUser ?? selectedConversation?.otherUser)!.fullName) : 'U'}</AvatarFallback>
+                      </Avatar>
                     )}
                     <div className="flex-1 min-w-0">
                       {selectedThreadId ? (
@@ -1029,7 +1054,7 @@ export default function Messages() {
                       ) : (
                         // Direct message header
                         <>
-                          <CardTitle className="text-lg truncate">{selectedUser?.fullName || 'Unknown User'}</CardTitle>
+                          <CardTitle className="text-lg truncate">{selectedUser?.fullName ?? selectedConversation?.otherUser?.fullName ?? 'Unknown User'}</CardTitle>
                     {selectedConversation && selectedConversation.unreadCount > 0 && (
                       <p className="text-sm text-muted-foreground">
                         {selectedConversation.unreadCount} unread message(s)
@@ -1089,18 +1114,32 @@ export default function Messages() {
                       <p className="text-sm">{String(messagesError)}</p>
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4">
                       <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
-                      <p>No messages yet. Start the conversation!</p>
-                      {selectedUserId && (
-                        <p className="text-xs mt-2">Conversation with user ID: {selectedUserId}</p>
-                      )}
-                      {selectedThreadId && (
-                        <p className="text-xs mt-2">Group conversation ID: {selectedThreadId}</p>
+                      <p className="text-center font-medium">No messages yet. Start the conversation!</p>
+                      {isBoltDownSupport ? (
+                        <div className="mt-3 text-center text-sm space-y-1 max-w-md">
+                          <p>This is a direct way to contact BoltDown support for help with your account or the platform.</p>
+                          <p>Alternatively, you can email <a href="mailto:support@boltdown.co.uk" className="text-primary hover:underline font-medium">support@boltdown.co.uk</a></p>
+                        </div>
+                      ) : (
+                        <>
+                          {selectedUserId && (
+                            <p className="text-xs mt-2">Conversation with user ID: {selectedUserId}</p>
+                          )}
+                          {selectedThreadId && (
+                            <p className="text-xs mt-2">Group conversation ID: {selectedThreadId}</p>
+                          )}
+                        </>
                       )}
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      {isBoltDownSupport && (
+                        <div className="rounded-lg bg-muted/50 border border-muted p-3 text-sm text-muted-foreground">
+                          <p>Chat with BoltDown support for help. Alternatively, email <a href="mailto:support@boltdown.co.uk" className="text-primary hover:underline font-medium">support@boltdown.co.uk</a></p>
+                        </div>
+                      )}
                       {messages.map((message) => {
                         const isOwnMessage = message.senderId === user?.id;
                         return (

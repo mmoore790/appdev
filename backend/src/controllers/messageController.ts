@@ -7,6 +7,10 @@ import { z } from "zod";
 import multer from "multer";
 import { uploadPublicFile } from "../services/fileStorageService";
 import { logActivity } from "../services/activityService";
+import { storage } from "../storage";
+import { sendSupportMessageNotificationEmail } from "../services/emailService";
+
+const BOLTDOWN_SUPPORT_EMAIL = "matthew.moore.contact@gmail.com";
 
 // Configure multer for memory storage (files stored in memory as Buffer)
 const upload = multer({
@@ -24,6 +28,8 @@ export class MessageController {
     this.router.use(isAuthenticated);
 
     // IMPORTANT: More specific routes must come before generic :id routes
+    // BoltDown support info (master user for support chat)
+    this.router.get("/support-info", this.getSupportInfo);
     // Get all conversations for current user
     this.router.get("/conversations", this.getConversations);
     
@@ -57,15 +63,65 @@ export class MessageController {
     this.router.get("/:id", this.getMessage);
   }
 
+  private async getSupportInfo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const masterUser = await storage.getUserByEmail(BOLTDOWN_SUPPORT_EMAIL);
+      if (!masterUser) {
+        return res.json({ masterUser: null });
+      }
+      res.json({
+        masterUser: {
+          id: masterUser.id,
+          fullName: masterUser.fullName,
+          avatarUrl: masterUser.avatarUrl,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   private async getConversations(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getBusinessIdFromRequest(req);
       const userId = getUserIdFromRequest(req);
-      
-      console.log(`[MessageController] getConversations - userId: ${userId}, businessId: ${businessId}`);
+      const role = (req.session as any)?.role as string | undefined;
+
+      if (role === "master") {
+        const { storage } = await import("../storage");
+        const conversations = await storage.getSupportConversations(userId);
+        return res.json(conversations);
+      }
+
       const conversations = await messageRepository.getAllConversations(userId, businessId);
-      console.log(`[MessageController] getConversations - Returning ${conversations.length} conversations for userId ${userId}`);
-      
+      const masterUser = await storage.getUserByEmail(BOLTDOWN_SUPPORT_EMAIL);
+      if (masterUser && masterUser.id !== userId) {
+        const hasSupportConv = conversations.some((c) => c.otherUser.id === masterUser.id);
+        if (!hasSupportConv) {
+          const supportConv = {
+            otherUser: {
+              id: masterUser.id,
+              fullName: "BoltDown support",
+              avatarUrl: masterUser.avatarUrl,
+            },
+            lastMessage: {
+              id: 0,
+              content: "Start a conversation with BoltDown support",
+              createdAt: new Date().toISOString(),
+              isRead: true,
+            } as Message,
+            unreadCount: 0,
+          };
+          conversations.unshift(supportConv);
+        } else {
+          const idx = conversations.findIndex((c) => c.otherUser.id === masterUser.id);
+          if (idx >= 0) {
+            const conv = conversations[idx];
+            conversations.splice(idx, 1);
+            conversations.unshift({ ...conv, otherUser: { ...conv.otherUser, fullName: "BoltDown support" } });
+          }
+        }
+      }
       res.json(conversations);
     } catch (error) {
       next(error);
@@ -74,27 +130,34 @@ export class MessageController {
 
   private async getConversation(req: Request, res: Response, next: NextFunction) {
     try {
-      const businessId = getBusinessIdFromRequest(req);
+      let businessId = getBusinessIdFromRequest(req);
       const userId = getUserIdFromRequest(req);
       const otherUserId = Number(req.params.userId);
-      
-      console.log('getConversation called with path:', req.path);
-      console.log('getConversation params:', req.params);
-      
+      const role = (req.session as any)?.role as string | undefined;
+      const supportBusinessId = req.query.businessId ? Number(req.query.businessId) : undefined;
+
       if (!Number.isFinite(otherUserId)) {
-        console.error('Invalid user ID in getConversation:', req.params.userId);
         return res.status(400).json({ message: "Invalid user ID" });
       }
-      
-      console.log('Fetching conversation:', { userId, otherUserId, businessId });
-      const messages = await messageRepository.getConversation(userId, otherUserId, businessId);
-      console.log(`Found ${messages.length} messages in conversation`);
-      
-      // Enrich messages with sender information
-      const { storage } = await import("../storage");
+
+      if (role === "master" && supportBusinessId) {
+        businessId = supportBusinessId;
+      } else if (role === "master") {
+        const otherUser = await storage.getUserById(otherUserId);
+        if (otherUser) businessId = otherUser.businessId;
+      }
+
+      let messagesList: Message[];
+      if (role === "master") {
+        messagesList = await storage.getSupportConversation(userId, otherUserId);
+      } else {
+        messagesList = await messageRepository.getConversation(userId, otherUserId, businessId);
+      }
+
       const enrichedMessages = await Promise.all(
-        messages.map(async (msg) => {
-          const sender = await storage.getUser(msg.senderId, businessId);
+        messagesList.map(async (msg) => {
+          let sender = await storage.getUser(msg.senderId, msg.businessId);
+          if (!sender) sender = await storage.getUserById(msg.senderId);
           return {
             ...msg,
             sender: sender ? {
@@ -105,7 +168,7 @@ export class MessageController {
           };
         })
       );
-      
+
       res.json(enrichedMessages);
     } catch (error) {
       console.error('Error in getConversation:', error);
@@ -144,59 +207,56 @@ export class MessageController {
 
   private async createMessage(req: Request, res: Response, next: NextFunction) {
     try {
-      const businessId = getBusinessIdFromRequest(req);
+      let businessId = getBusinessIdFromRequest(req);
       const senderId = getUserIdFromRequest(req);
-      
-      console.log('Creating message with data:', {
-        businessId,
-        senderId,
-        body: req.body,
-      });
-      
-      // Support both single recipient and group (threadId)
+      const role = (req.session as any)?.role as string | undefined;
+
       const recipientId = req.body.recipientId;
       const threadId = req.body.threadId;
-      const recipientIds = req.body.recipientIds; // For creating new group
-      
-      // Validate: either recipientId (direct) or threadId (group) or recipientIds (new group) must be provided
+      const recipientIds = req.body.recipientIds;
+
       if (!recipientId && !threadId && (!recipientIds || recipientIds.length === 0)) {
         return res.status(400).json({
           message: "Either recipientId (direct message), threadId (existing group), or recipientIds (new group) is required",
         });
       }
-      
-      // If creating a new group, create the thread first
+
       let finalThreadId = threadId;
       if (recipientIds && recipientIds.length > 0 && !threadId) {
-        const { storage } = await import("../storage");
-        // Create new thread
         const thread = await storage.createThread({
           businessId,
           name: req.body.groupName || null,
           createdBy: senderId,
         }, recipientIds);
         finalThreadId = thread.id;
-        console.log('Created new thread:', finalThreadId);
       }
-      
-      // Normalize attachedImageUrls - ensure it's an array or undefined
-      let attachedImageUrls: string[] | undefined = undefined;
-      if (req.body.attachedImageUrls) {
-        if (Array.isArray(req.body.attachedImageUrls) && req.body.attachedImageUrls.length > 0) {
-          attachedImageUrls = req.body.attachedImageUrls;
+
+      if (recipientId && !threadId && !recipientIds?.length) {
+        const masterUser = await storage.getUserByEmail(BOLTDOWN_SUPPORT_EMAIL);
+        const recipient = await storage.getUser(recipientId, businessId) ?? await storage.getUserById(recipientId);
+        if (!recipient) {
+          return res.status(404).json({ message: "Recipient not found" });
+        }
+        if (masterUser && recipient.id === masterUser.id) {
+          businessId = businessId;
+        } else if (role === "master" && recipient.role !== "master") {
+          businessId = recipient.businessId;
         }
       }
-      
-      // Validate content is provided (or at least one attachment)
+
+      let attachedImageUrls: string[] | undefined = undefined;
+      if (req.body.attachedImageUrls && Array.isArray(req.body.attachedImageUrls) && req.body.attachedImageUrls.length > 0) {
+        attachedImageUrls = req.body.attachedImageUrls;
+      }
+
       if (!req.body.content?.trim() && !attachedImageUrls && !req.body.attachedJobId && !req.body.attachedTaskId) {
         return res.status(400).json({
           message: "Message content or attachment is required",
         });
       }
-      
-      // Ensure content is not empty string
+
       const content = req.body.content?.trim() || '(No text message)';
-      
+
       let data;
       try {
         data = insertMessageSchema.parse({
@@ -206,9 +266,7 @@ export class MessageController {
           businessId,
           senderId,
         });
-        console.log('Parsed message data:', data);
       } catch (parseError) {
-        console.error('Schema validation error:', parseError);
         if (parseError instanceof z.ZodError) {
           return res.status(400).json({
             message: "Invalid message data",
@@ -217,19 +275,16 @@ export class MessageController {
         }
         throw parseError;
       }
-      
-      // Verify recipient (for direct) or thread participation (for group)
+
       try {
-        const { storage } = await import("../storage");
         if (recipientId) {
-          // Direct message - verify recipient
-          const recipient = await storage.getUser(recipientId, businessId);
+          const masterUser = await storage.getUserByEmail(BOLTDOWN_SUPPORT_EMAIL);
+          const recipient = await storage.getUser(recipientId, businessId) ?? (masterUser?.id === recipientId ? masterUser : await storage.getUserById(recipientId));
           if (!recipient) {
             return res.status(404).json({
               message: "Recipient not found or does not belong to your business",
             });
           }
-          console.log('Recipient verified:', recipientId);
         } else if (finalThreadId) {
           // Group message - verify user is participant
           const participants = await storage.getThreadParticipants(finalThreadId, businessId);
@@ -286,13 +341,31 @@ export class MessageController {
         });
       }
       
-      // Log activity (don't fail if this fails)
+      if (recipientId && !message.threadId) {
+        const masterUser = await storage.getUserByEmail(BOLTDOWN_SUPPORT_EMAIL);
+        if (masterUser && message.recipientId === masterUser.id) {
+          const sender = await storage.getUserById(senderId);
+          try {
+            await sendSupportMessageNotificationEmail({
+              to: BOLTDOWN_SUPPORT_EMAIL,
+              senderName: sender?.fullName ?? "Unknown",
+              senderEmail: sender?.email ?? "N/A",
+              senderBusinessId: message.businessId,
+              content: message.content,
+              sentAt: message.createdAt,
+            });
+          } catch (emailErr) {
+            console.error("Failed to send support notification email:", emailErr);
+          }
+        }
+      }
+
       try {
         const activityDescription = message.threadId 
           ? `Sent group message to thread ${message.threadId}`
           : `Sent message to user ${message.recipientId}`;
         await logActivity({
-          businessId,
+          businessId: message.businessId,
           userId: senderId,
           activityType: "message_sent",
           description: activityDescription,
@@ -417,14 +490,23 @@ export class MessageController {
 
   private async markConversationAsRead(req: Request, res: Response, next: NextFunction) {
     try {
-      const businessId = getBusinessIdFromRequest(req);
+      let businessId = getBusinessIdFromRequest(req);
       const userId = getUserIdFromRequest(req);
       const otherUserId = Number(req.params.userId);
-      
+      const role = (req.session as any)?.role as string | undefined;
+      const supportBusinessId = req.query.businessId ? Number(req.query.businessId) : undefined;
+
       if (!Number.isFinite(otherUserId)) {
         return res.status(400).json({ message: "Invalid user ID" });
       }
-      
+
+      if (role === "master" && supportBusinessId) {
+        businessId = supportBusinessId;
+      } else if (role === "master") {
+        const otherUser = await storage.getUserById(otherUserId);
+        if (otherUser) businessId = otherUser.businessId;
+      }
+
       const count = await messageRepository.markConversationAsRead(userId, otherUserId, businessId);
       res.json({ markedAsRead: count });
     } catch (error) {

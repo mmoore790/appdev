@@ -236,6 +236,70 @@ export async function sendEmail(apiKey: string, params: any): Promise<boolean> {
   return false;
 }
 
+export async function sendSupportMessageNotificationEmail(params: {
+  to: string;
+  senderName: string;
+  senderEmail: string;
+  senderBusinessId: number;
+  content: string;
+  sentAt: string;
+}): Promise<boolean> {
+  try {
+    const emailService = new EmailService();
+    const fromAddress = emailService.getFromAddress();
+    const subject = "BoltDown support: New message from " + params.senderName;
+    const formattedDate = format(new Date(params.sentAt), "PPpp");
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #22c55e; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
+    .detail { margin: 8px 0; }
+    .label { font-weight: 600; color: #6b7280; }
+    .message-box { background: white; padding: 16px; border-radius: 8px; margin-top: 12px; border-left: 4px solid #22c55e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>BoltDown Support - New Message</h1>
+    </div>
+    <div class="content">
+      <p>A user has sent a message via the BoltDown support chat.</p>
+      <div class="detail"><span class="label">From:</span> ${params.senderName}</div>
+      <div class="detail"><span class="label">Email:</span> ${params.senderEmail}</div>
+      <div class="detail"><span class="label">Business ID:</span> ${params.senderBusinessId}</div>
+      <div class="detail"><span class="label">Sent:</span> ${formattedDate}</div>
+      <div class="message-box">
+        <p class="label" style="margin-bottom: 8px;">Message:</p>
+        <p style="white-space: pre-wrap; margin: 0;">${params.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+      </div>
+      <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">Log in to BoltDown to view and respond to this message.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+    const text = `BoltDown Support - New Message\n\nFrom: ${params.senderName}\nEmail: ${params.senderEmail}\nBusiness ID: ${params.senderBusinessId}\nSent: ${formattedDate}\n\nMessage:\n${params.content}`;
+    await emailService.sendGenericEmail({
+      from: fromAddress,
+      to: params.to,
+      subject,
+      text,
+      html,
+    });
+    return true;
+  } catch (error) {
+    console.error("sendSupportMessageNotificationEmail error:", error);
+    return false;
+  }
+}
+
 export async function sendRegistrationApprovalEmail(to: string, fullName: string, username: string): Promise<boolean> {
   // This function is not implemented yet but exported for compatibility
   console.log('sendRegistrationApprovalEmail called', { to, fullName, username });

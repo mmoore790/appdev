@@ -41,6 +41,7 @@ interface Business {
   address?: string;
   subscriptionTier?: string | null;
   userLimit?: number | null;
+  textCredits?: number;
   isActive: boolean;
   createdAt: string;
   userCount?: number;
@@ -120,6 +121,7 @@ export default function MasterDashboard() {
     address: "",
     subscriptionTier: "",
     userLimit: "",
+    textCredits: "",
   });
 
   const [userForm, setUserForm] = useState({
@@ -230,7 +232,7 @@ export default function MasterDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/master/analytics"] });
       setBusinessDialogOpen(false);
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "", textCredits: "" });
       toast({
         title: "Success",
         description: "Business created successfully",
@@ -256,7 +258,7 @@ export default function MasterDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/master/analytics"] });
       setBusinessDialogOpen(false);
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "", textCredits: "" });
       toast({
         title: "Success",
         description: "Business updated successfully",
@@ -434,10 +436,11 @@ export default function MasterDashboard() {
         address: business.address || "",
         subscriptionTier: business.subscriptionTier ?? "",
         userLimit: business.userLimit != null ? String(business.userLimit) : "",
+        textCredits: (business.textCredits ?? 0).toString(),
       });
     } else {
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "", textCredits: "" });
     }
     setBusinessDialogOpen(true);
   };
@@ -509,6 +512,16 @@ export default function MasterDashboard() {
       });
       return;
     }
+    // Parse textCredits (default 0 if empty)
+    const textCreditsNum = businessForm.textCredits.trim() === "" ? 0 : parseInt(businessForm.textCredits.trim(), 10);
+    if (businessForm.textCredits.trim() !== "" && (isNaN(textCreditsNum) || textCreditsNum < 0)) {
+      toast({
+        title: "Validation Error",
+        description: "Text credits must be a non-negative number",
+        variant: "destructive",
+      });
+      return;
+    }
     const cleanedData = {
       name: businessForm.name.trim(),
       email: businessForm.email.trim() || undefined,
@@ -516,6 +529,7 @@ export default function MasterDashboard() {
       address: businessForm.address.trim() || undefined,
       subscriptionTier: businessForm.subscriptionTier.trim() || undefined,
       userLimit: userLimitNum,
+      textCredits: textCreditsNum,
     };
 
     if (editingBusiness) {
@@ -1311,6 +1325,18 @@ export default function MasterDashboard() {
                 placeholder="e.g. 5"
               />
               <p className="text-xs text-muted-foreground">Maximum number of users allowed on this account. Leave blank for no limit.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="textCredits">Text Credits</Label>
+              <Input
+                id="textCredits"
+                type="number"
+                min={0}
+                value={businessForm.textCredits}
+                onChange={(e) => setBusinessForm({ ...businessForm, textCredits: e.target.value })}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">Number of text/SMS credits allocated. Default is 0. Optional.</p>
             </div>
           </div>
           <DialogFooter>

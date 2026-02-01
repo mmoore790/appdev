@@ -28,6 +28,7 @@ type Business = {
   hourlyLabourFee?: number | null; // Stored in pence (e.g., 5000 = £50.00)
   subscriptionTier?: string | null;
   userLimit?: number | null;
+  textCredits?: number;
 };
 
 export default function Settings() {
@@ -380,9 +381,15 @@ export default function Settings() {
                                 {companyInfo?.userLimit != null ? companyInfo.userLimit : "—"}
                               </p>
                             </div>
+                            <div className="space-y-1">
+                              <Label className="text-muted-foreground">Text credits</Label>
+                              <p className="text-base font-medium">
+                                {companyInfo?.textCredits != null ? companyInfo.textCredits : 0}
+                              </p>
+                            </div>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Subscription and user limit are set when your account is created. Contact your administrator to change them.
+                            Subscription, user limit, and text credits are set when your account is created. Contact your administrator to change them.
                           </p>
                         </div>
                       </AccordionContent>

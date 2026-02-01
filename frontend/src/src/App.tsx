@@ -174,7 +174,7 @@ function Router() {
         {() => <ProtectedRoute component={CalendarPage} allowedRoles={operationalRoles} />}
       </Route>
       <Route path="/messages">
-        {() => <ProtectedRoute component={Messages} allowedRoles={operationalRoles} />}
+        {() => <ProtectedRoute component={Messages} allowedRoles={["master", ...operationalRoles]} />}
       </Route>
       <Route path="/">
         {() => <ProtectedRoute component={DefaultLanding} />}
