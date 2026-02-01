@@ -270,6 +270,10 @@ export function PrintJobSheet({ jobId, jobData }: PrintJobSheetProps) {
                   <span style={{ marginLeft: "6px", color: "#000" }}>{jobDetails.customerName || "N/A"}</span>
                 </div>
                 <div>
+                  <span style={{ fontWeight: "600", color: "#000" }}>Customer Phone:</span>
+                  <span style={{ marginLeft: "6px", color: "#000" }}>{jobDetails.customerPhone || "N/A"}</span>
+                </div>
+                <div>
                   <span style={{ fontWeight: "600", color: "#000" }}>Assigned To:</span>
                   <span style={{ marginLeft: "6px", color: "#000" }}>
                     {jobDetails.assignedToName || getUserName(jobDetails.assignedTo) || "N/A"}

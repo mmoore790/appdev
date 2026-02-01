@@ -2,9 +2,12 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,7 +48,9 @@ import {
   ArrowUp,
   ArrowDown,
   Filter,
-  X
+  X,
+  MoreVertical,
+  PackageOpen,
 } from "lucide-react";
 import {
   Pagination,
@@ -54,8 +59,15 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-  PaginationEllipsis,
 } from "@/components/ui/pagination";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, isAfter, subDays, startOfDay, endOfDay } from "date-fns";
 import { OrderForm } from "@/components/order-form";
 import { OrderDetailView } from "@/components/order-detail-view";
@@ -458,14 +470,14 @@ export default function Orders() {
   // Get status badge styling
   const getStatusBadge = (order: Order) => {
     const statusConfig: Record<string, { label: string; className: string }> = {
-      not_ordered: { label: "Not Ordered", className: "bg-gray-100 text-gray-800" },
-      ordered: { label: "Ordered", className: "bg-blue-100 text-blue-800" },
-      arrived: { label: "Arrived", className: "bg-green-100 text-green-800" },
-      completed: { label: "Completed", className: "bg-green-200 text-green-900" },
+      not_ordered: { label: "Not ordered", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" },
+      ordered: { label: "Ordered", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
+      arrived: { label: "Arrived", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400" },
+      completed: { label: "Completed", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 font-medium" },
     };
 
-    const config = statusConfig[order.status] || { label: order.status, className: "bg-gray-100 text-gray-800" };
-    return <Badge className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[order.status] || { label: order.status, className: "bg-muted text-muted-foreground" };
+    return <Badge variant="secondary" className={cn("font-normal", config.className)}>{config.label}</Badge>;
   };
 
   // Handle status update
@@ -501,87 +513,82 @@ export default function Orders() {
     }
   };
 
+  const openCount = orders.filter(o => o.status !== ORDER_STATUSES.COMPLETED).length;
+  const completedCount = orders.filter(o => o.status === ORDER_STATUSES.COMPLETED).length;
+
   return (
-    <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Order Management
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage orders for any type of item</p>
-        </div>
-        <div className="flex gap-2">
+    <div className="container mx-auto py-4 sm:py-6 px-3 sm:px-4 max-w-[1920px] space-y-6">
+      <PageHeader
+        title="Order Management"
+        description="Track and manage parts and supply orders for your workshop."
+        icon={<Package className="h-6 w-6" />}
+        actions={
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-9 bg-green-700 hover:bg-green-800">
+              <Button className="bg-green-700 hover:bg-green-800 shadow-sm">
                 <Plus className="h-4 w-4 mr-2" />
                 New Order
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Order</DialogTitle>
-              <DialogDescription>
-                Create a new order for any type of item. All details will be tracked automatically.
-              </DialogDescription>
-            </DialogHeader>
-            <OrderForm
-              onSuccess={() => {
-                setCreateDialogOpen(false);
-                setCurrentPage(1);
-                queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-              }}
-              onCancel={() => setCreateDialogOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
-        </div>
-      </div>
+            <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Order</DialogTitle>
+                <DialogDescription>
+                  Create a new order for any type of item. All details will be tracked automatically.
+                </DialogDescription>
+              </DialogHeader>
+              <OrderForm
+                onSuccess={() => {
+                  setCreateDialogOpen(false);
+                  setCurrentPage(1);
+                  queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                }}
+                onCancel={() => setCreateDialogOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
-      {/* Tabs for Open/Completed Orders */}
-      <Tabs value={activeTab} onValueChange={(value) => {
-        setActiveTab(value as "open" | "completed");
-        setCurrentPage(1);
-      }}>
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="open">
-            Open Orders
-            {orders.filter(o => o.status !== ORDER_STATUSES.COMPLETED).length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {orders.filter(o => o.status !== ORDER_STATUSES.COMPLETED).length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed Orders
-            {orders.filter(o => o.status === ORDER_STATUSES.COMPLETED).length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {orders.filter(o => o.status === ORDER_STATUSES.COMPLETED).length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {/* Search and Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            {/* Main filter row */}
-            <div className="flex gap-4 flex-wrap">
-              <div className="flex-1 min-w-[250px]">
+      {/* Tabs + Filters toolbar */}
+      <Card className="rounded-xl border border-border/80 shadow-sm overflow-hidden">
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value as "open" | "completed");
+          setCurrentPage(1);
+        }}>
+          <div className="px-4 pt-4 pb-2 sm:px-5">
+            <TabsList className="grid w-full max-w-sm grid-cols-2 h-10 bg-muted/60">
+              <TabsTrigger value="open" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Open
+                {openCount > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs font-medium">
+                    {openCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="completed" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Completed
+                {completedCount > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs font-medium">
+                    {completedCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <CardContent className="pt-2 pb-4 sm:px-5">
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4 flex-wrap">
+              <div className="flex-1 min-w-[200px] max-w-md">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-4 w-4" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
-                    placeholder="Search by order number, customer, supplier..."
+                    placeholder="Search orders, customer, supplier..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="pl-10"
+                    className="pl-9 h-9 bg-muted/30 border-border/80 focus:bg-background"
                   />
                 </div>
               </div>
@@ -589,12 +596,12 @@ export default function Orders() {
                 setStatusFilter(value);
                 setCurrentPage(1);
               }}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
+                <SelectTrigger className="w-[160px] h-9 border-border/80">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value={ORDER_STATUSES.NOT_ORDERED}>Not Ordered</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value={ORDER_STATUSES.NOT_ORDERED}>Not ordered</SelectItem>
                   <SelectItem value={ORDER_STATUSES.ORDERED}>Ordered</SelectItem>
                   <SelectItem value={ORDER_STATUSES.ARRIVED}>Arrived</SelectItem>
                   <SelectItem value={ORDER_STATUSES.COMPLETED}>Completed</SelectItem>
@@ -602,91 +609,110 @@ export default function Orders() {
               </Select>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="flex items-center gap-2"
+                className="h-9 gap-1.5 border-border/80"
               >
                 <Filter className="h-4 w-4" />
-                Advanced Filters
+                Date range
                 {hasActiveFilters && (
-                  <Badge variant="secondary" className="ml-1">
-                    Active
-                  </Badge>
+                  <Badge variant="secondary" className="ml-0.5 h-5 px-1.5 text-xs">On</Badge>
                 )}
               </Button>
               {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="text-neutral-600"
-                >
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4 mr-1" />
-                  Clear All
+                  Clear
                 </Button>
               )}
             </div>
-
-            {/* Advanced filters */}
             {showAdvancedFilters && (
-              <div className="border-t pt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Date range filter */}
-                  <div>
-                    <label className="text-sm font-medium text-neutral-700 mb-2 block">
-                      Order Date From
-                    </label>
-                    <Input
-                      type="date"
-                      value={dateRangeFilter.from ? format(dateRangeFilter.from, 'yyyy-MM-dd') : ''}
-                      onChange={(e) => {
-                        const date = e.target.value ? new Date(e.target.value) : null;
-                        setDateRangeFilter(prev => ({ ...prev, from: date }));
-                        setCurrentPage(1);
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-neutral-700 mb-2 block">
-                      Order Date To
-                    </label>
-                    <Input
-                      type="date"
-                      value={dateRangeFilter.to ? format(dateRangeFilter.to, 'yyyy-MM-dd') : ''}
-                      onChange={(e) => {
-                        const date = e.target.value ? new Date(e.target.value) : null;
-                        setDateRangeFilter(prev => ({ ...prev, to: date }));
-                        setCurrentPage(1);
-                      }}
-                    />
-                  </div>
+              <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-muted-foreground">From</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={dateRangeFilter.from ? format(dateRangeFilter.from, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setDateRangeFilter(prev => ({ ...prev, from: date }));
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-muted-foreground">To</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={dateRangeFilter.to ? format(dateRangeFilter.to, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setDateRangeFilter(prev => ({ ...prev, to: date }));
+                      setCurrentPage(1);
+                    }}
+                  />
                 </div>
               </div>
             )}
-          </div>
-        </CardContent>
+          </CardContent>
+        </Tabs>
       </Card>
 
       {/* Orders Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Orders
-            {pagination ? ` (${pagination.totalCount} total, showing ${filteredOrders.length} on this page)` : ` (${filteredOrders.length})`}
-          </CardTitle>
+      <Card className="rounded-xl border border-border/80 shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b bg-muted/20">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle className="text-lg font-semibold">
+              Orders
+              {pagination && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {filteredOrders.length} shown
+                  {pagination.totalCount !== filteredOrders.length && ` of ${pagination.totalCount}`}
+                </span>
+              )}
+            </CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="text-center py-8">Loading orders...</div>
+            <div className="p-6 space-y-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex gap-4 items-center">
+                  <Skeleton className="h-10 w-24 rounded" />
+                  <Skeleton className="h-10 flex-1 max-w-[200px] rounded" />
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <Skeleton className="h-10 w-28 rounded" />
+                  <Skeleton className="h-10 w-16 rounded" />
+                </div>
+              ))}
+            </div>
           ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-8 text-neutral-500">
-              No orders found. Create your first order to get started.
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="rounded-full bg-muted/60 p-4 mb-4">
+                <PackageOpen className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <p className="font-medium text-foreground">No orders found</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                {hasActiveFilters ? "Try clearing filters or create a new order." : "Create your first order to get started."}
+              </p>
+              {hasActiveFilters ? (
+                <Button variant="outline" size="sm" className="mt-4" onClick={clearAllFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button className="mt-4 bg-green-700 hover:bg-green-800" onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Order
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
+                <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur supports-[backdrop-filter]:bg-muted/80 [&_tr]:border-b">
+                  <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
                     <TableHead>
                       <button
                         onClick={() => handleSort('orderNumber')}
@@ -742,12 +768,12 @@ export default function Orders() {
                         {getSortIcon('totalCost')}
                       </button>
                     </TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[120px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => (
-                    <TableRow key={order.id}>
+                    <TableRow key={order.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-mono font-semibold">{order.orderNumber}</TableCell>
                       <TableCell>
                         <div>
@@ -762,14 +788,15 @@ export default function Orders() {
                       </TableCell>
                       <TableCell>
                         <Button
-                          variant="ghost"
+                          variant="link"
                           size="sm"
+                          className="h-auto p-0 text-primary font-medium"
                           onClick={() => {
                             setSelectedOrder(order);
                             setDetailsDialogOpen(true);
                           }}
                         >
-                          View Items
+                          View items
                         </Button>
                       </TableCell>
                       <TableCell>{getStatusBadge(order)}</TableCell>
@@ -786,59 +813,75 @@ export default function Orders() {
                           ? `£${order.actualTotalCost.toFixed(2)}`
                           : "-"}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2 items-center">
-                          {order.status === ORDER_STATUSES.ARRIVED && (
-                            <Button
-                              className="bg-green-600 hover:bg-green-700 text-white font-semibold"
-                              size="sm"
-                              onClick={() => handleMarkAsComplete(order)}
-                              title="Mark order as completed"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Mark Complete
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setDetailsDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              statusForm.reset({ status: order.status as any });
-                              setStatusDialogOpen(true);
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {order.status === ORDER_STATUSES.ARRIVED && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleNotifyCustomer(order, 'arrived')}
-                              title="Notify customer order is ready"
-                            >
-                              <Bell className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteOrder(order)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                      <TableCell className="text-right">
+                        <TooltipProvider delayDuration={300}>
+                          <div className="flex gap-1 items-center justify-end">
+                            {order.status === ORDER_STATUSES.ARRIVED && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    size="sm"
+                                    onClick={() => handleMarkAsComplete(order)}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Complete
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Mark order as completed</TooltipContent>
+                              </Tooltip>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    setSelectedOrder(order);
+                                    setDetailsDialogOpen(true);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>View details</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedOrder(order);
+                                    statusForm.reset({ status: order.status as any });
+                                    setStatusDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Update status
+                                </DropdownMenuItem>
+                                {order.status === ORDER_STATUSES.ARRIVED && (
+                                  <DropdownMenuItem onClick={() => handleNotifyCustomer(order, 'arrived')}>
+                                    <Bell className="h-4 w-4 mr-2" />
+                                    Notify customer
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteOrder(order)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete order
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -847,71 +890,64 @@ export default function Orders() {
             </div>
           )}
         </CardContent>
+        {pagination && pagination.totalPages > 1 && (
+          <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t bg-muted/20 px-4 py-3 sm:px-6">
+            <p className="text-sm text-muted-foreground order-2 sm:order-1">
+              Showing {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, pagination.totalCount)} of {pagination.totalCount}
+            </p>
+            <Pagination className="order-1 sm:order-2">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    className={!pagination.hasPreviousPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pagination.hasPreviousPage) handlePageChange(currentPage - 1);
+                    }}
+                  />
+                </PaginationItem>
+                {Array.from({ length: Math.min(7, pagination.totalPages) }, (_, i) => {
+                  let pageNumber: number;
+                  if (pagination!.totalPages <= 7) {
+                    pageNumber = i + 1;
+                  } else if (currentPage <= 4) {
+                    pageNumber = i + 1;
+                  } else if (currentPage >= pagination!.totalPages - 3) {
+                    pageNumber = pagination!.totalPages - 6 + i;
+                  } else {
+                    pageNumber = currentPage - 3 + i;
+                  }
+                  return (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        isActive={currentPage === pageNumber}
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pageNumber);
+                        }}
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+                <PaginationItem>
+                  <PaginationNext
+                    className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pagination.hasNextPage) handlePageChange(currentPage + 1);
+                    }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </CardFooter>
+        )}
       </Card>
-
-      {/* Pagination */}
-      {pagination && pagination.totalPages > 1 && (
-        <div className="mt-4">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  className={!pagination.hasPreviousPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (pagination.hasPreviousPage) {
-                      handlePageChange(currentPage - 1);
-                    }
-                  }}
-                />
-              </PaginationItem>
-              {Array.from({ length: Math.min(7, pagination.totalPages) }, (_, i) => {
-                let pageNumber: number;
-                if (pagination.totalPages <= 7) {
-                  pageNumber = i + 1;
-                } else if (currentPage <= 4) {
-                  pageNumber = i + 1;
-                } else if (currentPage >= pagination.totalPages - 3) {
-                  pageNumber = pagination.totalPages - 6 + i;
-                } else {
-                  pageNumber = currentPage - 3 + i;
-                }
-                
-                return (
-                  <PaginationItem key={pageNumber}>
-                    <PaginationLink
-                      isActive={currentPage === pageNumber}
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handlePageChange(pageNumber);
-                      }}
-                    >
-                      {pageNumber}
-                    </PaginationLink>
-                  </PaginationItem>
-                );
-              })}
-              <PaginationItem>
-                <PaginationNext
-                  className={!pagination.hasNextPage ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (pagination.hasNextPage) {
-                      handlePageChange(currentPage + 1);
-                    }
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-          <div className="text-center text-sm text-muted-foreground mt-2">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, pagination.totalCount)} of {pagination.totalCount} orders
-          </div>
-        </div>
-      )}
 
       {/* Status Update Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={(open) => {

@@ -49,6 +49,7 @@ interface Job {
   description: string;
   equipmentDescription?: string | null;
   customerName?: string | null;
+  customerPhone?: string | null;
   createdAt: string;
   updatedAt?: string | null;
 }
@@ -528,6 +529,17 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   const totalLabourTime = labourEntries.reduce((total: number, entry: LabourEntry) => total + (entry.timeSpent || 0), 0) / 60;
   const totalPartsUsed = partsUsed.length;
   const lastUpdateTime = jobNote?.updatedAt || jobNote?.createdAt || job?.updatedAt;
+
+  // Parts that have been entered but have no price set (for invoicing warning)
+  const partsWithoutPrice = useMemo(() => {
+    return partsUsed.filter((p: PartUsed) => {
+      const hasExVat = p.costExcludingVat != null && p.costExcludingVat > 0;
+      const hasIncVat = p.costIncludingVat != null && p.costIncludingVat > 0;
+      const hasCost = p.cost != null && p.cost > 0;
+      return !hasExVat && !hasIncVat && !hasCost;
+    });
+  }, [partsUsed]);
+  const hasPartsWithoutPrice = partsWithoutPrice.length > 0;
   
   // Calculate labour charge: total hours * hourly rate (excluding VAT)
   const hourlyRate = business?.hourlyLabourFee ? business.hourlyLabourFee / 100 : null; // Convert from pence to pounds
@@ -610,6 +622,10 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             <span className="ml-2 text-gray-900">{job?.customerName || "—"}</span>
           </div>
           <div>
+            <span className="text-gray-500 font-medium">Customer Phone:</span>
+            <span className="ml-2 text-gray-900">{job?.customerPhone || "—"}</span>
+          </div>
+          <div>
             <span className="text-gray-500 font-medium">Equipment:</span>
             <span className="ml-2 text-gray-900">{job?.equipmentDescription || job?.description || "—"}</span>
           </div>
@@ -659,6 +675,13 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             <span className="font-semibold text-gray-900">{attachments.length}</span>
           </div>
         </div>
+        {hasPartsWithoutPrice && (
+          <div className="mt-3 p-2.5 sm:p-3 bg-amber-50 border border-amber-200 rounded-md">
+            <p className="text-xs sm:text-sm text-amber-800 font-medium">
+              ⚠️ Prices have not been entered for {partsWithoutPrice.length} part{partsWithoutPrice.length !== 1 ? "s" : ""}. Please check when invoicing.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Document Body */}

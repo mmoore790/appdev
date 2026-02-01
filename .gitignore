@@ -27,7 +27,13 @@ npm-debug.log*
 .config
 .local
 
+# IDE / tooling
+.agents/
+.cursor/
+.github/
+
 # Other
 /tmp
 cookies.txt
+database_dump.sql
 cookies_new.txt

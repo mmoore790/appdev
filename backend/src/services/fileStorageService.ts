@@ -1,10 +1,5 @@
 import { randomUUID } from "crypto";
-
-export interface FileStorageConfig {
-  supabaseUrl: string;
-  supabaseKey: string;
-  bucket: string;
-}
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 /**
  * Get file extension from content type or filename
@@ -37,88 +32,57 @@ export async function uploadPublicFile(
   options?: { businessId?: number; folder?: string; filename?: string }
 ): Promise<string> {
   const {
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    SUPABASE_ANON_KEY,
-    SUPABASE_STORAGE_BUCKET,
+    R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY,
+    R2_BUCKET_NAME,
+    R2_ENDPOINT,
+    R2_PUBLIC_URL,
   } = process.env;
 
-  // Use service role key if available (for admin operations), otherwise use anon key
-  const supabaseKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
-
-  if (!SUPABASE_URL || !supabaseKey || !SUPABASE_STORAGE_BUCKET) {
+  if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_ENDPOINT || !R2_PUBLIC_URL) {
     throw new Error(
-      "Supabase storage environment variables are missing. Please set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY), and SUPABASE_STORAGE_BUCKET."
+      "R2 storage environment variables are missing. Please set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_ENDPOINT, and R2_PUBLIC_URL."
     );
   }
-
-  const config: FileStorageConfig = {
-    supabaseUrl: SUPABASE_URL.replace(/\/$/, ""), // Remove trailing slash
-    supabaseKey,
-    bucket: SUPABASE_STORAGE_BUCKET,
-  };
 
   // Generate file path with extension
   const folder = options?.folder || "uploads";
   const businessPart = options?.businessId ? `b${options.businessId}/` : "";
   const extension = getFileExtension(contentType, options?.filename);
   const fileName = `${randomUUID()}${extension}`;
-  const filePath = `${folder}/${businessPart}${fileName}`;
+  const key = `${folder}/${businessPart}${fileName}`;
 
-  // Construct the upload URL
-  const uploadUrl = `${config.supabaseUrl}/storage/v1/object/${config.bucket}/${filePath}`;
+  const s3Client = new S3Client({
+    region: "auto",
+    endpoint: R2_ENDPOINT.trim().replace(/\/$/, ""),
+    credentials: {
+      accessKeyId: R2_ACCESS_KEY_ID,
+      secretAccessKey: R2_SECRET_ACCESS_KEY,
+    },
+  });
 
   try {
-    console.log(`Uploading file to Supabase Storage: ${uploadUrl}`);
+    console.log(`Uploading file to R2: ${R2_BUCKET_NAME}/${key}`);
     console.log(`File size: ${fileBuffer.length} bytes, Content-Type: ${contentType}`);
 
-    const response = await fetch(uploadUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${config.supabaseKey}`,
-        "Content-Type": contentType,
-        "x-upsert": "false", // Don't overwrite existing files
-      },
-      body: fileBuffer,
-    });
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: contentType,
+      })
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Failed to upload file: ${response.status} ${response.statusText}`;
-      
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.message || errorJson.error || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
-      }
-
-      console.error("Supabase Storage upload error:", {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorMessage,
-        bucket: config.bucket,
-        filePath,
-        url: uploadUrl,
-      });
-
-      throw new Error(errorMessage);
-    }
-
-    // Construct public URL
-    const publicUrl = `${config.supabaseUrl}/storage/v1/object/public/${config.bucket}/${filePath}`;
-    
+    const publicUrl = `${R2_PUBLIC_URL.trim().replace(/\/$/, "")}/${key}`;
     console.log(`File uploaded successfully: ${publicUrl}`);
     return publicUrl;
   } catch (error: any) {
-    console.error("File upload error:", {
+    console.error("R2 upload error:", {
       message: error.message,
-      bucket: config.bucket,
-      filePath,
-      url: uploadUrl,
+      bucket: R2_BUCKET_NAME,
+      key,
     });
     throw new Error(`Failed to upload file: ${error.message || "Unknown error"}`);
   }
 }
-
-
