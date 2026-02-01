@@ -2,19 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import {
-  Phone,
-  Mail,
-  MapPin,
   Package,
-  Calendar,
-  DollarSign,
   Truck,
   User,
   History,
-  Bell,
-  Send,
   FileText,
   CheckCircle,
   Edit,
@@ -38,9 +31,6 @@ interface Order {
   supplierPhone?: string;
   expectedLeadTime?: number;
   trackingNumber?: string;
-  estimatedTotalCost?: number;
-  actualTotalCost?: number;
-  depositAmount?: number;
   notes?: string;
   internalNotes?: string;
   notifyOnOrderPlaced: boolean;
@@ -71,8 +61,8 @@ interface OrderDetailViewProps {
   items: OrderItem[];
   onClose: () => void;
   onViewHistory: () => void;
-  onNotifyCustomer: (type: 'order_placed' | 'arrived') => void;
   onMarkAsComplete?: () => void;
+  onMarkAsOrdered?: () => void;
   onEdit?: () => void;
 }
 
@@ -93,10 +83,13 @@ export function OrderDetailView({
   items,
   onClose,
   onViewHistory,
-  onNotifyCustomer,
   onMarkAsComplete,
+  onMarkAsOrdered,
   onEdit,
 }: OrderDetailViewProps) {
+  const daysSinceOrdered = order.status !== "not_ordered" && order.orderDate
+    ? differenceInDays(new Date(), new Date(order.orderDate))
+    : null;
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -136,139 +129,98 @@ export function OrderDetailView({
               <div className="text-sm text-neutral-600">Name</div>
               <div className="font-medium">{order.customerName}</div>
             </div>
-            {order.customerPhone && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-neutral-400" />
-                <span>{order.customerPhone}</span>
-              </div>
-            )}
-            {order.customerEmail && (
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-neutral-400" />
-                <span>{order.customerEmail}</span>
-              </div>
-            )}
-            {order.customerAddress && (
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-neutral-400 mt-1" />
-                <span className="text-sm">{order.customerAddress}</span>
-              </div>
-            )}
-            {order.customerNotes && (
-              <div>
-                <div className="text-sm text-neutral-600 mb-1">Notes</div>
-                <div className="text-sm">{order.customerNotes}</div>
-              </div>
-            )}
+            <div>
+              <div className="text-sm text-neutral-600">Phone</div>
+              <div className="font-medium">{order.customerPhone || "—"}</div>
+            </div>
+            <div>
+              <div className="text-sm text-neutral-600">Email</div>
+              <div className="font-medium">{order.customerEmail || "—"}</div>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Order Details */}
+        {/* Delivery Information */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Order Details
+              <Truck className="h-5 w-5" />
+              Delivery Information
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Status / Days since ordered - for orders not yet arrived */}
+            {order.status !== "arrived" && order.status !== "completed" && (
+              <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                {order.status === "not_ordered" ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      Not ordered yet — would you like to mark this order as ordered?
+                    </p>
+                    {onMarkAsOrdered && (
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 shrink-0"
+                        onClick={onMarkAsOrdered}
+                      >
+                        Mark as Ordered
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Days since ordered: </span>
+                    <span className="font-semibold">
+                      {daysSinceOrdered === 0
+                        ? "Today"
+                        : daysSinceOrdered === 1
+                        ? "1 day"
+                        : `${daysSinceOrdered} days`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-sm text-neutral-600">Supplier Name</div>
+                <div className="font-medium">{order.supplierName || "—"}</div>
+              </div>
               <div>
                 <div className="text-sm text-neutral-600">Order Date</div>
                 <div className="font-medium">
                   {format(new Date(order.orderDate), "MMM d, yyyy")}
                 </div>
               </div>
-              {order.expectedDeliveryDate && (
-                <div>
-                  <div className="text-sm text-neutral-600">Expected Delivery</div>
-                  <div className="font-medium">
-                    {format(new Date(order.expectedDeliveryDate), "MMM d, yyyy")}
-                  </div>
+              <div>
+                <div className="text-sm text-neutral-600">Expected Delivery</div>
+                <div className="font-medium">
+                  {order.expectedDeliveryDate
+                    ? format(new Date(order.expectedDeliveryDate), "MMM d, yyyy")
+                    : "—"}
                 </div>
-              )}
-            </div>
-            {order.actualDeliveryDate && (
+              </div>
               <div>
                 <div className="text-sm text-neutral-600">Actual Delivery</div>
                 <div className="font-medium">
-                  {format(new Date(order.actualDeliveryDate), "MMM d, yyyy")}
+                  {order.actualDeliveryDate
+                    ? format(new Date(order.actualDeliveryDate), "MMM d, yyyy")
+                    : "—"}
                 </div>
               </div>
-            )}
-            {order.trackingNumber && (
               <div>
-                <div className="text-sm text-neutral-600">Tracking Number</div>
-                <div className="font-medium font-mono">{order.trackingNumber}</div>
+                <div className="text-sm text-neutral-600">Expected Lead Time (Days)</div>
+                <div className="font-medium">{order.expectedLeadTime != null ? `${order.expectedLeadTime}` : "—"}</div>
               </div>
-            )}
-            {(order.estimatedTotalCost || order.actualTotalCost) && (
               <div>
-                <div className="text-sm text-neutral-600">Total Cost</div>
-                <div className="font-medium">
-                  {order.actualTotalCost
-                    ? `£${order.actualTotalCost.toFixed(2)}`
-                    : order.estimatedTotalCost
-                    ? `£${order.estimatedTotalCost.toFixed(2)} (estimated)`
-                    : "-"}
-                </div>
+                <div className="text-sm text-neutral-600">Order/Tracking Number</div>
+                <div className="font-medium font-mono">{order.trackingNumber || "—"}</div>
               </div>
-            )}
-            {order.depositAmount && (
-              <div>
-                <div className="text-sm text-neutral-600">Deposit</div>
-                <div className="font-medium">£{order.depositAmount.toFixed(2)}</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Supplier Information */}
-      {(order.supplierName || order.supplierContact || order.supplierEmail || order.supplierPhone) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              Supplier Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {order.supplierName && (
-              <div>
-                <div className="text-sm text-neutral-600">Supplier Name</div>
-                <div className="font-medium">{order.supplierName}</div>
-              </div>
-            )}
-            {order.supplierContact && (
-              <div>
-                <div className="text-sm text-neutral-600">Contact Person</div>
-                <div className="font-medium">{order.supplierContact}</div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              {order.supplierEmail && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-neutral-400" />
-                  <span className="text-sm">{order.supplierEmail}</span>
-                </div>
-              )}
-              {order.supplierPhone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-neutral-400" />
-                  <span className="text-sm">{order.supplierPhone}</span>
-                </div>
-              )}
             </div>
-            {order.expectedLeadTime && (
-              <div>
-                <div className="text-sm text-neutral-600">Expected Lead Time</div>
-                <div className="font-medium">{order.expectedLeadTime} days</div>
-              </div>
-            )}
           </CardContent>
         </Card>
-      )}
+
+      </div>
 
       {/* Order Items */}
       <Card>
@@ -283,7 +235,6 @@ export function OrderDetailView({
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="font-semibold">{item.itemName}</h4>
-                      <Badge variant="outline">{item.itemType}</Badge>
                       {item.itemCategory && (
                         <Badge variant="secondary">{item.itemCategory}</Badge>
                       )}
@@ -323,12 +274,6 @@ export function OrderDetailView({
                         </div>
                       )}
                     </div>
-                    {item.supplierName && (
-                      <div className="mt-2 text-sm">
-                        <span className="text-neutral-600">Supplier: </span>
-                        <span className="font-medium">{item.supplierName}</span>
-                      </div>
-                    )}
                     {item.notes && (
                       <div className="mt-2 text-sm text-neutral-600">{item.notes}</div>
                     )}
@@ -341,68 +286,17 @@ export function OrderDetailView({
       </Card>
 
       {/* Notes */}
-      {(order.notes || order.internalNotes) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Notes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {order.notes && (
-              <div>
-                <div className="text-sm font-semibold text-neutral-600 mb-1">Order Notes</div>
-                <div className="text-sm">{order.notes}</div>
-              </div>
-            )}
-            {order.internalNotes && (
-              <div>
-                <div className="text-sm font-semibold text-neutral-600 mb-1">Internal Notes (Staff Only)</div>
-                <div className="text-sm">{order.internalNotes}</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Notification Actions */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Customer Notifications
+            <FileText className="h-5 w-5" />
+            Notes
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onNotifyCustomer('order_placed')}
-              disabled={!order.customerEmail && !order.customerPhone}
-            >
-              <Send className="h-4 w-4 mr-2" />
-              Send Order Confirmation
-            </Button>
-            {order.status === 'arrived' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onNotifyCustomer('arrived')}
-                disabled={!order.customerEmail && !order.customerPhone}
-              >
-                <Bell className="h-4 w-4 mr-2" />
-                Notify Order Ready
-              </Button>
-            )}
-          </div>
-          <div className="mt-4 text-sm text-neutral-600">
-            <div>Notification Method: {order.notificationMethod}</div>
-            <div className="mt-2 space-y-1">
-              <div>✓ Notify on order placed: {order.notifyOnOrderPlaced ? "Yes" : "No"}</div>
-              <div>✓ Notify on arrival: {order.notifyOnArrival ? "Yes" : "No"}</div>
-            </div>
+        <CardContent className="space-y-4">
+          <div>
+            <div className="text-sm text-neutral-600 mb-1">Order Notes</div>
+            <div className="text-sm">{order.notes || "—"}</div>
           </div>
         </CardContent>
       </Card>

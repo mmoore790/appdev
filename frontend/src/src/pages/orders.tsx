@@ -14,7 +14,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
@@ -32,13 +31,11 @@ import {
   AlertCircle,
   Truck,
   Calendar,
-  DollarSign,
   User,
   History,
   Bell,
   PackageCheck,
   PackageX,
-  Eye,
   FileText,
   Edit,
   Trash2,
@@ -49,8 +46,8 @@ import {
   ArrowDown,
   Filter,
   X,
-  MoreVertical,
   PackageOpen,
+  ChevronRight,
 } from "lucide-react";
 import {
   Pagination,
@@ -60,15 +57,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { format, isAfter, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, isAfter, subDays, startOfDay, endOfDay, differenceInDays } from "date-fns";
 import { OrderForm } from "@/components/order-form";
 import { OrderDetailView } from "@/components/order-detail-view";
 import { OrderEditForm } from "@/components/order-edit-form";
@@ -102,9 +92,6 @@ interface Order {
   supplierPhone?: string;
   expectedLeadTime?: number;
   trackingNumber?: string;
-  estimatedTotalCost?: number;
-  actualTotalCost?: number;
-  depositAmount?: number;
   notes?: string;
   internalNotes?: string;
   notifyOnOrderPlaced: boolean;
@@ -118,6 +105,7 @@ interface Order {
   completedAt?: string;
   cancelledAt?: string;
   relatedJobId?: number;
+  items?: OrderItem[];
 }
 
 interface OrderItem {
@@ -144,7 +132,7 @@ const ORDER_STATUSES = {
   COMPLETED: 'completed',
 } as const;
 
-type SortField = 'orderNumber' | 'customerName' | 'orderDate' | 'expectedDeliveryDate' | 'totalCost' | 'status';
+type SortField = 'orderNumber' | 'customerName' | 'orderDate' | 'expectedDeliveryDate' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export default function Orders() {
@@ -176,7 +164,7 @@ export default function Orders() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 25;
 
-  // Fetch orders with pagination
+  // Fetch orders with pagination and optional search (searches order #, customer, supplier, item names)
   const { data: ordersResponse, isLoading } = useQuery<{
     data: Order[];
     pagination: {
@@ -188,17 +176,44 @@ export default function Orders() {
       hasPreviousPage: boolean;
     };
   }>({
-    queryKey: ["/api/orders", currentPage],
-    queryFn: () => apiRequest("GET", `/api/orders?page=${currentPage}&limit=${itemsPerPage}`),
+    queryKey: ["/api/orders", currentPage, searchQuery],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(currentPage), limit: String(itemsPerPage) });
+      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+      return apiRequest("GET", `/api/orders?${params.toString()}`);
+    },
   });
 
   const orders = ordersResponse?.data || [];
   const pagination = ordersResponse?.pagination;
 
+  // Fallback: fetch items in batch when list response doesn't include them
+  const orderIdsNeedingItems = useMemo(() => {
+    if (!orders.length) return [];
+    return orders.filter((o) => !o.items?.length).map((o) => o.id);
+  }, [orders]);
+
+  const { data: batchItems = {} } = useQuery<Record<number, OrderItem[]>>({
+    queryKey: ["/api/orders/batch-items", orderIdsNeedingItems.join(",")],
+    queryFn: () =>
+      orderIdsNeedingItems.length
+        ? apiRequest("GET", `/api/orders/batch-items?orderIds=${orderIdsNeedingItems.join(",")}`)
+        : Promise.resolve({}),
+    enabled: orderIdsNeedingItems.length > 0,
+  });
+
+  // Merge batch items into orders for display (use list items when present, otherwise batch-fetched)
+  const ordersWithItems = useMemo(() => {
+    return orders.map((order) => ({
+      ...order,
+      items: order.items?.length ? order.items : (batchItems[order.id] ?? []),
+    }));
+  }, [orders, batchItems]);
+
   // Fetch order items for selected order
   const { data: orderItems = [] } = useQuery<OrderItem[]>({
     queryKey: [`/api/orders/${selectedOrder?.id}/items`],
-    enabled: !!selectedOrder?.id && (detailsDialogOpen || historyDialogOpen),
+    enabled: !!selectedOrder?.id && (detailsDialogOpen || historyDialogOpen || editDialogOpen),
   });
 
   // Fetch order status history
@@ -256,40 +271,22 @@ export default function Orders() {
   const statusUpdateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: OrderStatusUpdateFormData }) =>
       apiRequest("POST", `/api/orders/${id}/status`, data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       setCurrentPage(1);
       setStatusDialogOpen(false);
+      const isArrived = variables.data.status === ORDER_STATUSES.ARRIVED;
       toast({
         title: "Success",
-        description: "Order status updated successfully",
+        description: isArrived
+          ? "Order marked as arrived. The customer will be sent an email to notify them their order has arrived."
+          : "Order status updated successfully",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to update order status",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Notify customer mutation
-  const notifyCustomerMutation = useMutation({
-    mutationFn: ({ id, type }: { id: number; type: string }) =>
-      apiRequest("POST", `/api/orders/${id}/notify`, { type }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      setCurrentPage(1);
-      toast({
-        title: "Success",
-        description: "Customer notification sent successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send notification",
         variant: "destructive",
       });
     },
@@ -312,6 +309,48 @@ export default function Orders() {
         description: error.message || "Failed to delete order",
         variant: "destructive",
       });
+    },
+  });
+
+  // Add order item mutation
+  const addOrderItemMutation = useMutation({
+    mutationFn: ({ orderId, data }: { orderId: number; data: any }) =>
+      apiRequest("POST", `/api/orders/${orderId}/items`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${variables.orderId}/items`] });
+      toast({ title: "Success", description: "Item added to order" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add item", variant: "destructive" });
+    },
+  });
+
+  // Update order item mutation
+  const updateOrderItemMutation = useMutation({
+    mutationFn: ({ orderId, itemId, data }: { orderId: number; itemId: number; data: any }) =>
+      apiRequest("PUT", `/api/orders/${orderId}/items/${itemId}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${variables.orderId}/items`] });
+      toast({ title: "Success", description: "Item updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update item", variant: "destructive" });
+    },
+  });
+
+  // Delete order item mutation
+  const deleteOrderItemMutation = useMutation({
+    mutationFn: ({ orderId, itemId }: { orderId: number; itemId: number }) =>
+      apiRequest("DELETE", `/api/orders/${orderId}/items/${itemId}`, {}),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${variables.orderId}/items`] });
+      toast({ title: "Success", description: "Item removed from order" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to remove item", variant: "destructive" });
     },
   });
 
@@ -350,9 +389,9 @@ export default function Orders() {
     },
   });
 
-  // Filter orders based on all filters
+  // Filter orders based on all filters (use ordersWithItems so items column displays correctly)
   const filteredOrders = useMemo(() => {
-    let filtered = orders.filter((order) => {
+    let filtered = ordersWithItems.filter((order) => {
       // Tab filter - separate open and completed orders
       const isCompleted = order.status === ORDER_STATUSES.COMPLETED;
       const matchesTab = activeTab === "completed" ? isCompleted : !isCompleted;
@@ -405,10 +444,6 @@ export default function Orders() {
           aValue = a.expectedDeliveryDate ? new Date(a.expectedDeliveryDate).getTime() : 0;
           bValue = b.expectedDeliveryDate ? new Date(b.expectedDeliveryDate).getTime() : 0;
           break;
-        case 'totalCost':
-          aValue = a.actualTotalCost || a.estimatedTotalCost || 0;
-          bValue = b.actualTotalCost || b.estimatedTotalCost || 0;
-          break;
         case 'status':
           aValue = a.status;
           bValue = b.status;
@@ -423,7 +458,7 @@ export default function Orders() {
     });
 
     return filtered;
-  }, [orders, searchQuery, statusFilter, dateRangeFilter, sortField, sortDirection, activeTab]);
+  }, [ordersWithItems, searchQuery, statusFilter, dateRangeFilter, sortField, sortDirection, activeTab]);
 
   // Handle sort
   const handleSort = (field: SortField) => {
@@ -468,28 +503,37 @@ export default function Orders() {
   }, [searchQuery, statusFilter, dateRangeFilter]);
 
   // Get status badge styling
-  const getStatusBadge = (order: Order) => {
-    const statusConfig: Record<string, { label: string; className: string }> = {
-      not_ordered: { label: "Not ordered", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" },
-      ordered: { label: "Ordered", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-      arrived: { label: "Arrived", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400" },
-      completed: { label: "Completed", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 font-medium" },
-    };
+  const statusConfig: Record<string, { label: string; className: string }> = {
+    not_ordered: { label: "Not ordered", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200" },
+    ordered: { label: "Ordered", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200" },
+    arrived: { label: "Arrived", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200" },
+    completed: { label: "Completed", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 font-medium" },
+  };
 
+  const getStatusBadge = (order: Order) => {
     const config = statusConfig[order.status] || { label: order.status, className: "bg-muted text-muted-foreground" };
     return <Badge variant="secondary" className={cn("font-normal", config.className)}>{config.label}</Badge>;
   };
 
-  // Handle status update
+  // Handle status update (from dialog)
   const onStatusUpdate = (data: OrderStatusUpdateFormData) => {
     if (selectedOrder) {
-      statusUpdateMutation.mutate({ id: selectedOrder.id, data });
+      // Always notify customer by email when status changes to arrived
+      const payload = data.status === ORDER_STATUSES.ARRIVED
+        ? { ...data, notifyOnArrival: true }
+        : data;
+      statusUpdateMutation.mutate({ id: selectedOrder.id, data: payload });
     }
   };
 
-  // Handle notify customer
-  const handleNotifyCustomer = (order: Order, type: 'order_placed' | 'arrived') => {
-    notifyCustomerMutation.mutate({ id: order.id, type });
+  // Handle inline status change from dropdown
+  const handleStatusChange = (order: Order, newStatus: string) => {
+    if (newStatus === order.status) return;
+    const payload: OrderStatusUpdateFormData = {
+      status: newStatus as any,
+      ...(newStatus === ORDER_STATUSES.ARRIVED && { notifyOnArrival: true }),
+    };
+    statusUpdateMutation.mutate({ id: order.id, data: payload });
   };
 
   // Handle mark as complete
@@ -582,7 +626,7 @@ export default function Orders() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
-                    placeholder="Search orders, customer, supplier..."
+                    placeholder="Search orders, customer, supplier, items..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -759,22 +803,25 @@ export default function Orders() {
                         {getSortIcon('expectedDeliveryDate')}
                       </button>
                     </TableHead>
-                    <TableHead>
-                      <button
-                        onClick={() => handleSort('totalCost')}
-                        className="flex items-center hover:text-neutral-900 transition-colors"
-                      >
-                        Total Cost
-                        {getSortIcon('totalCost')}
-                      </button>
-                    </TableHead>
                     <TableHead className="w-[120px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="font-mono font-semibold">{order.orderNumber}</TableCell>
+                    <TableRow
+                      key={order.id}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setDetailsDialogOpen(true);
+                      }}
+                    >
+                      <TableCell className="font-mono font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span>{order.orderNumber}</span>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{order.customerName}</div>
@@ -787,33 +834,58 @@ export default function Orders() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 text-primary font-medium"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setDetailsDialogOpen(true);
-                          }}
+                        <div
+                          className="text-sm max-w-[220px] line-clamp-2"
+                          title={(order.items?.length ? order.items.map((i) => `${i.itemName}${i.quantity > 1 ? ` (×${i.quantity})` : ""}`).join(", ") : "No items") || "No items"}
                         >
-                          View items
-                        </Button>
+                          {order.items?.length
+                            ? order.items.map((i) => `${i.itemName}${i.quantity > 1 ? ` (×${i.quantity})` : ""}`).join(", ")
+                            : "—"}
+                        </div>
                       </TableCell>
-                      <TableCell>{getStatusBadge(order)}</TableCell>
-                      <TableCell>{format(new Date(order.orderDate), "MMM d, yyyy")}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={order.status}
+                          onValueChange={(value) => handleStatusChange(order, value)}
+                          disabled={statusUpdateMutation.isPending}
+                        >
+                          <SelectTrigger className={cn("h-8 w-[130px] font-normal border", statusConfig[order.status]?.className || "bg-muted")}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ORDER_STATUSES.NOT_ORDERED}>Not ordered</SelectItem>
+                            <SelectItem value={ORDER_STATUSES.ORDERED}>Ordered</SelectItem>
+                            <SelectItem value={ORDER_STATUSES.ARRIVED}>Arrived</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const days = differenceInDays(new Date(), new Date(order.orderDate));
+                          const daysColorClass =
+                            days > 11
+                              ? "text-red-600 dark:text-red-400"
+                              : days >= 7
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-green-600 dark:text-green-500";
+                          const daysLabel =
+                            days === 0 ? "Today" : days === 1 ? "1 day ago" : `${days} days ago`;
+                          return (
+                            <div>
+                              <div>{format(new Date(order.orderDate), "MMM d, yyyy")}</div>
+                              <div className={cn("text-xs mt-0.5 font-medium", daysColorClass)}>
+                                {daysLabel}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell>
                         {order.expectedDeliveryDate
                           ? format(new Date(order.expectedDeliveryDate), "MMM d, yyyy")
                           : "-"}
                       </TableCell>
-                      <TableCell>
-                        {order.estimatedTotalCost
-                          ? `£${order.estimatedTotalCost.toFixed(2)}`
-                          : order.actualTotalCost
-                          ? `£${order.actualTotalCost.toFixed(2)}`
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <TooltipProvider delayDuration={300}>
                           <div className="flex gap-1 items-center justify-end">
                             {order.status === ORDER_STATUSES.ARRIVED && (
@@ -825,7 +897,7 @@ export default function Orders() {
                                     onClick={() => handleMarkAsComplete(order)}
                                   >
                                     <CheckCircle className="h-4 w-4 mr-1" />
-                                    Complete
+                                    Mark Complete
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Mark order as completed</TooltipContent>
@@ -836,50 +908,14 @@ export default function Orders() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => {
-                                    setSelectedOrder(order);
-                                    setDetailsDialogOpen(true);
-                                  }}
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleDeleteOrder(order)}
                                 >
-                                  <Eye className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>View details</TooltipContent>
+                              <TooltipContent>Delete order</TooltipContent>
                             </Tooltip>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSelectedOrder(order);
-                                    statusForm.reset({ status: order.status as any });
-                                    setStatusDialogOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Update status
-                                </DropdownMenuItem>
-                                {order.status === ORDER_STATUSES.ARRIVED && (
-                                  <DropdownMenuItem onClick={() => handleNotifyCustomer(order, 'arrived')}>
-                                    <Bell className="h-4 w-4 mr-2" />
-                                    Notify customer
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteOrder(order)}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete order
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </div>
                         </TooltipProvider>
                       </TableCell>
@@ -995,7 +1031,6 @@ export default function Orders() {
                         <SelectItem value={ORDER_STATUSES.NOT_ORDERED}>Not Ordered</SelectItem>
                         <SelectItem value={ORDER_STATUSES.ORDERED}>Ordered</SelectItem>
                         <SelectItem value={ORDER_STATUSES.ARRIVED}>Arrived</SelectItem>
-                        <SelectItem value={ORDER_STATUSES.COMPLETED}>Completed</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -1029,26 +1064,12 @@ export default function Orders() {
                 )}
               />
               {statusForm.watch("status") === ORDER_STATUSES.ARRIVED && (
-                <FormField
-                  control={statusForm.control}
-                  name="notifyOnArrival"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value || false}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Notify customer that order has arrived</FormLabel>
-                        <p className="text-xs text-neutral-500">
-                          Send an email notification to the customer when the order status is updated to "Arrived"
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+                <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
+                  <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <AlertDescription>
+                    An email will be sent to the customer to notify them that their order has arrived.
+                  </AlertDescription>
+                </Alert>
               )}
               <div className="flex justify-end gap-2">
                 <Button
@@ -1079,12 +1100,19 @@ export default function Orders() {
                 setDetailsDialogOpen(false);
                 setHistoryDialogOpen(true);
               }}
-              onNotifyCustomer={(type) => handleNotifyCustomer(selectedOrder, type)}
               onMarkAsComplete={
                 selectedOrder.status === ORDER_STATUSES.ARRIVED
                   ? () => {
                       setDetailsDialogOpen(false);
                       handleMarkAsComplete(selectedOrder);
+                    }
+                  : undefined
+              }
+              onMarkAsOrdered={
+                selectedOrder.status === ORDER_STATUSES.NOT_ORDERED
+                  ? () => {
+                      handleStatusChange(selectedOrder, ORDER_STATUSES.ORDERED);
+                      setSelectedOrder((prev) => prev ? { ...prev, status: ORDER_STATUSES.ORDERED } : null);
                     }
                   : undefined
               }
@@ -1109,6 +1137,7 @@ export default function Orders() {
           {selectedOrder && (
             <OrderEditForm
               order={selectedOrder}
+              items={orderItems}
               onSuccess={() => {
                 setEditDialogOpen(false);
                 setDetailsDialogOpen(true);
@@ -1123,6 +1152,26 @@ export default function Orders() {
                   data,
                 });
               }}
+              onAddItem={async (itemData) => {
+                await addOrderItemMutation.mutateAsync({
+                  orderId: selectedOrder.id,
+                  data: itemData,
+                });
+              }}
+              onUpdateItem={async (itemId, itemData) => {
+                await updateOrderItemMutation.mutateAsync({
+                  orderId: selectedOrder.id,
+                  itemId,
+                  data: itemData,
+                });
+              }}
+              onDeleteItem={async (itemId) => {
+                await deleteOrderItemMutation.mutateAsync({
+                  orderId: selectedOrder.id,
+                  itemId,
+                });
+              }}
+              isItemsLoading={addOrderItemMutation.isPending || updateOrderItemMutation.isPending || deleteOrderItemMutation.isPending}
             />
           )}
         </DialogContent>

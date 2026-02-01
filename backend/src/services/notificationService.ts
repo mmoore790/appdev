@@ -218,7 +218,7 @@ export class NotificationService implements NotificationProvider {
         <h3>Order Details</h3>
         <p><strong>Order Number:</strong> ${data.orderNumber}</p>
         <p><strong>New Status:</strong> <span class="status">${data.status}</span></p>
-        ${data.trackingNumber ? `<p><strong>Tracking Number:</strong> ${data.trackingNumber}</p>` : ''}
+        ${data.trackingNumber ? `<p><strong>Order/Tracking Number:</strong> ${data.trackingNumber}</p>` : ''}
       </div>
 
       <p>We'll continue to keep you updated. If you have any questions, please contact us.</p>

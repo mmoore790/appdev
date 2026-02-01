@@ -173,6 +173,16 @@ export const jobCounter = pgTable("job_counter", {
 
 export type JobCounter = typeof jobCounter.$inferSelect;
 
+// Order Counter for sequential unique order numbers (per business)
+export const orderCounter = pgTable("order_counter", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull().unique(), // One counter per business
+  currentNumber: integer("current_number").notNull().default(0),
+  updatedAt: timestamp("updated_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+export type OrderCounter = typeof orderCounter.$inferSelect;
+
 // Users
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

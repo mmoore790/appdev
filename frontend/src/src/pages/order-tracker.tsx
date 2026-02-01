@@ -33,8 +33,6 @@ interface Order {
   actualDeliveryDate?: string;
   status: string;
   trackingNumber?: string;
-  estimatedTotalCost?: number;
-  actualTotalCost?: number;
   notes?: string;
 }
 
@@ -207,7 +205,7 @@ export default function OrderTracker() {
                         <FormLabel>Order Number</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="e.g., ORD-20240115-0001"
+                            placeholder="e.g., ORD-1"
                             {...field}
                             className="text-lg"
                           />
@@ -293,7 +291,7 @@ export default function OrderTracker() {
                   </div>
                   {orderData.trackingNumber && (
                     <div>
-                      <p className="text-sm text-neutral-600 mb-2">Tracking Number</p>
+                      <p className="text-sm text-neutral-600 mb-2">Order/Tracking Number</p>
                       <p className="text-lg font-mono font-semibold">{orderData.trackingNumber}</p>
                     </div>
                   )}
@@ -331,7 +329,6 @@ export default function OrderTracker() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <h4 className="font-semibold text-lg">{item.itemName}</h4>
-                              <Badge variant="outline">{item.itemType}</Badge>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               {item.itemSku && (
@@ -403,19 +400,6 @@ export default function OrderTracker() {
                       Email
                     </span>
                     <span className="font-medium">{orderData.customerEmail}</span>
-                  </div>
-                )}
-                <Separator />
-                {(orderData.estimatedTotalCost || orderData.actualTotalCost) && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold">Total Cost</span>
-                    <span className="text-lg font-bold">
-                      {orderData.actualTotalCost
-                        ? `£${orderData.actualTotalCost.toFixed(2)}`
-                        : orderData.estimatedTotalCost
-                        ? `£${orderData.estimatedTotalCost.toFixed(2)} (estimated)`
-                        : "-"}
-                    </span>
                   </div>
                 )}
               </CardContent>

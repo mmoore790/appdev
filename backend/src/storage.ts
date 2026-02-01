@@ -16,6 +16,7 @@ import {
   jobAttachments, JobAttachment, InsertJobAttachment,
   paymentRequests, PaymentRequest, InsertPaymentRequest,
   jobCounter, JobCounter,
+  orderCounter, OrderCounter,
   partsOnOrder, PartOnOrder, InsertPartOnOrder,
   partOrderUpdates, PartOrderUpdate, InsertPartOrderUpdate,
   timeEntries, TimeEntry, InsertTimeEntry,
@@ -221,6 +222,7 @@ export interface IStorage {
   createPartOrderUpdate(updateData: InsertPartOrderUpdate): Promise<PartOrderUpdate>;
   
   // Universal Order Management operations
+  generateNextOrderNumber(businessId: number): Promise<string>;
   getOrder(id: number, businessId: number): Promise<Order | undefined>;
   getOrderByNumber(orderNumber: string, businessId: number): Promise<Order | undefined>;
   getAllOrders(businessId: number, limit?: number, offset?: number): Promise<Order[]>;
@@ -236,6 +238,7 @@ export interface IStorage {
   
   // Order Items operations
   getOrderItems(orderId: number, businessId: number): Promise<OrderItem[]>;
+  getOrderItemsByOrderIds(orderIds: number[], businessId: number): Promise<OrderItem[]>;
   getOrderItem(id: number, businessId: number): Promise<OrderItem | undefined>;
   createOrderItem(itemData: InsertOrderItem): Promise<OrderItem>;
   updateOrderItem(id: number, itemData: Partial<OrderItem>, businessId: number): Promise<OrderItem | undefined>;
@@ -482,6 +485,17 @@ export class DatabaseStorage implements IStorage {
       
       // Delete job counter
       await tx.delete(jobCounter).where(eq(jobCounter.businessId, id));
+      
+      // Delete orders (order_items and order_status_history have FKs to orders)
+      const businessOrderIds = (await tx.select({ id: orders.id }).from(orders).where(eq(orders.businessId, id))).map(r => r.id);
+      if (businessOrderIds.length > 0) {
+        await tx.delete(orderItems).where(inArray(orderItems.orderId, businessOrderIds));
+        await tx.delete(orderStatusHistory).where(inArray(orderStatusHistory.orderId, businessOrderIds));
+      }
+      await tx.delete(orders).where(eq(orders.businessId, id));
+      
+      // Delete order counter
+      await tx.delete(orderCounter).where(eq(orderCounter.businessId, id));
       
       // Finally, delete the business itself
       const [deleted] = await tx.delete(businesses).where(eq(businesses.id, id)).returning();
@@ -2440,6 +2454,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Universal Order Management operations
+  async generateNextOrderNumber(businessId: number): Promise<string> {
+    const result = await db.transaction(async (tx) => {
+      let [counter] = await tx.select().from(orderCounter).where(eq(orderCounter.businessId, businessId));
+
+      if (!counter) {
+        [counter] = await tx.insert(orderCounter).values({
+          businessId,
+          currentNumber: 0,
+          updatedAt: new Date().toISOString(),
+        }).returning();
+      }
+
+      const newNumber = counter.currentNumber + 1;
+
+      await tx.update(orderCounter)
+        .set({
+          currentNumber: newNumber,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(orderCounter.id, counter.id));
+
+      return `ORD-${newNumber}`;
+    });
+
+    return result;
+  }
+
   async getOrder(id: number, businessId: number): Promise<Order | undefined> {
     const [order] = await db.select().from(orders).where(
       and(eq(orders.id, id), eq(orders.businessId, businessId))
@@ -2503,28 +2544,42 @@ export class DatabaseStorage implements IStorage {
 
   async searchOrders(businessId: number, query: string): Promise<Order[]> {
     const searchTerm = `%${query.toLowerCase()}%`;
+    const matchingOrderIds = await db.selectDistinct({ orderId: orderItems.orderId })
+      .from(orderItems)
+      .where(
+        and(
+          eq(orderItems.businessId, businessId),
+          sql`LOWER(${orderItems.itemName}) LIKE ${searchTerm}`
+        )
+      );
+    const orderIdsWithMatchingItems = matchingOrderIds.map((r) => r.orderId);
+    const orderConditions = [
+      sql`LOWER(${orders.orderNumber}) LIKE ${searchTerm}`,
+      sql`LOWER(${orders.customerName}) LIKE ${searchTerm}`,
+      sql`LOWER(${orders.customerEmail}) LIKE ${searchTerm}`,
+      sql`LOWER(${orders.customerPhone}) LIKE ${searchTerm}`,
+      sql`LOWER(${orders.status}) LIKE ${searchTerm}`,
+      sql`LOWER(${orders.supplierName}) LIKE ${searchTerm}`,
+    ];
+    if (orderIdsWithMatchingItems.length > 0) {
+      orderConditions.push(inArray(orders.id, orderIdsWithMatchingItems));
+    }
     return await db.select().from(orders)
       .where(
         and(
           eq(orders.businessId, businessId),
-          or(
-            sql`LOWER(${orders.orderNumber}) LIKE ${searchTerm}`,
-            sql`LOWER(${orders.customerName}) LIKE ${searchTerm}`,
-            sql`LOWER(${orders.customerEmail}) LIKE ${searchTerm}`,
-            sql`LOWER(${orders.customerPhone}) LIKE ${searchTerm}`,
-            sql`LOWER(${orders.status}) LIKE ${searchTerm}`,
-            sql`LOWER(${orders.supplierName}) LIKE ${searchTerm}`
-          )
+          or(...orderConditions)
         )
       )
       .orderBy(desc(orders.createdAt));
   }
 
   async createOrder(orderData: InsertOrder): Promise<Order> {
-    // Convert decimal costs to pence if provided
+    // Ensure order number is always unique (generate if not provided)
+    const orderNumber = orderData.orderNumber || await this.generateNextOrderNumber(orderData.businessId);
     const processedData = {
       ...orderData,
-      orderNumber: orderData.orderNumber || `ORD-${Date.now()}`,
+      orderNumber,
       businessId: orderData.businessId,
       createdBy: orderData.createdBy ?? 1,
       estimatedTotalCost: orderData.estimatedTotalCost ? Math.round(orderData.estimatedTotalCost * 100) : undefined,
@@ -2670,6 +2725,15 @@ export class DatabaseStorage implements IStorage {
         and(eq(orderItems.orderId, orderId), eq(orderItems.businessId, businessId))
       )
       .orderBy(orderItems.createdAt);
+  }
+
+  async getOrderItemsByOrderIds(orderIds: number[], businessId: number): Promise<OrderItem[]> {
+    if (orderIds.length === 0) return [];
+    return await db.select().from(orderItems)
+      .where(
+        and(inArray(orderItems.orderId, orderIds), eq(orderItems.businessId, businessId))
+      )
+      .orderBy(orderItems.orderId, orderItems.createdAt);
   }
 
   async getOrderItem(id: number, businessId: number): Promise<OrderItem | undefined> {

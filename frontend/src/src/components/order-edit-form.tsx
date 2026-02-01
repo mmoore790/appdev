@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Trash2 } from "lucide-react";
 
 const orderEditSchema = z.object({
   customerName: z.string().min(1, "Customer name is required"),
@@ -17,32 +19,16 @@ const orderEditSchema = z.object({
     z.string().email("Valid email required").optional()
   ),
   customerPhone: z.string().min(1, "Phone number is required"),
-  customerAddress: z.string().optional(),
-  customerNotes: z.string().optional(),
   orderDate: z.string().optional(),
   expectedDeliveryDate: z.string().optional(),
   actualDeliveryDate: z.string().optional(),
   supplierName: z.string().optional(),
-  supplierNotes: z.string().optional(),
   expectedLeadTime: z.preprocess(
     (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
     z.number().optional()
   ),
   trackingNumber: z.string().optional(),
-  estimatedTotalCost: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
-    z.number().optional()
-  ),
-  actualTotalCost: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
-    z.number().optional()
-  ),
-  depositAmount: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
-    z.number().optional()
-  ),
   notes: z.string().optional(),
-  internalNotes: z.string().optional(),
   notificationMethod: z.enum(["email", "sms", "both"]).optional(),
   notifyOnOrderPlaced: z.boolean().optional(),
   notifyOnArrival: z.boolean().optional(),
@@ -62,29 +48,237 @@ interface Order {
   expectedDeliveryDate?: string;
   actualDeliveryDate?: string;
   supplierName?: string;
-  supplierNotes?: string;
   expectedLeadTime?: number;
   trackingNumber?: string;
-  estimatedTotalCost?: number;
-  actualTotalCost?: number;
-  depositAmount?: number;
   notes?: string;
-  internalNotes?: string;
   notificationMethod?: string;
   notifyOnOrderPlaced?: boolean;
   notifyOnArrival?: boolean;
 }
 
+interface OrderItem {
+  id: number;
+  orderId: number;
+  itemName: string;
+  itemSku?: string | null;
+  itemType: string;
+  quantity: number;
+  unitPrice?: number | null;
+  priceExcludingVat?: number | null;
+  priceIncludingVat?: number | null;
+  totalPrice?: number | null;
+  supplierName?: string | null;
+  supplierSku?: string | null;
+  notes?: string | null;
+  isOrdered?: boolean;
+}
+
+interface OrderItemType {
+  id: number;
+  orderId: number;
+  itemName: string;
+  itemSku?: string | null;
+  itemType: string;
+  quantity: number;
+  unitPrice?: number | null;
+  priceExcludingVat?: number | null;
+  priceIncludingVat?: number | null;
+  totalPrice?: number | null;
+  supplierName?: string | null;
+  supplierSku?: string | null;
+  notes?: string | null;
+  isOrdered?: boolean;
+}
+
 interface OrderEditFormProps {
   order: Order;
+  items: OrderItemType[];
   onSuccess?: () => void;
   onCancel?: () => void;
   onUpdate: (data: Partial<OrderEditFormData>) => Promise<void>;
+  onAddItem: (data: { itemName: string; itemType: string; quantity: number; itemSku?: string; priceExcludingVat?: number; priceIncludingVat?: number; supplierName?: string; supplierSku?: string; notes?: string; isOrdered?: boolean }) => Promise<void>;
+  onUpdateItem: (itemId: number, data: Partial<OrderItemType>) => Promise<void>;
+  onDeleteItem: (itemId: number) => Promise<void>;
+  isItemsLoading?: boolean;
 }
 
-export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEditFormProps) {
+const ITEM_TYPES = ["part", "machine", "accessory", "service", "consumable", "other"] as const;
+
+function OrderItemEditor({
+  item,
+  isEditing,
+  onEdit,
+  onCancelEdit,
+  onSave,
+  onDelete,
+  canDelete = true,
+  disabled,
+}: {
+  item: OrderItemType;
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: (data: Partial<OrderItemType>) => Promise<void>;
+  onDelete: () => void;
+  canDelete?: boolean;
+  disabled?: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    itemName: item.itemName,
+    itemType: item.itemType,
+    quantity: item.quantity,
+    itemSku: item.itemSku || "",
+    priceExcludingVat: item.priceExcludingVat ?? undefined,
+    priceIncludingVat: item.priceIncludingVat ?? undefined,
+    notes: item.notes || "",
+    isOrdered: item.isOrdered ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isEditing) {
+      setFormData({
+        itemName: item.itemName,
+        itemType: item.itemType,
+        quantity: item.quantity,
+        itemSku: item.itemSku || "",
+        priceExcludingVat: item.priceExcludingVat ?? undefined,
+        priceIncludingVat: item.priceIncludingVat ?? undefined,
+        notes: item.notes || "",
+        isOrdered: item.isOrdered ?? true,
+      });
+    }
+  }, [isEditing, item.id, item.itemName, item.itemType, item.quantity, item.itemSku, item.priceExcludingVat, item.priceIncludingVat, item.notes, item.isOrdered]);
+
+  if (isEditing) {
+    return (
+      <Card className="p-4 border-primary/50">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              placeholder="Item name *"
+              value={formData.itemName}
+              onChange={(e) => setFormData((p) => ({ ...p, itemName: e.target.value }))}
+            />
+            <Select value={formData.itemType} onValueChange={(v) => setFormData((p) => ({ ...p, itemType: v }))}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ITEM_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              placeholder="SKU / Part number"
+              value={formData.itemSku}
+              onChange={(e) => setFormData((p) => ({ ...p, itemSku: e.target.value }))}
+            />
+            <Input
+              type="number"
+              min={1}
+              placeholder="Quantity"
+              value={formData.quantity}
+              onChange={(e) => setFormData((p) => ({ ...p, quantity: parseInt(e.target.value) || 1 }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="Price ex VAT (£)"
+              value={formData.priceExcludingVat ?? ""}
+              onChange={(e) => setFormData((p) => ({ ...p, priceExcludingVat: e.target.value ? parseFloat(e.target.value) : undefined }))}
+            />
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="Price inc VAT (£)"
+              value={formData.priceIncludingVat ?? ""}
+              onChange={(e) => setFormData((p) => ({ ...p, priceIncludingVat: e.target.value ? parseFloat(e.target.value) : undefined }))}
+            />
+          </div>
+          <Input
+            placeholder="Notes"
+            value={formData.notes}
+            onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
+          />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id={`ordered-${item.id}`}
+                checked={formData.isOrdered}
+                onCheckedChange={(c) => setFormData((p) => ({ ...p, isOrdered: !!c }))}
+              />
+              <label htmlFor={`ordered-${item.id}`} className="text-sm">Ordered?</label>
+            </div>
+            <div className="flex gap-2 ml-auto">
+              <Button
+                type="button"
+                size="sm"
+                disabled={!formData.itemName.trim() || saving || disabled}
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    await onSave({
+                      itemName: formData.itemName.trim(),
+                      itemType: formData.itemType,
+                      quantity: formData.quantity,
+                      itemSku: formData.itemSku.trim() || undefined,
+                      priceExcludingVat: formData.priceExcludingVat,
+                      priceIncludingVat: formData.priceIncludingVat,
+                      notes: formData.notes.trim() || undefined,
+                      isOrdered: formData.isOrdered,
+                    });
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                {saving ? "Saving..." : "Save"}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={onCancelEdit} disabled={saving || disabled}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+      <div>
+        <div className="font-medium">{item.itemName}</div>
+        <div className="text-sm text-muted-foreground">
+          {item.itemType} · Qty: {item.quantity}
+          {item.priceIncludingVat != null && ` · £${Number(item.priceIncludingVat).toFixed(2)}`}
+          {item.priceExcludingVat != null && item.priceIncludingVat == null && ` · £${Number(item.priceExcludingVat).toFixed(2)} ex VAT`}
+        </div>
+      </div>
+      <div className="flex gap-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onEdit} disabled={disabled}>
+          Edit
+        </Button>
+        {canDelete && (
+          <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={onDelete} disabled={disabled}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function OrderEditForm({ order, items, onSuccess, onCancel, onUpdate, onAddItem, onUpdateItem, onDeleteItem, isItemsLoading }: OrderEditFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newItem, setNewItem] = useState<{ itemName: string; itemType: string; quantity: number; itemSku?: string; priceExcludingVat?: number; priceIncludingVat?: number; notes?: string; isOrdered?: boolean } | null>(null);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
 
   const form = useForm<OrderEditFormData>({
     resolver: zodResolver(orderEditSchema),
@@ -92,20 +286,13 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
       customerName: order.customerName,
       customerEmail: order.customerEmail || "",
       customerPhone: order.customerPhone,
-      customerAddress: order.customerAddress || "",
-      customerNotes: order.customerNotes || "",
       orderDate: order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : "",
       expectedDeliveryDate: order.expectedDeliveryDate ? new Date(order.expectedDeliveryDate).toISOString().split('T')[0] : "",
       actualDeliveryDate: order.actualDeliveryDate ? new Date(order.actualDeliveryDate).toISOString().split('T')[0] : "",
       supplierName: order.supplierName || "",
-      supplierNotes: order.supplierNotes || "",
       expectedLeadTime: order.expectedLeadTime,
       trackingNumber: order.trackingNumber || "",
-      estimatedTotalCost: order.estimatedTotalCost,
-      actualTotalCost: order.actualTotalCost,
-      depositAmount: order.depositAmount,
       notes: order.notes || "",
-      internalNotes: order.internalNotes || "",
       notificationMethod: (order.notificationMethod as "email" | "sms" | "both") || "email",
       notifyOnOrderPlaced: order.notifyOnOrderPlaced,
       notifyOnArrival: order.notifyOnArrival,
@@ -120,17 +307,10 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
         customerName: data.customerName,
         customerPhone: data.customerPhone,
         customerEmail: data.customerEmail && data.customerEmail.trim() !== "" ? data.customerEmail.trim() : undefined,
-        customerAddress: data.customerAddress && data.customerAddress.trim() !== "" ? data.customerAddress.trim() : undefined,
-        customerNotes: data.customerNotes && data.customerNotes.trim() !== "" ? data.customerNotes.trim() : undefined,
         supplierName: data.supplierName && data.supplierName.trim() !== "" ? data.supplierName.trim() : undefined,
-        supplierNotes: data.supplierNotes && data.supplierNotes.trim() !== "" ? data.supplierNotes.trim() : undefined,
         trackingNumber: data.trackingNumber && data.trackingNumber.trim() !== "" ? data.trackingNumber.trim() : undefined,
         notes: data.notes && data.notes.trim() !== "" ? data.notes.trim() : undefined,
-        internalNotes: data.internalNotes && data.internalNotes.trim() !== "" ? data.internalNotes.trim() : undefined,
         expectedLeadTime: data.expectedLeadTime !== undefined && data.expectedLeadTime !== null ? data.expectedLeadTime : undefined,
-        estimatedTotalCost: data.estimatedTotalCost !== undefined && data.estimatedTotalCost !== null ? data.estimatedTotalCost : undefined,
-        actualTotalCost: data.actualTotalCost !== undefined && data.actualTotalCost !== null ? data.actualTotalCost : undefined,
-        depositAmount: data.depositAmount !== undefined && data.depositAmount !== null ? data.depositAmount : undefined,
         notificationMethod: data.notificationMethod || "email",
         notifyOnOrderPlaced: data.notifyOnOrderPlaced,
         notifyOnArrival: data.notifyOnArrival,
@@ -198,42 +378,14 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
                   )}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="customerEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="customerAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
               <FormField
                 control={form.control}
-                name="customerNotes"
+                name="customerEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Customer Notes</FormLabel>
+                    <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Textarea {...field} rows={2} />
+                      <Input type="email" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -242,12 +394,25 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
             </CardContent>
           </Card>
 
-          {/* Order Dates */}
+          {/* Delivery Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Order Dates</CardTitle>
+              <CardTitle className="text-base">Delivery Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="supplierName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Supplier Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Optional" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <div className="grid grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
@@ -289,41 +454,6 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
                   )}
                 />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Supplier Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Supplier Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="supplierName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Supplier Name</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="supplierNotes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Supplier Notes</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={2} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -348,7 +478,7 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
                   name="trackingNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tracking Number</FormLabel>
+                      <FormLabel>Order/Tracking Number</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -357,83 +487,6 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
                   )}
                 />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Financial Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Financial Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="estimatedTotalCost"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estimated Total Cost (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value === "" || e.target.value === null ? undefined : parseFloat(e.target.value) || undefined)}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="actualTotalCost"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Actual Total Cost (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value === "" || e.target.value === null ? undefined : parseFloat(e.target.value) || undefined)}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="depositAmount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Deposit Amount (£)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value === "" || e.target.value === null ? undefined : parseFloat(e.target.value) || undefined)}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <FormField
                 control={form.control}
                 name="notes"
@@ -441,25 +494,137 @@ export function OrderEditForm({ order, onSuccess, onCancel, onUpdate }: OrderEdi
                   <FormItem>
                     <FormLabel>Order Notes</FormLabel>
                     <FormControl>
-                      <Textarea {...field} rows={3} placeholder="Notes visible to customer" />
+                      <Textarea {...field} rows={3} placeholder="Order notes" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="internalNotes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Internal Notes (Staff Only)</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={3} placeholder="Internal notes not visible to customer" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            </CardContent>
+          </Card>
+
+          {/* Order Items */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Order Items ({items.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {items.map((item) => (
+                <OrderItemEditor
+                  key={item.id}
+                  item={item}
+                  isEditing={editingItemId === item.id}
+                  onEdit={() => setEditingItemId(item.id)}
+                  onCancelEdit={() => setEditingItemId(null)}
+                  onSave={async (data) => {
+                    await onUpdateItem(item.id, data);
+                    setEditingItemId(null);
+                  }}
+                  onDelete={() => onDeleteItem(item.id)}
+                  canDelete={items.length > 1}
+                  disabled={isItemsLoading}
+                />
+              ))}
+              {newItem ? (
+                <Card className="p-4 border-dashed">
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        placeholder="Item name *"
+                        value={newItem.itemName}
+                        onChange={(e) => setNewItem((p) => p ? { ...p, itemName: e.target.value } : null)}
+                      />
+                      <Select
+                        value={newItem.itemType}
+                        onValueChange={(v) => setNewItem((p) => p ? { ...p, itemType: v } : null)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ITEM_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t.charAt(0).toUpperCase() + t.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        placeholder="SKU / Part number"
+                        value={newItem.itemSku || ""}
+                        onChange={(e) => setNewItem((p) => p ? { ...p, itemSku: e.target.value || undefined } : null)}
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="Quantity"
+                        value={newItem.quantity}
+                        onChange={(e) => setNewItem((p) => p ? { ...p, quantity: parseInt(e.target.value) || 1 } : null)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="Price ex VAT (£)"
+                        value={newItem.priceExcludingVat ?? ""}
+                        onChange={(e) => setNewItem((p) => p ? { ...p, priceExcludingVat: e.target.value ? parseFloat(e.target.value) : undefined } : null)}
+                      />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="Price inc VAT (£)"
+                        value={newItem.priceIncludingVat ?? ""}
+                        onChange={(e) => setNewItem((p) => p ? { ...p, priceIncludingVat: e.target.value ? parseFloat(e.target.value) : undefined } : null)}
+                      />
+                    </div>
+                    <Input
+                      placeholder="Notes"
+                      value={newItem.notes || ""}
+                      onChange={(e) => setNewItem((p) => p ? { ...p, notes: e.target.value || undefined } : null)}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!newItem.itemName.trim() || isItemsLoading}
+                        onClick={async () => {
+                          if (!newItem?.itemName.trim()) return;
+                          await onAddItem({
+                            itemName: newItem.itemName.trim(),
+                            itemType: newItem.itemType,
+                            quantity: newItem.quantity,
+                            itemSku: newItem.itemSku?.trim() || undefined,
+                            priceExcludingVat: newItem.priceExcludingVat,
+                            priceIncludingVat: newItem.priceIncludingVat,
+                            notes: newItem.notes?.trim() || undefined,
+                            isOrdered: newItem.isOrdered ?? true,
+                          });
+                          setNewItem(null);
+                        }}
+                      >
+                        Add Item
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setNewItem(null)} disabled={isItemsLoading}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setNewItem({ itemName: "", itemType: "part", quantity: 1, isOrdered: true })}
+                  disabled={isItemsLoading}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>

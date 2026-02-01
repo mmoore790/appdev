@@ -12,6 +12,10 @@ export class OrderItemRepository {
     return this.store.getOrderItems(orderId, businessId);
   }
 
+  findByOrderIds(orderIds: number[], businessId: number): Promise<OrderItem[]> {
+    return this.store.getOrderItemsByOrderIds(orderIds, businessId);
+  }
+
   create(data: InsertOrderItem): Promise<OrderItem> {
     return this.store.createOrderItem(data);
   }

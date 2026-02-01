@@ -25,6 +25,41 @@ class OrderService {
     return orderRepository.findAll(businessId, limit, offset);
   }
 
+  async listOrdersWithItems(
+    businessId: number,
+    options: { search?: string; limit?: number; offset?: number }
+  ): Promise<{ orders: Order[]; totalCount: number }> {
+    const { search, limit = 25, offset = 0 } = options;
+    let orders: Order[];
+    let totalCount: number;
+
+    if (search && search.trim()) {
+      const searchResults = await orderRepository.search(businessId, search.trim());
+      totalCount = searchResults.length;
+      orders = searchResults.slice(offset, offset + limit);
+    } else {
+      [orders, totalCount] = await Promise.all([
+        orderRepository.findAll(businessId, limit, offset),
+        orderRepository.countAll(businessId),
+      ]);
+    }
+
+    const orderIds = orders.map((o) => o.id);
+    const items = await orderItemRepository.findByOrderIds(orderIds, businessId);
+    const itemsByOrderId = items.reduce<Record<number, typeof items>>((acc, item) => {
+      if (!acc[item.orderId]) acc[item.orderId] = [];
+      acc[item.orderId].push(item);
+      return acc;
+    }, {});
+
+    const ordersWithItems = orders.map((order) => ({
+      ...order,
+      items: itemsByOrderId[order.id] || [],
+    }));
+
+    return { orders: ordersWithItems, totalCount };
+  }
+
   async countOrders(businessId: number) {
     return orderRepository.countAll(businessId);
   }
@@ -62,8 +97,8 @@ class OrderService {
   }
 
   async createOrder(data: InsertOrder, items?: InsertOrderItem[]) {
-    // Generate order number if not provided
-    if (!data.orderNumber && data.businessId) {
+    // Always generate a unique order number (never use client-provided to prevent duplicates)
+    if (data.businessId) {
       data.orderNumber = await this.generateOrderNumber(data.businessId);
     }
 
@@ -116,7 +151,9 @@ class OrderService {
       throw new Error('Order not found');
     }
 
-    const updated = await orderRepository.update(id, data, businessId);
+    // Order number is immutable - never allow it to be changed
+    const { orderNumber: _ignored, ...updateData } = data;
+    const updated = await orderRepository.update(id, updateData, businessId);
 
     // Update job's updatedAt timestamp if order is linked to a job
     if (updated?.relatedJobId) {
@@ -355,26 +392,7 @@ class OrderService {
   }
 
   private async generateOrderNumber(businessId: number): Promise<string> {
-    // Generate a unique order number
-    // Format: ORD-YYYYMMDD-XXXX (e.g., ORD-20240115-0001)
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-    
-    // Get the last order number for today to increment
-    const today = date.toISOString().slice(0, 10);
-    const todayOrders = await orderRepository.findAll(businessId);
-    const todayOrderNumbers = todayOrders
-      .filter(o => o.orderDate.startsWith(today))
-      .map(o => {
-        const match = o.orderNumber.match(/-(\d+)$/);
-        return match ? parseInt(match[1]) : 0;
-      });
-    
-    const nextNumber = todayOrderNumbers.length > 0 
-      ? Math.max(...todayOrderNumbers) + 1 
-      : 1;
-    
-    return `ORD-${dateStr}-${String(nextNumber).padStart(4, '0')}`;
+    return storage.generateNextOrderNumber(businessId);
   }
 }
 

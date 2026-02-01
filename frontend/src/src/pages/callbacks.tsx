@@ -188,8 +188,15 @@ export default function Callbacks() {
   
   // Customer selection state for form
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+
+  // Debounce customer search so we hit the API after user stops typing
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCustomerSearch(customerSearchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [customerSearchQuery]);
   
   // Customer creation and view dialogs
   const [isCreateCustomerDialogOpen, setIsCreateCustomerDialogOpen] = useState(false);
@@ -291,16 +298,29 @@ export default function Callbacks() {
     queryFn: () => apiRequest('GET', '/api/users')
   });
 
-  // Query for customers (for the customer dropdown)
-  const { data: customersData } = useQuery({
-    queryKey: ['/api/customers'],
-    queryFn: () => apiRequest('GET', '/api/customers')
+  // Query for customers (used in completion flow when creating job from callback; larger limit to match by name/phone)
+  const { data: customersData } = useQuery<{ data?: any[] }>({
+    queryKey: ['/api/customers', 'list', '500'],
+    queryFn: () => apiRequest('GET', '/api/customers?page=1&limit=500')
   });
+
+  // Server-side customer search for create-callback dropdown (searches the database)
+  const buildCustomersQueryParams = (search: string) => {
+    const params = new URLSearchParams({ page: '1', limit: '25' });
+    if (search) params.set('search', search);
+    return params.toString();
+  };
+  const { data: customersSearchResult, isLoading: isCustomersSearchLoading } = useQuery<{ data?: any[] }>({
+    queryKey: ['/api/customers', 'search', debouncedCustomerSearch],
+    queryFn: () => apiRequest('GET', `/api/customers?${buildCustomersQueryParams(debouncedCustomerSearch)}`),
+    enabled: isCreateDialogOpen,
+  });
+  const searchCustomers = Array.isArray(customersSearchResult?.data) ? customersSearchResult.data : [];
 
   const callbacks = Array.isArray(callbacksData) ? callbacksData : [];
   const allCallbacks = Array.isArray(allCallbacksData) ? allCallbacksData : [];
   const users = Array.isArray(usersData) ? usersData : [];
-  const customers = Array.isArray(customersData) ? customersData : [];
+  const customers = Array.isArray(customersData?.data) ? customersData.data : (Array.isArray(customersData) ? customersData : []);
 
   // Create callback mutation
   const createMutation = useMutation({
@@ -720,16 +740,7 @@ export default function Callbacks() {
       : <ArrowDown className="h-4 w-4 ml-1" />;
   };
 
-  // Filtered customers for searchable dropdown
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearchQuery.trim()) return customers.slice(0, 10);
-    const query = customerSearchQuery.toLowerCase();
-    return customers.filter((customer: any) => 
-      customer.name?.toLowerCase().includes(query) ||
-      customer.phone?.includes(query) ||
-      customer.email?.toLowerCase().includes(query)
-    ).slice(0, 10);
-  }, [customers, customerSearchQuery]);
+  // searchCustomers comes from server-side search (useQuery above); no client-side filter needed
 
   // Close customer dropdown when clicking outside
   const customerDropdownRef = useRef<HTMLDivElement>(null);
@@ -770,85 +781,79 @@ export default function Callbacks() {
   }, [allCallbacks, callbacks, user?.id]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
-              <PhoneCall className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-              <span className="truncate">Customer Callbacks</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 hidden sm:block">Manage and track all customer callback requests</p>
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-              setIsCreateDialogOpen(open);
-              if (!open) {
-                form.reset();
-                setCustomerSearchQuery('');
-                setSelectedCustomerId(null);
-                setShowCustomerDropdown(false);
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button 
-                  size="sm"
-                  className="h-9 bg-green-700 hover:bg-green-800 text-xs sm:text-sm"
-                >
-                  <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                  <span className="hidden sm:inline">New Callback</span>
-                  <span className="sm:hidden">New</span>
-                </Button>
-              </DialogTrigger>
-            </Dialog>
-          </div>
+    <div className="container mx-auto py-2 sm:py-3 px-2 sm:px-3 max-w-[1920px]">
+      {/* Header - matches Customers / Tasks */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2 text-foreground">
+            <PhoneCall className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+            <span className="truncate">Customer Callbacks</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 hidden sm:block">Manage and track all customer callback requests</p>
         </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              form.reset();
+              setCustomerSearchQuery('');
+              setSelectedCustomerId(null);
+              setShowCustomerDropdown(false);
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-9 text-xs sm:text-sm">
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                <span className="hidden sm:inline">New Callback</span>
+                <span className="sm:hidden">New</span>
+              </Button>
+            </DialogTrigger>
+          </Dialog>
+        </div>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
-            <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-3 sm:p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">To Do</p>
-                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.pendingCount}</p>
-                  </div>
-                  <div className="p-2 sm:p-2.5 md:p-3 bg-blue-100 dark:bg-blue-900/50 rounded-full flex-shrink-0 ml-2">
-                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow">
-              <CardContent className="p-3 sm:p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">Scheduled</p>
-                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.scheduledCount}</p>
-                  </div>
-                  <div className="p-2 sm:p-2.5 md:p-3 bg-purple-100 dark:bg-purple-900/50 rounded-full flex-shrink-0 ml-2">
-                    <Calendar className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-800 shadow-md hover:shadow-lg transition-shadow col-span-2 sm:col-span-1">
-              <CardContent className="p-3 sm:p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400 mb-0.5 sm:mb-1">Assigned to Me</p>
-                    <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">{stats.assignedCount}</p>
-                  </div>
-                  <div className="p-2 sm:p-2.5 md:p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full flex-shrink-0 ml-2">
-                    <UserCheck className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-amber-600 dark:text-amber-400" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+      {/* Stats Cards - matches site Card style */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <Card className="border shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">To Do</p>
+                <p className="text-xl sm:text-2xl font-semibold text-foreground truncate">{stats.pendingCount}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted flex-shrink-0 ml-2">
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Scheduled</p>
+                <p className="text-xl sm:text-2xl font-semibold text-foreground truncate">{stats.scheduledCount}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted flex-shrink-0 ml-2">
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border shadow-sm col-span-2 sm:col-span-1">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Assigned to Me</p>
+                <p className="text-xl sm:text-2xl font-semibold text-foreground truncate">{stats.assignedCount}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted flex-shrink-0 ml-2">
+                <UserCheck className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
         <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
           setIsCreateDialogOpen(open);
@@ -861,16 +866,15 @@ export default function Callbacks() {
         }}>
           <DialogContent className="sm:max-w-[525px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-base sm:text-lg">Create New Callback Request</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Fill in the details below to create a new customer callback request.
+              <DialogTitle className="text-lg font-semibold">Create new callback</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Search for a customer or enter a new name. Callback requests are stored and can be completed from this page.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
-                {/* Searchable Customer Selection */}
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormItem>
-                  <FormLabel className="text-xs sm:text-sm">Customer</FormLabel>
+                  <FormLabel className="text-sm">Customer</FormLabel>
                   <div className="relative" ref={customerDropdownRef}>
                     <Input
                       placeholder="Search for customer or enter new name..."
@@ -897,7 +901,7 @@ export default function Callbacks() {
                         // Keep dropdown open briefly to allow clicking on items
                         setTimeout(() => setShowCustomerDropdown(false), 200);
                       }}
-                      className="text-xs sm:text-sm h-9 sm:h-10"
+                      className="h-9 text-sm"
                     />
                     {customerSearchQuery && (
                       <Button
@@ -916,10 +920,15 @@ export default function Callbacks() {
                       </Button>
                     )}
                     {showCustomerDropdown && (
-                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
-                        {filteredCustomers.length > 0 ? (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                        {isCustomersSearchLoading ? (
+                          <div className="px-3 py-4 text-sm text-muted-foreground flex items-center gap-2">
+                            <span className="animate-spin rounded-full h-4 w-4 border-2 border-muted-foreground border-t-transparent" />
+                            Searching customers...
+                          </div>
+                        ) : searchCustomers.length > 0 ? (
                           <>
-                            {filteredCustomers.map((customer: any) => (
+                            {searchCustomers.map((customer: any) => (
                               <div
                                 key={customer.id}
                                 className="px-3 sm:px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between group"
@@ -935,9 +944,9 @@ export default function Callbacks() {
                                     setShowCustomerDropdown(false);
                                   }}
                                 >
-                                  <div className="font-medium text-xs sm:text-sm truncate">{customer.name}</div>
+                                  <div className="font-medium text-sm truncate">{customer.name}</div>
                                   {customer.phone && (
-                                    <div className="text-xs sm:text-sm text-gray-500 truncate">{customer.phone}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{customer.phone}</div>
                                   )}
                                 </div>
                                 <Button
@@ -952,16 +961,16 @@ export default function Callbacks() {
                                     setShowCustomerDropdown(false);
                                   }}
                                 >
-                                  <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </div>
                             ))}
                           </>
-                        ) : customerSearchQuery ? (
-                          <div className="px-3 sm:px-4 py-3">
-                            <div className="text-xs sm:text-sm text-gray-500 mb-2">
-                              No customers found matching "{customerSearchQuery}"
-                            </div>
+                        ) : customerSearchQuery.trim() ? (
+                          <div className="px-3 py-3">
+                            <p className="text-sm text-muted-foreground mb-2">
+                              No customers found matching &quot;{customerSearchQuery}&quot;
+                            </p>
                             <Button
                               type="button"
                               variant="outline"
@@ -991,7 +1000,7 @@ export default function Callbacks() {
                         </FormControl>
                         <FormMessage />
                         {customerSearchQuery && !selectedCustomerId && (
-                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             New customer will be created with this name
                           </p>
                         )}
@@ -1005,57 +1014,49 @@ export default function Callbacks() {
                   name="phoneNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs sm:text-sm">Phone Number</FormLabel>
+                      <FormLabel className="text-sm">Phone number</FormLabel>
                       <FormControl>
-                        <Input placeholder="Phone number" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
+                        <Input placeholder="Phone number" {...field} className="h-9 text-sm" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={form.control}
                   name="subject"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs sm:text-sm">Subject</FormLabel>
+                      <FormLabel className="text-sm">Subject</FormLabel>
                       <FormControl>
-                        <Input placeholder="Callback subject" {...field} className="text-xs sm:text-sm h-9 sm:h-10" />
+                        <Input placeholder="Callback subject" {...field} className="h-9 text-sm" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={form.control}
                   name="details"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs sm:text-sm">Details</FormLabel>
+                      <FormLabel className="text-sm">Details</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter additional details about the callback request" 
-                          {...field} 
-                          value={field.value || ''}
-                          className="text-xs sm:text-sm min-h-[80px] sm:min-h-[100px]"
-                        />
+                        <Textarea placeholder="Additional details (optional)" {...field} value={field.value || ''} className="min-h-[80px] text-sm" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={form.control}
                   name="priority"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs sm:text-sm">Priority</FormLabel>
+                      <FormLabel className="text-sm">Priority</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="text-xs sm:text-sm h-9 sm:h-10">
+                          <SelectTrigger className="h-9 text-sm">
                             <SelectValue placeholder="Select priority" />
                           </SelectTrigger>
                         </FormControl>
@@ -1069,30 +1070,23 @@ export default function Callbacks() {
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={form.control}
                   name="assignedTo"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs sm:text-sm">Assign To</FormLabel>
-                      <Select 
-                        onValueChange={(value) => {
-                          if (value === "unassigned") {
-                            field.onChange(null);
-                          } else {
-                            field.onChange(value ? Number(value) : null);
-                          }
-                        }} 
+                      <FormLabel className="text-sm">Assign to</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === "unassigned" ? null : value ? Number(value) : null)}
                         value={field.value?.toString() || "unassigned"}
                       >
                         <FormControl>
-                          <SelectTrigger className="text-xs sm:text-sm h-9 sm:h-10">
-                            <SelectValue placeholder="Select staff member or leave unassigned" />
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Unassigned or select staff" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="unassigned">Unassigned (Anyone can pick up)</SelectItem>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
                           {users?.map((user: any) => (
                             <SelectItem key={user.id} value={user.id.toString()}>
                               {user.fullName}
@@ -1104,22 +1098,12 @@ export default function Callbacks() {
                     </FormItem>
                   )}
                 />
-                
-                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setIsCreateDialogOpen(false)}
-                    className="w-full sm:w-auto text-xs sm:text-sm h-9"
-                  >
+                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="w-full sm:w-auto h-9 text-sm">
                     Cancel
                   </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createMutation.isPending}
-                    className="w-full sm:w-auto text-xs sm:text-sm h-9"
-                  >
-                    {createMutation.isPending ? 'Creating...' : 'Create Callback'}
+                  <Button type="submit" disabled={createMutation.isPending} className="w-full sm:w-auto h-9 text-sm">
+                    {createMutation.isPending ? 'Creating...' : 'Create callback'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -1521,65 +1505,55 @@ export default function Callbacks() {
         </DialogContent>
       </Dialog>
 
-      <Card className="shadow-xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
-        <CardHeader className="pb-3 sm:pb-4">
-          <div className="flex items-center justify-between mb-4 sm:mb-6">
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-                Callback Requests
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm md:text-base">
-                {filteredAndSortedCallbacks.length} of {callbacks.length} callbacks
-                {searchQuery && ` matching "${searchQuery}"`}
-              </CardDescription>
-            </div>
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-2 sm:pb-3">
+          <div className="space-y-1 mb-4">
+            <CardTitle className="text-xl sm:text-2xl font-semibold text-foreground">
+              Callback Requests
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm text-muted-foreground">
+              {filteredAndSortedCallbacks.length} of {callbacks.length} callbacks
+              {searchQuery && ` matching "${searchQuery}"`}
+            </CardDescription>
           </div>
-          
-          {/* Search and Filters - Enhanced */}
-          <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
-            {/* Enhanced Search Bar */}
+
+          {/* Search and Filters - matches Customers / Tasks */}
+          <div className="space-y-3 mb-4">
             <div className="relative">
-              <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 z-10" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search callbacks..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 sm:pl-12 pr-9 sm:pr-10 h-10 sm:h-12 text-sm sm:text-base border-2 focus:border-blue-500 dark:focus:border-blue-400 rounded-xl shadow-sm"
+                className="pl-8 h-9 sm:h-10 text-sm"
               />
               {searchQuery && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-1.5 sm:right-2 top-1/2 transform -translate-y-1/2 h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
                   onClick={() => setSearchQuery('')}
                 >
-                  <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <X className="h-4 w-4" />
                 </Button>
               )}
             </div>
-
-            {/* Enhanced Filter Row */}
-            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600 dark:text-gray-400" />
-                <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">Filters:</span>
-              </div>
-              
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0 sm:mr-1" />
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-full sm:w-[140px] md:w-[150px] h-9 sm:h-10 border-2 rounded-lg text-xs sm:text-sm">
+                <SelectTrigger className="w-full sm:w-[130px] h-9 text-sm">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Priorities</SelectItem>
-                  <SelectItem value="high">🔴 High</SelectItem>
-                  <SelectItem value="medium">🟡 Medium</SelectItem>
-                  <SelectItem value="low">🟢 Low</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
                 </SelectContent>
               </Select>
-
               <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-                <SelectTrigger className="w-full sm:w-[160px] md:w-[180px] h-9 sm:h-10 border-2 rounded-lg text-xs sm:text-sm">
+                <SelectTrigger className="w-full sm:w-[140px] h-9 text-sm">
                   <SelectValue placeholder="Assignee" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1591,159 +1565,84 @@ export default function Callbacks() {
                   ))}
                 </SelectContent>
               </Select>
-
             </div>
           </div>
-          
-          <Tabs 
-            value={selectedTab} 
-            onValueChange={(value) => setSelectedTab(value)}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-5 h-auto sm:h-12 md:h-14 bg-gray-100 dark:bg-gray-900/50 p-0.5 sm:p-1 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
-              <TabsTrigger 
-                value="pending"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-blue-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-blue-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
-              >
-                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
-                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span className="truncate">To Do</span>
+
+          <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-5 h-auto p-1 rounded-lg bg-muted overflow-x-auto">
+              <TabsTrigger value="pending" className="text-xs sm:text-sm px-2 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <span className="flex items-center gap-1.5 truncate">
+                  <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                  To Do
                   {stats.pendingCount > 0 && (
-                    <Badge className="ml-0 sm:ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
-                      {stats.pendingCount}
-                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{stats.pendingCount}</Badge>
                   )}
-                </div>
+                </span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="scheduled"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-purple-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-purple-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
-              >
-                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
-                  <Calendar className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span className="truncate">Follow Up</span>
+              <TabsTrigger value="scheduled" className="text-xs sm:text-sm px-2 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <span className="flex items-center gap-1.5 truncate">
+                  <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                  Follow Up
                   {stats.scheduledCount > 0 && (
-                    <Badge className="ml-0 sm:ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
-                      {stats.scheduledCount}
-                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{stats.scheduledCount}</Badge>
                   )}
-                </div>
+                </span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="assigned"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-amber-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-amber-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
-              >
-                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
-                  <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span className="truncate">My Callbacks</span>
+              <TabsTrigger value="assigned" className="text-xs sm:text-sm px-2 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <span className="flex items-center gap-1.5 truncate">
+                  <UserCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                  My Callbacks
                   {stats.assignedCount > 0 && (
-                    <Badge className="ml-0 sm:ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
-                      {stats.assignedCount}
-                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{stats.assignedCount}</Badge>
                   )}
-                </div>
+                </span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="completed"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-green-600 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-green-400 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
-              >
-                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 font-semibold text-[10px] xs:text-xs sm:text-sm">
-                  <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span className="truncate">Completed</span>
+              <TabsTrigger value="completed" className="text-xs sm:text-sm px-2 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <span className="flex items-center gap-1.5 truncate">
+                  <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                  Completed
                   {stats.completedCount > 0 && (
-                    <Badge className="ml-0 sm:ml-1 bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5">
-                      {stats.completedCount}
-                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{stats.completedCount}</Badge>
                   )}
-                </div>
+                </span>
               </TabsTrigger>
-              <TabsTrigger 
-                value="all"
-                className="data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-gray-700 dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-gray-300 rounded-lg transition-all px-2 sm:px-3 py-2 sm:py-2.5 md:py-3 flex-shrink-0"
-              >
-                <span className="font-semibold text-[10px] xs:text-xs sm:text-sm">All</span>
+              <TabsTrigger value="all" className="text-xs sm:text-sm px-2 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                All
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </CardHeader>
         <CardContent>
-          {/* Date Filter - Only show for "completed" and "all" tabs */}
+          {/* Date Filter - only for completed / all tabs */}
           {(selectedTab === 'completed' || selectedTab === 'all') && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl border border-blue-200 dark:border-blue-900">
-              <div className="flex flex-col gap-3 sm:gap-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                  <span className="text-xs sm:text-sm font-semibold text-blue-900 dark:text-blue-100">
-                    Filter by Date Range
-                  </span>
+            <div className="mb-4 p-3 rounded-lg border bg-muted/50">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Filter by date range</span>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateFilter({ from: startOfDay(subDays(new Date(), 7)), to: endOfDay(new Date()) })}>7 days</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateFilter({ from: startOfDay(subDays(new Date(), 31)), to: endOfDay(new Date()) })}>31 days</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateFilter({ from: startOfDay(subDays(new Date(), 90)), to: endOfDay(new Date()) })}>90 days</Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDateFilter({ from: startOfDay(new Date(0)), to: endOfDay(addDays(new Date(), 365)) })}>All time</Button>
                 </div>
-                <div className="grid grid-cols-2 sm:flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDateFilter({
-                      from: startOfDay(subDays(new Date(), 7)),
-                      to: endOfDay(new Date())
-                    })}
-                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                  >
-                    7 days
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDateFilter({
-                      from: startOfDay(subDays(new Date(), 31)),
-                      to: endOfDay(new Date())
-                    })}
-                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                  >
-                    31 days
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDateFilter({
-                      from: startOfDay(subDays(new Date(), 90)),
-                      to: endOfDay(new Date())
-                    })}
-                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                  >
-                    90 days
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDateFilter({
-                      from: startOfDay(new Date(0)),
-                      to: endOfDay(addDays(new Date(), 365))
-                    })}
-                    className="text-[10px] sm:text-xs h-9 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50 col-span-2 sm:col-span-1"
-                  >
-                    All Time
-                  </Button>
-                </div>
-                <div className="text-[10px] sm:text-xs text-blue-700 dark:text-blue-300">
-                  Showing: {format(dateFilter.from, 'MMM dd, yyyy')} - {format(dateFilter.to, 'MMM dd, yyyy')}
-                </div>
+                <p className="text-xs text-muted-foreground">{format(dateFilter.from, 'MMM d, yyyy')} – {format(dateFilter.to, 'MMM d, yyyy')}</p>
               </div>
             </div>
           )}
           
           {isLoading ? (
-            <div className="flex flex-col justify-center items-center p-6 sm:p-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
-              <span className="ml-0 sm:ml-3 mt-2 sm:mt-0 text-xs sm:text-sm">Loading callbacks...</span>
+            <div className="flex flex-col justify-center items-center py-12">
+              <span className="animate-spin rounded-full h-8 w-8 border-2 border-muted-foreground border-t-transparent" />
+              <span className="mt-3 text-sm text-muted-foreground">Loading callbacks...</span>
             </div>
           ) : filteredAndSortedCallbacks?.length === 0 ? (
-            <div className="text-center p-6 sm:p-8">
-              <PhoneCall className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
-              <h3 className="mt-2 text-xs sm:text-sm font-semibold text-gray-900">
+            <div className="text-center py-12">
+              <PhoneCall className="mx-auto h-10 w-10 text-muted-foreground" />
+              <h3 className="mt-3 text-sm font-medium text-foreground">
                 {searchQuery || priorityFilter !== 'all' || assigneeFilter !== 'all'
                   ? 'No callbacks match your filters'
                   : 'No callback requests'}
               </h3>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {searchQuery || priorityFilter !== 'all' || assigneeFilter !== 'all'
                   ? 'Try adjusting your search or filter criteria.'
                   : selectedTab === 'all' 
@@ -1759,171 +1658,99 @@ export default function Callbacks() {
                             : 'There are no deleted callback requests.'}
               </p>
               {(searchQuery || priorityFilter !== 'all' || assigneeFilter !== 'all') && (
-                <div className="mt-4">
-                  <Button 
-                    variant="outline"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setPriorityFilter('all');
-                      setAssigneeFilter('all');
-                    }}
-                    className="text-xs sm:text-sm h-9"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearchQuery(''); setPriorityFilter('all'); setAssigneeFilter('all'); }}>
+                  Clear filters
+                </Button>
               )}
               {selectedTab !== 'deleted' && !searchQuery && priorityFilter === 'all' && assigneeFilter === 'all' && (
-                <div className="mt-4 sm:mt-6">
-                  <Button onClick={() => setIsCreateDialogOpen(true)} className="text-xs sm:text-sm h-9">
-                    <Plus className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    <span className="hidden sm:inline">New Callback Request</span>
-                    <span className="sm:hidden">New Callback</span>
-                  </Button>
-                </div>
+                <Button size="sm" className="mt-4" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New callback
+                </Button>
               )}
             </div>
           ) : (
-            <div className="space-y-2 sm:space-y-3">
+            <div className="space-y-2">
               {filteredAndSortedCallbacks?.map((callback: any) => {
                 const assignee = users?.find((u: any) => u.id === callback.assignedTo);
                 const isScheduled = callback.requestedAt && new Date(callback.requestedAt) > new Date();
-                const isHighPriority = callback.status === 'pending' && callback.priority === 'high';
-                
-                    return (
-                      <Card
-                        key={callback.id}
-                        className={`transition-all duration-200 hover:shadow-lg cursor-pointer border-2 ${
-                          isScheduled
-                            ? 'border-l-4 border-l-purple-500 bg-gradient-to-r from-purple-50/50 to-white dark:from-purple-900/20 dark:to-gray-800 hover:from-purple-50 hover:to-purple-50/30 dark:hover:from-purple-900/30'
-                            : isHighPriority
-                              ? 'border-l-4 border-l-red-500 bg-gradient-to-r from-red-50/50 to-white dark:from-red-900/20 dark:to-gray-800 hover:from-red-50 hover:to-red-50/30 dark:hover:from-red-900/30'
-                              : callback.status === 'pending'
-                                ? 'border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50/30 to-white dark:from-blue-900/10 dark:to-gray-800 hover:from-blue-50 hover:to-blue-50/30 dark:hover:from-blue-900/20'
-                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
-                        onClick={() => {
-                          setSelectedCallback(callback);
-                          setIsViewDetailsDialogOpen(true);
-                        }}
-                      >
-                        <CardContent className="p-3 sm:p-4 md:p-6">
-                          <div className="flex flex-col gap-3 sm:gap-4">
-                            {/* Main Info Section */}
-                            <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
-                              <div className={`p-2 sm:p-2.5 md:p-3 rounded-xl flex-shrink-0 ${
-                                isScheduled
-                                  ? 'bg-purple-100 dark:bg-purple-900/50'
-                                  : isHighPriority
-                                    ? 'bg-red-100 dark:bg-red-900/50'
-                                    : 'bg-blue-100 dark:bg-blue-900/50'
-                              }`}>
-                                <PhoneCall className={`h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 ${
-                                  isScheduled
-                                    ? 'text-purple-600 dark:text-purple-400'
-                                    : isHighPriority
-                                      ? 'text-red-600 dark:text-red-400'
-                                      : 'text-blue-600 dark:text-blue-400'
-                                }`} />
-                              </div>
-                              <div className="flex-1 min-w-0 space-y-2">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
-                                    {callback.customerName}
-                                  </h3>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {getPriorityBadge(callback.priority)}
-                                    {isScheduled && (
-                                      <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 text-[10px] sm:text-xs">
-                                        <Calendar className="h-3 w-3 mr-1" />
-                                        Scheduled
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                                <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">
-                                  {callback.subject}
-                                </p>
-                                {callback.details && (
-                                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                                    {callback.details}
-                                  </p>
-                                )}
-                                <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                                  <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <PhoneForwarded className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                    <a href={`tel:${callback.phoneNumber}`} className="font-mono hover:text-blue-600 dark:hover:text-blue-400" onClick={(e) => e.stopPropagation()}>
-                                      {callback.phoneNumber}
-                                    </a>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                    <span>{assignee?.fullName || 'Unassigned'}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                    <span>
-                                      {callback.requestedAt 
-                                        ? format(new Date(callback.requestedAt), 'MMM dd, yyyy • HH:mm')
-                                        : 'Unknown'}
-                                    </span>
-                                    {isScheduled && (
-                                      <span className="text-purple-600 dark:text-purple-400 font-medium">
-                                        ({formatDistanceToNow(new Date(callback.requestedAt), { addSuffix: true })})
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Actions Section */}
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <div className="flex-shrink-0">
-                                {getStatusBadge(callback.status)}
-                              </div>
-                              {callback.status === 'pending' && (
-                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                  {!callback.assignedTo && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-900/20 text-xs sm:text-sm h-9 w-full sm:w-auto"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        claimCallback(callback.id);
-                                      }}
-                                      disabled={updateMutation.isPending}
-                                    >
-                                      <UserCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                                      Claim
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md text-xs sm:text-sm h-9 w-full sm:w-auto"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedCallback(callback);
-                                      setIsNotesDialogOpen(true);
-                                    }}
-                                  >
-                                    <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                                    Complete
-                                  </Button>
-                                </div>
+                return (
+                  <Card
+                    key={callback.id}
+                    className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => {
+                      setSelectedCallback(callback);
+                      setIsViewDetailsDialogOpen(true);
+                    }}
+                  >
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-muted flex-shrink-0">
+                          <PhoneCall className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                            <h3 className="text-sm font-semibold text-foreground truncate">
+                              {callback.customerName}
+                            </h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {getPriorityBadge(callback.priority)}
+                              {isScheduled && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Calendar className="h-3 w-3 mr-1" />
+                                  Scheduled
+                                </Badge>
                               )}
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                          <p className="text-sm font-medium text-foreground">{callback.subject}</p>
+                          {callback.details && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{callback.details}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1.5">
+                              <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                              <a href={`tel:${callback.phoneNumber}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                                {callback.phoneNumber}
+                              </a>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <UserCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                              {assignee?.fullName || 'Unassigned'}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                              {callback.requestedAt ? format(new Date(callback.requestedAt), 'MMM d, yyyy · HH:mm') : '—'}
+                              {isScheduled && (
+                                <span className="text-muted-foreground">({formatDistanceToNow(new Date(callback.requestedAt), { addSuffix: true })})</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 mt-2 border-t border-border">
+                            {getStatusBadge(callback.status)}
+                            {callback.status === 'pending' && (
+                              <div className="flex gap-2">
+                                {!callback.assignedTo && (
+                                  <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); claimCallback(callback.id); }} disabled={updateMutation.isPending}>
+                                    <UserCheck className="h-3.5 w-3.5 mr-1.5" /> Claim
+                                  </Button>
+                                )}
+                                <Button size="sm" onClick={(e) => { e.stopPropagation(); setSelectedCallback(callback); setIsNotesDialogOpen(true); }}>
+                                  <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Complete
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
-      </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteConfirmDialogOpen} onOpenChange={setIsDeleteConfirmDialogOpen}>
@@ -1993,30 +1820,22 @@ export default function Callbacks() {
             initialName={customerSearchQuery}
             onComplete={async () => {
               setIsCreateCustomerDialogOpen(false);
-              // Refresh customers list
               await queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
-              // Refetch customers to get the newly created one
-              const updatedCustomers = await queryClient.fetchQuery({
-                queryKey: ['/api/customers'],
-                queryFn: () => apiRequest('GET', '/api/customers'),
+              // Refetch search results so the new customer appears; then auto-select if name matches
+              const result = await queryClient.fetchQuery<{ data?: any[] }>({
+                queryKey: ['/api/customers', 'search', customerSearchQuery.trim()],
+                queryFn: () => apiRequest('GET', `/api/customers?${buildCustomersQueryParams(customerSearchQuery.trim())}`),
               });
-              
-              // Find the newly created customer by name
-              if (customerSearchQuery && Array.isArray(updatedCustomers)) {
-                const newCustomer = updatedCustomers.find((c: any) => 
-                  c.name?.toLowerCase() === customerSearchQuery.toLowerCase()
-                );
-                
-                if (newCustomer) {
-                  // Auto-select the newly created customer
-                  setSelectedCustomerId(newCustomer.id);
-                  form.setValue('customerId', newCustomer.id);
-                  form.setValue('customerName', newCustomer.name);
-                  if (newCustomer.phone) {
-                    form.setValue('phoneNumber', newCustomer.phone);
-                  }
-                  setShowCustomerDropdown(false);
-                }
+              const list = result?.data ?? [];
+              const newCustomer = list.find((c: any) =>
+                c.name?.toLowerCase() === customerSearchQuery.trim().toLowerCase()
+              );
+              if (newCustomer) {
+                setSelectedCustomerId(newCustomer.id);
+                form.setValue('customerId', newCustomer.id);
+                form.setValue('customerName', newCustomer.name);
+                if (newCustomer.phone) form.setValue('phoneNumber', newCustomer.phone);
+                setShowCustomerDropdown(false);
               }
             }}
             onCancel={() => setIsCreateCustomerDialogOpen(false)}

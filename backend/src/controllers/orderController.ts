@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { insertOrderSchema, insertOrderItemSchema } from "@shared/schema";
 import { orderService, ORDER_STATUSES } from "../services/domains/orderService";
+import { orderItemRepository } from "../repositories/orderItemRepository";
 import { isAuthenticated } from "../auth";
 import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { z } from "zod";
@@ -44,6 +45,7 @@ export class OrderController {
 
   constructor() {
     this.router.get("/", isAuthenticated, this.listOrders);
+    this.router.get("/batch-items", isAuthenticated, this.getBatchOrderItems);
     this.router.get("/status/:status", isAuthenticated, this.listOrdersByStatus);
     this.router.get("/customer/:customerId", isAuthenticated, this.listOrdersByCustomer);
     this.router.get("/job/:jobId", isAuthenticated, this.listOrdersByJob);
@@ -67,16 +69,21 @@ export class OrderController {
       const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
       const limit = req.query.limit ? Math.min(25, Math.max(1, Number(req.query.limit))) : 25;
       const offset = (page - 1) * limit;
-      
-      const [orders, totalCount] = await Promise.all([
-        orderService.listOrders(businessId, limit, offset),
-        orderService.countOrders(businessId),
-      ]);
-      
+      const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
+
+      const { orders, totalCount } = await orderService.listOrdersWithItems(businessId, {
+        search: search || undefined,
+        limit,
+        offset,
+      });
+
       const totalPages = Math.ceil(totalCount / limit);
-      
+
       res.json({
-        data: orders.map(formatOrder),
+        data: orders.map((order) => ({
+          ...formatOrder(order),
+          items: (order as any).items?.map(formatOrderItem) ?? [],
+        })),
         pagination: {
           page,
           limit,
@@ -161,6 +168,33 @@ export class OrderController {
       }
 
       res.json(formatOrder(order));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async getBatchOrderItems(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const orderIdsParam = req.query.orderIds;
+      if (!orderIdsParam || typeof orderIdsParam !== "string") {
+        return res.status(400).json({ message: "orderIds query parameter required (comma-separated)" });
+      }
+      const orderIds = orderIdsParam
+        .split(",")
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !Number.isNaN(n));
+      if (orderIds.length === 0) {
+        return res.json({});
+      }
+      const items = await orderItemRepository.findByOrderIds(orderIds, businessId);
+      const byOrderId: Record<number, ReturnType<typeof formatOrderItem>[]> = {};
+      for (const item of items) {
+        const id = (item as any).orderId ?? (item as any).order_id;
+        if (!byOrderId[id]) byOrderId[id] = [];
+        byOrderId[id].push(formatOrderItem(item));
+      }
+      res.json(byOrderId);
     } catch (error) {
       next(error);
     }

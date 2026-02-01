@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,7 +29,7 @@ const orderItemSchema = z.object({
   supplierName: z.string().optional(),
   supplierSku: z.string().optional(),
   notes: z.string().optional(),
-  isOrdered: z.boolean().default(false),
+  isOrdered: z.boolean().default(true),
 });
 
 const orderSchema = z.object({
@@ -40,18 +39,15 @@ const orderSchema = z.object({
     z.string().email("Valid email required").optional()
   ),
   customerPhone: z.string().min(1, "Phone number is required"),
+  customerAddress: z.string().optional(),
+  customerNotes: z.string().optional(),
   orderDate: z.string().optional(),
   expectedDeliveryDate: z.string().optional(),
   status: z.enum(["not_ordered", "ordered", "arrived", "completed"]).default("not_ordered"),
   supplierName: z.string().optional(),
-  supplierNotes: z.string().optional(),
   expectedLeadTime: z.number().optional(),
   trackingNumber: z.string().optional(),
-  estimatedTotalCost: z.number().optional(),
-  actualTotalCost: z.number().optional(),
-  depositAmount: z.number().optional(),
   notes: z.string().optional(),
-  internalNotes: z.string().optional(),
   notifyOnOrderPlaced: z.boolean().default(true),
   notifyOnArrival: z.boolean().default(true),
   notificationMethod: z.enum(["email", "sms", "both"]).default("email"),
@@ -70,7 +66,7 @@ interface OrderFormProps {
 const STEPS = [
   { id: 1, title: "Customer", icon: User, description: "Who is this order for?" },
   { id: 2, title: "Items", icon: Package, description: "What are you ordering?" },
-  { id: 3, title: "Supplier & Delivery", icon: Truck, description: "Supplier and delivery details" },
+  { id: 3, title: "Delivery", icon: Truck, description: "Delivery information" },
   { id: 4, title: "Review", icon: CheckCircle, description: "Review and submit" },
 ];
 
@@ -92,6 +88,7 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
           itemName: "",
           itemType: "part",
           quantity: 1,
+          isOrdered: true,
         },
       ],
       ...initialData,
@@ -159,26 +156,21 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
         return allItemsOrdered ? "ordered" : "not_ordered";
       })(),
       supplierName: data.supplierName && data.supplierName.trim() !== "" ? data.supplierName : undefined,
-      supplierNotes: data.supplierNotes && data.supplierNotes.trim() !== "" ? data.supplierNotes : undefined,
       expectedLeadTime: data.expectedLeadTime,
       trackingNumber: data.trackingNumber && data.trackingNumber.trim() !== "" ? data.trackingNumber : undefined,
-      estimatedTotalCost: data.estimatedTotalCost,
-      actualTotalCost: data.actualTotalCost,
-      depositAmount: data.depositAmount,
       notes: data.notes && data.notes.trim() !== "" ? data.notes : undefined,
-      internalNotes: data.internalNotes && data.internalNotes.trim() !== "" ? data.internalNotes : undefined,
-      notifyOnOrderPlaced: data.notifyOnOrderPlaced !== undefined ? data.notifyOnOrderPlaced : true,
+      notifyOnOrderPlaced: true, // Always email customer when order is placed
       notifyOnArrival: false, // Don't notify on arrival during order creation - this will be set when status changes to arrived
       notificationMethod: data.notificationMethod || "email",
       relatedJobId: data.relatedJobId,
       // Handle dates - only send if provided, otherwise let server use defaults
-      // Don't send orderDate if empty - server will use default (now())
-      expectedDeliveryDate: data.expectedDeliveryDate && data.expectedDeliveryDate.trim() !== "" ? data.expectedDeliveryDate : undefined,
+      orderDate: data.orderDate && data.orderDate.trim() !== "" ? new Date(data.orderDate + "T00:00:00").toISOString() : undefined,
+      expectedDeliveryDate: data.expectedDeliveryDate && data.expectedDeliveryDate.trim() !== "" ? new Date(data.expectedDeliveryDate + "T00:00:00").toISOString() : undefined,
       // Clean up items - ensure required fields are present
       items: data.items.map(item => {
         const cleanedItem: any = {
           itemName: item.itemName,
-          itemType: item.itemType,
+          itemType: item.itemType ?? "part",
           quantity: item.quantity || 1,
         };
         
@@ -187,7 +179,6 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
         if (item.priceExcludingVat !== undefined && item.priceExcludingVat !== null) cleanedItem.priceExcludingVat = item.priceExcludingVat;
         if (item.priceIncludingVat !== undefined && item.priceIncludingVat !== null) cleanedItem.priceIncludingVat = item.priceIncludingVat;
         if (item.totalPrice !== undefined && item.totalPrice !== null) cleanedItem.totalPrice = item.totalPrice;
-        if (item.supplierName && item.supplierName.trim() !== "") cleanedItem.supplierName = item.supplierName;
         if (item.supplierSku && item.supplierSku.trim() !== "") cleanedItem.supplierSku = item.supplierSku;
         if (item.notes && item.notes.trim() !== "") cleanedItem.notes = item.notes;
         cleanedItem.isOrdered = item.isOrdered || false;
@@ -304,21 +295,19 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                 )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="customerEmail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="e.g., john@example.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="customerEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="e.g., john@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
         );
 
@@ -403,31 +392,6 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                           <FormControl>
                             <Input placeholder="e.g., Replacement Blade" {...field} />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`items.${index}.itemType`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Item Type *</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="part">Part</SelectItem>
-                              <SelectItem value="machine">Machine</SelectItem>
-                              <SelectItem value="accessory">Accessory</SelectItem>
-                              <SelectItem value="service">Service</SelectItem>
-                              <SelectItem value="consumable">Consumable</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -531,19 +495,6 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <FormField
                       control={form.control}
-                      name={`items.${index}.supplierName`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Supplier Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Optional supplier" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
                       name={`items.${index}.isOrdered`}
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-start space-x-3 space-y-0">
@@ -574,7 +525,7 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => append({ itemName: "", itemType: "part", quantity: 1 })}
+                onClick={() => append({ itemName: "", itemType: "part", quantity: 1, isOrdered: true })}
                 className="w-full"
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -588,16 +539,13 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
         return (
           <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold mb-4">Supplier & Delivery Information</h3>
+              <h3 className="text-lg font-semibold mb-4">Delivery Information</h3>
               <p className="text-sm text-neutral-600 mb-6">
-                Optional supplier details and delivery information. You can skip this step if not needed.
+                Optional delivery information. You can skip this step if not needed.
               </p>
             </div>
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Supplier Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-6">
                 <FormField
                   control={form.control}
                   name="supplierName"
@@ -611,26 +559,6 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="supplierNotes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Supplier Notes</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Any relevant notes about the supplier..." {...field} rows={3} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Delivery Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -684,9 +612,9 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                     name="trackingNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Tracking Number</FormLabel>
+                        <FormLabel>Order/Tracking Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="Tracking number" {...field} />
+                          <Input placeholder="Order/tracking number" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -700,7 +628,7 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                     <FormItem>
                       <FormLabel>Order Notes</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Additional notes about the order..." {...field} rows={3} />
+                        <Textarea placeholder="Order notes" {...field} rows={3} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -740,13 +668,11 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                       <div className="text-sm text-neutral-600">Phone</div>
                       <div className="font-medium">{formValues.customerPhone}</div>
                     </div>
-                  </div>
-                  {formValues.customerEmail && (
                     <div>
                       <div className="text-sm text-neutral-600">Email</div>
-                      <div className="font-medium">{formValues.customerEmail}</div>
+                      <div className="font-medium">{formValues.customerEmail || "—"}</div>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -762,7 +688,6 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <span className="font-semibold">{item.itemName}</span>
-                              <Badge variant="outline">{item.itemType}</Badge>
                               {item.itemSku && (
                                 <span className="text-sm text-neutral-500">({item.itemSku})</span>
                               )}
@@ -826,90 +751,54 @@ export function OrderForm({ onSuccess, onCancel, initialData }: OrderFormProps) 
                 </CardContent>
               </Card>
 
-              {formValues.supplierName && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Supplier</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="font-medium">{formValues.supplierName}</div>
-                    {formValues.supplierNotes && (
-                      <div className="mt-2">
-                        <div className="text-sm text-neutral-600">Notes:</div>
-                        <div className="text-sm">{formValues.supplierNotes}</div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {formValues.expectedDeliveryDate && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Delivery</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm">
-                      <div className="text-neutral-600">Expected Delivery:</div>
-                      <div className="font-medium">
-                        {new Date(formValues.expectedDeliveryDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Notification Preferences</CardTitle>
+                  <CardTitle className="text-base">Delivery Information</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="notificationMethod"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notification Method</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select method" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="sms">SMS</SelectItem>
-                            <SelectItem value="both">Both Email & SMS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="space-y-3 pt-2">
-                    <FormField
-                      control={form.control}
-                      name="notifyOnOrderPlaced"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Notify customer when order is placed</FormLabel>
-                            <p className="text-xs text-neutral-500">
-                              Customer will receive a confirmation email when the order is created
-                            </p>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-neutral-600">Supplier Name</div>
+                      <div className="font-medium">{formValues.supplierName || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-neutral-600">Order Date</div>
+                      <div className="font-medium">
+                        {formValues.orderDate ? new Date(formValues.orderDate).toLocaleDateString() : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-neutral-600">Expected Delivery</div>
+                      <div className="font-medium">
+                        {formValues.expectedDeliveryDate
+                          ? new Date(formValues.expectedDeliveryDate).toLocaleDateString()
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-neutral-600">Expected Lead Time (Days)</div>
+                      <div className="font-medium">{formValues.expectedLeadTime ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-neutral-600">Order/Tracking Number</div>
+                      <div className="font-medium font-mono">{formValues.trackingNumber || "—"}</div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Notes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div>
+                    <div className="text-sm text-neutral-600">Order Notes</div>
+                    <div className="font-medium">{(formValues.notes as string) || "—"}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
             </div>
           </div>
         );
