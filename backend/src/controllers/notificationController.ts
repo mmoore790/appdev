@@ -50,7 +50,16 @@ export class NotificationController {
             link = `/orders?orderId=${notif.entityId}`;
           }
         }
-        
+        // Normalize job links - convert /jobs/:id to /workshop/jobs/:id (correct route)
+        if (notif.entityType === 'job') {
+          if (link.startsWith('/jobs/') && link !== '/jobs') {
+            const jobId = link.replace('/jobs/', '');
+            link = `/workshop/jobs/${jobId}`;
+          } else if ((link === '/jobs' || !link) && notif.entityId) {
+            link = `/workshop/jobs/${notif.entityId}`;
+          }
+        }
+
         return {
           id: `notification-${notif.id}`,
           type: notif.type,
@@ -82,7 +91,9 @@ export class NotificationController {
   private getDefaultLink(type: string, entityId: number | null): string {
     switch (type) {
       case "job":
-        return `/workshop/jobs/${entityId}`;
+      case "job_assigned":
+      case "job_unassigned":
+        return entityId ? `/workshop/jobs/${entityId}` : "/workshop";
       case "callback":
         return `/callbacks`;
       case "task":

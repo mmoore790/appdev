@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -12,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { api } from "@/lib/api";
-import { ChevronRight, ChevronLeft, User, Wrench, FileText, CheckCircle, AlertCircle, X, Plus, MapPin, Phone, Mail } from "lucide-react";
+import { ChevronRight, ChevronLeft, User, Wrench, FileText, CheckCircle, AlertCircle, X, Plus, MapPin, Phone, Mail, Camera, Upload, Loader2 } from "lucide-react";
+import { resolveApiUrl } from "@/lib/api";
 
 interface Customer {
   id: number;
@@ -60,6 +62,7 @@ interface WizardData {
   equipmentModel: string;
   equipmentSerial: string;
   roboticMowerPinCode: string;
+  machineImageUrl?: string; // URL of machine photo
   
   // Step 3: Job Details
   description: string;
@@ -96,6 +99,9 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
   const customerInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [machineImageUploading, setMachineImageUploading] = useState(false);
+  const [enlargedImageOpen, setEnlargedImageOpen] = useState(false);
   
   const { toast } = useToast();
 
@@ -198,6 +204,7 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
       equipmentModel: "",
       equipmentSerial: "",
       roboticMowerPinCode: "",
+      machineImageUrl: undefined,
       description: "",
       priority: "medium"
     });
@@ -313,6 +320,11 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
     // Add robotic mower pin code if machine type is robotic mower
     if (wizardData.machineType === "robotic mower" && wizardData.roboticMowerPinCode) {
       jobData.roboticMowerPinCode = wizardData.roboticMowerPinCode;
+    }
+    
+    // Add machine image URL if a photo was uploaded
+    if (wizardData.machineImageUrl) {
+      jobData.machineImageUrl = wizardData.machineImageUrl;
     }
     
     // Keep equipmentDescription for backward compatibility (combine make/model/serial)
@@ -711,6 +723,131 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                   className="mt-2"
                 />
               </div>
+
+              {/* Machine photo - take or upload */}
+              <div>
+                <Label className="text-base font-medium">Machine Photo</Label>
+                <p className="text-sm text-gray-500 mt-1 mb-2">
+                  Add a photo of the machine to help identify it
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setMachineImageUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        const response = await fetch(resolveApiUrl("/api/jobs/upload-machine-image"), {
+                          method: "POST",
+                          body: formData,
+                          credentials: "include",
+                          headers: { Authorization: `Bearer ${localStorage.getItem("authToken") || ""}` },
+                        });
+                        if (!response.ok) {
+                          const err = await response.json();
+                          throw new Error(err.message || "Upload failed");
+                        }
+                        const { url } = await response.json();
+                        updateWizardData("machineImageUrl", url);
+                        toast({ title: "Photo uploaded", description: "Machine photo added successfully" });
+                      } catch (err: any) {
+                        toast({ title: "Upload failed", description: err.message || "Could not upload photo", variant: "destructive" });
+                      } finally {
+                        setMachineImageUploading(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={machineImageUploading}
+                  >
+                    {machineImageUploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="h-4 w-4" />
+                    )}
+                    Take Photo
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="machine-image-upload"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setMachineImageUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        const response = await fetch(resolveApiUrl("/api/jobs/upload-machine-image"), {
+                          method: "POST",
+                          body: formData,
+                          credentials: "include",
+                          headers: { Authorization: `Bearer ${localStorage.getItem("authToken") || ""}` },
+                        });
+                        if (!response.ok) {
+                          const err = await response.json();
+                          throw new Error(err.message || "Upload failed");
+                        }
+                        const { url } = await response.json();
+                        updateWizardData("machineImageUrl", url);
+                        toast({ title: "Photo uploaded", description: "Machine photo added successfully" });
+                      } catch (err: any) {
+                        toast({ title: "Upload failed", description: err.message || "Could not upload photo", variant: "destructive" });
+                      } finally {
+                        setMachineImageUploading(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={() => document.getElementById("machine-image-upload")?.click()}
+                    disabled={machineImageUploading}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Image
+                  </Button>
+                </div>
+                {wizardData.machineImageUrl && (
+                  <div className="mt-3 relative inline-block">
+                    <img
+                      src={wizardData.machineImageUrl}
+                      alt="Machine"
+                      className="h-24 w-auto rounded-md border border-gray-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setEnlargedImageOpen(true)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === "Enter" && setEnlargedImageOpen(true)}
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={() => updateWizardData("machineImageUrl", undefined)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -759,7 +896,15 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                     <SelectItem value="unassigned">Unassigned</SelectItem>
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.fullName || user.username}
+                        <span className="flex items-center gap-2">
+                          <Avatar className="h-6 w-6 shrink-0">
+                            <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+                            <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                              <User className="h-3.5 w-3.5" />
+                            </AvatarFallback>
+                          </Avatar>
+                          {user.fullName || user.username}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -832,6 +977,18 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
                     )}
                     {wizardData.machineType === "robotic mower" && wizardData.roboticMowerPinCode && (
                       <p className="text-sm text-gray-600">Robotic Mower PIN Code: {wizardData.roboticMowerPinCode}</p>
+                    )}
+                    {wizardData.machineImageUrl && (
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-600 mb-1">Machine Photo (click to enlarge):</p>
+                        <img
+                          src={wizardData.machineImageUrl}
+                          alt="Machine"
+                          className="h-20 rounded border object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setEnlargedImageOpen(true)}
+                          role="button"
+                        />
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -924,6 +1081,19 @@ export function JobWizard({ open, onOpenChange, initialData, mode = "create" }: 
         <div className="min-h-[300px] sm:min-h-[400px]">
           {renderStepContent()}
         </div>
+
+        {/* Enlarged machine photo dialog */}
+        <Dialog open={enlargedImageOpen} onOpenChange={setEnlargedImageOpen}>
+          <DialogContent className="sm:max-w-[90vw] sm:max-h-[90vh] p-2">
+            {wizardData.machineImageUrl && (
+              <img
+                src={wizardData.machineImageUrl}
+                alt="Machine (enlarged)"
+                className="max-w-full max-h-[85vh] w-auto h-auto object-contain rounded"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Navigation buttons */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-2 pt-4 sm:pt-6 border-t">

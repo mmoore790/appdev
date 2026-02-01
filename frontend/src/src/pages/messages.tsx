@@ -1113,7 +1113,8 @@ export default function Messages() {
                           >
                             {!isOwnMessage && (
                               <Avatar className="h-8 w-8">
-                                <AvatarFallback>{getInitials(message.sender?.fullName || 'U')}</AvatarFallback>
+                                <AvatarImage src={message.sender?.avatarUrl ?? undefined} alt={message.sender?.fullName} />
+                                <AvatarFallback>{getInitials(message.sender?.fullName || "U")}</AvatarFallback>
                               </Avatar>
                             )}
                             <div className={cn(
@@ -1185,7 +1186,8 @@ export default function Messages() {
                             </div>
                             {isOwnMessage && (
                               <Avatar className="h-8 w-8">
-                                <AvatarFallback>{getInitials(user?.fullName || 'U')}</AvatarFallback>
+                                <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.fullName} />
+                                <AvatarFallback>{getInitials(user?.fullName || "U")}</AvatarFallback>
                               </Avatar>
                             )}
                           </div>

@@ -1,5 +1,5 @@
 import { InsertJob, Job } from "@shared/schema";
-import { customerRepository, jobRepository, jobUpdateRepository } from "../../repositories";
+import { customerRepository, jobRepository, jobUpdateRepository, jobSheetRepository } from "../../repositories";
 import { storage } from "../../storage";
 import { getActivityDescription, logActivity } from "../activityService";
 import { sendJobBookedEmail, sendJobCompletedEmail } from "../emailService";
@@ -56,6 +56,8 @@ class JobService {
   async listJobs(businessId: number, filter?: { customerId?: number; assignedTo?: number }) {
     // Get ALL jobs for the business - all users can see all jobs
     const jobs = await jobRepository.findAll(businessId);
+    const jobIds = jobs.map((j) => j.id);
+    const internalNotesCounts = await jobSheetRepository.getInternalNotesCountByJobIds(jobIds, businessId);
 
     // Calculate time in status for each job
     const jobsWithTimeInStatus = await Promise.all(
@@ -121,6 +123,7 @@ class JobService {
             ...job,
             timeInStatusDays,
             statusEntryTime,
+            internalNotesCount: internalNotesCounts[job.id] ?? 0,
           };
 
           return jobWithTime;
@@ -138,6 +141,7 @@ class JobService {
             ...job,
             timeInStatusDays,
             statusEntryTime: job.createdAt || now.toISOString(),
+            internalNotesCount: internalNotesCounts[job.id] ?? 0,
           };
 
           return jobWithTime;

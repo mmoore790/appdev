@@ -39,6 +39,8 @@ interface Business {
   email?: string;
   phone?: string;
   address?: string;
+  subscriptionTier?: string | null;
+  userLimit?: number | null;
   isActive: boolean;
   createdAt: string;
   userCount?: number;
@@ -115,7 +117,9 @@ export default function MasterDashboard() {
     name: "",
     email: "",
     phone: "",
-    address: ""
+    address: "",
+    subscriptionTier: "",
+    userLimit: "",
   });
 
   const [userForm, setUserForm] = useState({
@@ -226,7 +230,7 @@ export default function MasterDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/master/analytics"] });
       setBusinessDialogOpen(false);
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
       toast({
         title: "Success",
         description: "Business created successfully",
@@ -252,7 +256,7 @@ export default function MasterDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/master/analytics"] });
       setBusinessDialogOpen(false);
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
       toast({
         title: "Success",
         description: "Business updated successfully",
@@ -427,11 +431,13 @@ export default function MasterDashboard() {
         name: business.name,
         email: business.email || "",
         phone: business.phone || "",
-        address: business.address || ""
+        address: business.address || "",
+        subscriptionTier: business.subscriptionTier ?? "",
+        userLimit: business.userLimit != null ? String(business.userLimit) : "",
       });
     } else {
       setEditingBusiness(null);
-      setBusinessForm({ name: "", email: "", phone: "", address: "" });
+      setBusinessForm({ name: "", email: "", phone: "", address: "", subscriptionTier: "", userLimit: "" });
     }
     setBusinessDialogOpen(true);
   };
@@ -493,12 +499,23 @@ export default function MasterDashboard() {
       }
     }
 
-    // Trim all string fields
+    // Trim all string fields; parse userLimit as number
+    const userLimitNum = businessForm.userLimit.trim() === "" ? undefined : parseInt(businessForm.userLimit.trim(), 10);
+    if (businessForm.userLimit.trim() !== "" && (isNaN(userLimitNum!) || userLimitNum! < 0)) {
+      toast({
+        title: "Validation Error",
+        description: "User limit must be a non-negative number",
+        variant: "destructive",
+      });
+      return;
+    }
     const cleanedData = {
       name: businessForm.name.trim(),
       email: businessForm.email.trim() || undefined,
       phone: businessForm.phone.trim() || undefined,
       address: businessForm.address.trim() || undefined,
+      subscriptionTier: businessForm.subscriptionTier.trim() || undefined,
+      userLimit: userLimitNum,
     };
 
     if (editingBusiness) {
@@ -1266,6 +1283,34 @@ export default function MasterDashboard() {
                 onChange={(e) => setBusinessForm({ ...businessForm, address: e.target.value })}
                 placeholder="Business address"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="subscription">Subscription</Label>
+              <Select
+                value={businessForm.subscriptionTier || undefined}
+                onValueChange={(value) => setBusinessForm({ ...businessForm, subscriptionTier: value })}
+              >
+                <SelectTrigger id="subscription">
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Starter">Starter</SelectItem>
+                  <SelectItem value="Pro">Pro</SelectItem>
+                  <SelectItem value="Pro Plus">Pro Plus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="userLimit">User Limit</Label>
+              <Input
+                id="userLimit"
+                type="number"
+                min={0}
+                value={businessForm.userLimit}
+                onChange={(e) => setBusinessForm({ ...businessForm, userLimit: e.target.value })}
+                placeholder="e.g. 5"
+              />
+              <p className="text-xs text-muted-foreground">Maximum number of users allowed on this account. Leave blank for no limit.</p>
             </div>
           </div>
           <DialogFooter>

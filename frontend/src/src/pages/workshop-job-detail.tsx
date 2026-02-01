@@ -29,6 +29,7 @@ import { OrderForm } from "@/components/order-form";
 import { CustomerActions } from "@/components/customer-actions";
 import { PrintJobOverview } from "@/components/print-job-overview";
 import { formatDate, getStatusColor, cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,7 +39,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit2, Check, X, Eye } from "lucide-react";
+import { Edit2, Check, X, Eye, StickyNote } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -55,6 +56,7 @@ interface JobEntity {
   equipmentModel?: string | null;
   equipmentSerial?: string | null;
   roboticMowerPinCode?: string | null;
+  machineImageUrl?: string | null;
   assignedTo?: number | null;
   customerId?: number | null;
   customerName?: string | null;
@@ -115,6 +117,8 @@ export default function WorkshopJobDetail() {
   const [orderDetailsDialogOpen, setOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<OrderEntity | null>(null);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [machineImageEnlargedOpen, setMachineImageEnlargedOpen] = useState(false);
+  const [internalNoteInput, setInternalNoteInput] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const printOverviewRef = useRef<HTMLDivElement>(null);
@@ -172,6 +176,33 @@ export default function WorkshopJobDetail() {
   // Fetch company info for print overview
   const { data: companyInfo } = useQuery<any>({
     queryKey: ["/api/business/me"],
+  });
+
+  // Internal job notes
+  const { data: internalNotes = [], isLoading: internalNotesLoading } = useQuery<Array<{
+    id: number;
+    noteText: string;
+    createdAt: string;
+    userName?: string;
+  }>>({
+    queryKey: [`/api/job-sheet/${numericJobId}/internal-notes`],
+    enabled: Number.isFinite(numericJobId) && numericJobId > 0,
+  });
+
+  const createInternalNoteMutation = useMutation({
+    mutationFn: async (noteText: string) => {
+      return apiRequest("POST", `/api/job-sheet/${numericJobId}/internal-notes`, { noteText });
+    },
+    onSuccess: () => {
+      toast({ title: "Note added", description: "Internal note has been saved." });
+      setInternalNoteInput("");
+      queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${numericJobId}/internal-notes`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      void refetchJob();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message ?? "Failed to add note", variant: "destructive" });
+    },
   });
 
   // Print overview handler
@@ -648,19 +679,19 @@ export default function WorkshopJobDetail() {
                     <SelectItem value="unassigned">Unassigned</SelectItem>
                     {assignmentOptions.map((userOption: any) => (
                       <SelectItem key={userOption.id} value={String(userOption.id)}>
-                        {userOption.fullName || userOption.username || `User ${userOption.id}`}
+                        <span className="flex items-center gap-2">
+                          <Avatar className="h-6 w-6 shrink-0">
+                            <AvatarImage src={userOption.avatarUrl ?? undefined} alt="" />
+                            <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                              <User className="h-3.5 w-3.5" />
+                            </AvatarFallback>
+                          </Avatar>
+                          {userOption.fullName || userOption.username || `User ${userOption.id}`}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="w-full md:w-56">
-                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Created
-                </span>
-                <div className="mt-1 flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm text-neutral-700">
-                  {job?.createdAt ? formatDate(job.createdAt) : "No date"}
-                </div>
               </div>
               <div className="w-full md:w-56">
                 <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -682,6 +713,14 @@ export default function WorkshopJobDetail() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="w-full md:w-56">
+                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                  Created
+                </span>
+                <div className="mt-1 flex h-10 w-full items-center rounded-md border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-500">
+                  {job?.createdAt ? formatDate(job.createdAt) : "No date"}
+                </div>
               </div>
             </div>
             
@@ -1022,6 +1061,25 @@ export default function WorkshopJobDetail() {
                     className="sm:col-span-2"
                   />
                 )}
+                {job?.machineImageUrl && (
+                  <div className="sm:col-span-2 space-y-1">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      <Wrench size={16} />
+                      <span>Machine Photo (click to enlarge)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMachineImageEnlargedOpen(true)}
+                      className="block text-left"
+                    >
+                      <img
+                        src={job.machineImageUrl}
+                        alt="Machine"
+                        className="h-32 w-auto max-w-full rounded-lg border border-neutral-200 object-cover hover:opacity-90 transition-opacity cursor-pointer"
+                      />
+                    </button>
+                  </div>
+                )}
                 <MetaItem
                   icon={<Clock size={16} />}
                   label="Estimated Hours"
@@ -1068,6 +1126,70 @@ export default function WorkshopJobDetail() {
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr] mt-4">
               <div className="space-y-6">
                 {renderMetaCard()}
+                {job && (
+                  <Card className="border-green-100 shadow-sm">
+                    <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <StickyNote size={16} className="text-neutral-500" />
+                          <h3 className="text-sm font-semibold text-neutral-800">Internal Job Notes</h3>
+                        </div>
+                      </div>
+                      <p className="text-xs text-neutral-500 mb-4">
+                        Add quick notes for special requirements, findings, or anything the team should know. Each note is timestamped and shows who added it.
+                      </p>
+                      <div className="flex gap-2 mb-4">
+                        <Textarea
+                          placeholder="Add a note..."
+                          value={internalNoteInput}
+                          onChange={(e) => setInternalNoteInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              if (internalNoteInput.trim()) {
+                                createInternalNoteMutation.mutate(internalNoteInput.trim());
+                              }
+                            }
+                          }}
+                          rows={2}
+                          className="resize-none border-neutral-200 flex-1"
+                          disabled={createInternalNoteMutation.isPending}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (internalNoteInput.trim()) {
+                              createInternalNoteMutation.mutate(internalNoteInput.trim());
+                            }
+                          }}
+                          disabled={!internalNoteInput.trim() || createInternalNoteMutation.isPending}
+                          className="self-end bg-green-700 hover:bg-green-800"
+                        >
+                          {createInternalNoteMutation.isPending ? "Adding..." : "Add Note"}
+                        </Button>
+                      </div>
+                      {internalNotesLoading ? (
+                        <p className="text-sm text-neutral-500 py-2">Loading notes...</p>
+                      ) : internalNotes.length === 0 ? (
+                        <p className="text-sm text-neutral-500 py-2">No notes yet. Add one above when something comes up.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {internalNotes.map((note) => (
+                            <div
+                              key={note.id}
+                              className="rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 text-sm"
+                            >
+                              <p className="text-neutral-800 whitespace-pre-wrap">{note.noteText}</p>
+                              <p className="text-xs text-neutral-500 mt-2">
+                                {note.userName} • {formatDate(note.createdAt)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )}
               </div>
 
               <aside className="space-y-6">
@@ -1312,6 +1434,29 @@ export default function WorkshopJobDetail() {
               </div>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enlarged machine photo dialog */}
+      <Dialog open={machineImageEnlargedOpen} onOpenChange={setMachineImageEnlargedOpen}>
+        <DialogContent className="sm:max-w-[90vw] sm:max-h-[90vh] p-2">
+          {job?.machineImageUrl && (
+            <>
+              <img
+                src={job.machineImageUrl}
+                alt="Machine (enlarged)"
+                className="max-w-full max-h-[85vh] w-auto h-auto object-contain rounded"
+              />
+              <a
+                href={job.machineImageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:underline text-center block mt-2"
+              >
+                Open full size in new tab
+              </a>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

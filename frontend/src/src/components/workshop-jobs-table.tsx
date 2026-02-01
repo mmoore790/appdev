@@ -1,7 +1,7 @@
 import { useState, useEffect, type MouseEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Plus, Printer, Phone, Mail, MapPin, FileText as FileTextIcon, X } from "lucide-react";
+import { Search, Plus, Printer, Phone, Mail, MapPin, FileText as FileTextIcon, X, StickyNote, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -21,6 +21,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "./ui/pagination";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { formatDate, getStatusColor, cn } from "../lib/utils";
 import { JobWizard } from "./job-wizard";
@@ -389,6 +390,9 @@ export function WorkshopJobsTable({
                     <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[110px]">
                       Created
                     </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[100px]">
+                      Invoice
+                    </TableHead>
                     <TableHead className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-neutral-500 w-[100px]">
                       Actions
                     </TableHead>
@@ -397,7 +401,7 @@ export function WorkshopJobsTable({
               <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center">
+                      <TableCell colSpan={9} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-600" />
                         <p className="text-sm text-neutral-600">Loading jobs...</p>
@@ -406,7 +410,7 @@ export function WorkshopJobsTable({
                   </TableRow>
                   ) : filteredJobs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center">
+                      <TableCell colSpan={9} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="rounded-full bg-neutral-100 p-3">
                           <svg className="h-8 w-8 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -421,10 +425,18 @@ export function WorkshopJobsTable({
                     </TableCell>
                   </TableRow>
                   ) : (
-                    paginatedJobs.map((job) => (
+                    paginatedJobs.map((job) => {
+                      const invoiceStatus = job.invoiceStatus || null;
+                      const isReadyToInvoice = invoiceStatus === "ready_to_invoice";
+                      const isInvoiced = invoiceStatus === "invoiced";
+                      return (
                       <TableRow
                         key={job.id}
-                        className="border-b border-neutral-100 transition-colors hover:bg-neutral-50 cursor-pointer"
+                        className={cn(
+                          "border-b border-neutral-100 transition-colors hover:bg-neutral-50 cursor-pointer",
+                          isReadyToInvoice && "border-l-4 border-l-purple-500",
+                          isInvoiced && "border-l-4 border-l-green-500"
+                        )}
                         onClick={() => handleNavigateToJob(job.id)}
                         tabIndex={0}
                         onKeyDown={(event) => {
@@ -435,16 +447,23 @@ export function WorkshopJobsTable({
                         }}
                       >
                         <TableCell className="px-3 py-4 text-sm font-semibold text-green-800">
-                          <button
-                            type="button"
-                            className="text-left underline-offset-2 hover:underline focus-visible:underline"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleNavigateToJob(job.id);
-                            }}
-                          >
-                            {job.jobId}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {(job.internalNotesCount ?? 0) > 0 && (
+                              <span title={`${job.internalNotesCount} note${job.internalNotesCount !== 1 ? "s" : ""}`}>
+                                <StickyNote className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="text-left underline-offset-2 hover:underline focus-visible:underline"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleNavigateToJob(job.id);
+                              }}
+                            >
+                              {job.jobId}
+                            </button>
+                          </div>
                         </TableCell>
                       <TableCell className="px-3 py-4 text-sm text-neutral-700">
                         {getEquipmentName(job)}
@@ -488,14 +507,22 @@ export function WorkshopJobsTable({
                             {Array.isArray(userData) && userData.length > 0 && userData.map((user: any) => (
                               user && user.id ? (
                                 <SelectItem key={user.id} value={user.id.toString()}>
-                                  {user.fullName || user.username}
+                                  <span className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6 shrink-0">
+                                      <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+                                      <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                                        <User className="h-3.5 w-3.5" />
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    {user.fullName || user.username}
+                                  </span>
                                 </SelectItem>
                               ) : null
                             ))}
                           </SelectContent>
                         </Select>
                       </TableCell>
-                        <TableCell className="px-3 py-4" onClick={stopPropagation}>
+                      <TableCell className="px-3 py-4" onClick={stopPropagation}>
                         <Select
                           value={job.status}
                           onValueChange={(status) => handleStatusChange(job, status)}
@@ -549,6 +576,19 @@ export function WorkshopJobsTable({
                       <TableCell className="px-3 py-4 text-sm text-neutral-600">
                         {formatDate(job.createdAt)}
                       </TableCell>
+                      <TableCell className="px-3 py-4" onClick={stopPropagation}>
+                        {(isReadyToInvoice || isInvoiced) && (
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              isReadyToInvoice && "bg-purple-100 text-purple-700",
+                              isInvoiced && "bg-green-100 text-green-700"
+                            )}
+                          >
+                            {isReadyToInvoice ? "Ready to Invoice" : "Invoiced"}
+                          </span>
+                        )}
+                      </TableCell>
                         <TableCell className="px-3 py-4 text-right" onClick={stopPropagation}>
                           <div className="flex items-center justify-end gap-2">
                             <PrintJobDialog
@@ -570,7 +610,8 @@ export function WorkshopJobsTable({
                           </div>
                         </TableCell>
                     </TableRow>
-                  ))
+                  );
+                    })
                 )}
               </TableBody>
             </Table>
@@ -599,16 +640,45 @@ export function WorkshopJobsTable({
             </div>
             ) : (
               <div className="space-y-4">
-                {paginatedJobs.map((job) => (
+                {paginatedJobs.map((job) => {
+                  const invoiceStatus = job.invoiceStatus || null;
+                  const isReadyToInvoice = invoiceStatus === "ready_to_invoice";
+                  const isInvoiced = invoiceStatus === "invoiced";
+                  return (
+                  <div key={job.id} className={cn("relative", (isReadyToInvoice || isInvoiced) && "mt-4")}>
+                    {(isReadyToInvoice || isInvoiced) && (
+                      <div
+                        className={cn(
+                          "absolute -top-2.5 left-0 right-0 z-10 flex justify-center",
+                          isReadyToInvoice && "text-purple-600",
+                          isInvoiced && "text-green-600"
+                        )}
+                      >
+                        <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-semibold shadow-sm ring-1 ring-inset">
+                          {isReadyToInvoice ? "Ready to Invoice" : "Invoiced"}
+                        </span>
+                      </div>
+                    )}
                   <Card
-                    key={job.id}
-                    className="border border-neutral-200 shadow-sm cursor-pointer"
+                    className={cn(
+                      "border shadow-sm cursor-pointer",
+                      isReadyToInvoice && "border-2 border-purple-500",
+                      isInvoiced && "border-2 border-green-500",
+                      !isReadyToInvoice && !isInvoiced && "border-neutral-200"
+                    )}
                     onClick={() => handleNavigateToJob(job.id)}
                   >
                     <CardContent className="space-y-4 p-4">
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="text-lg font-semibold text-green-800 block mb-1">{job.jobId}</span>
+                            <div className="flex items-center gap-2 mb-1">
+                              {(job.internalNotesCount ?? 0) > 0 && (
+                                <span title={`${job.internalNotesCount} note${job.internalNotesCount !== 1 ? "s" : ""}`}>
+                                  <StickyNote className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                </span>
+                              )}
+                              <span className="text-lg font-semibold text-green-800 block">{job.jobId}</span>
+                            </div>
                             <p className="text-sm font-medium text-neutral-800">{getEquipmentName(job)}</p>
                           </div>
                           <div className="flex gap-2">
@@ -660,7 +730,15 @@ export function WorkshopJobsTable({
                                 {Array.isArray(userData) && userData.length > 0 && userData.map((user: any) => (
                                   user && user.id ? (
                                     <SelectItem key={user.id} value={user.id.toString()}>
-                                      {user.fullName || user.username}
+                                      <span className="flex items-center gap-2">
+                                        <Avatar className="h-6 w-6 shrink-0">
+                                          <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+                                          <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                                            <User className="h-3.5 w-3.5" />
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        {user.fullName || user.username}
+                                      </span>
                                     </SelectItem>
                                   ) : null
                                 ))}
@@ -737,7 +815,9 @@ export function WorkshopJobsTable({
                         </div>
                     </CardContent>
                   </Card>
-                ))}
+                  </div>
+                );
+                })}
               </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { InsertLabourEntry, InsertPartUsed, InsertJobNote, InsertJobAttachment } from "@shared/schema";
+import { InsertLabourEntry, InsertPartUsed, InsertJobNote, InsertJobInternalNote, InsertJobAttachment } from "@shared/schema";
 import { jobSheetRepository } from "../../repositories";
 import { jobService } from "./jobService";
 
@@ -83,6 +83,25 @@ class JobSheetService {
 
   async deleteJobNote(jobId: number, businessId: number) {
     return jobSheetRepository.deleteJobNote(jobId, businessId);
+  }
+
+  // Job Internal Notes
+  listJobInternalNotes(jobId: number, businessId: number) {
+    return jobSheetRepository.findJobInternalNotes(jobId, businessId);
+  }
+
+  async createJobInternalNote(data: InsertJobInternalNote) {
+    const note = await jobSheetRepository.createJobInternalNote(data);
+
+    if (note.jobId) {
+      await jobService.touchJob(note.jobId, note.businessId);
+    }
+
+    return note;
+  }
+
+  getInternalNotesCountByJobIds(jobIds: number[], businessId: number) {
+    return jobSheetRepository.getInternalNotesCountByJobIds(jobIds, businessId);
   }
 
   // Job Attachments

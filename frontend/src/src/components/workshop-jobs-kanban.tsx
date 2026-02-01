@@ -23,6 +23,7 @@ import {
   FileText as FileTextIcon,
   Clock,
   Search,
+  StickyNote,
 } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -290,17 +291,38 @@ function KanbanJobCard({
     .toUpperCase()
     .slice(0, 2);
 
+  const invoiceStatus = job.invoiceStatus || null;
+  const isReadyToInvoice = invoiceStatus === "ready_to_invoice";
+  const isInvoiced = invoiceStatus === "invoiced";
+
   return (
-    <Card
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "hover:shadow-md transition-shadow border-neutral-200 cursor-grab active:cursor-grabbing",
-        isDragging && "shadow-lg opacity-50"
+    <div className={cn("relative", (isReadyToInvoice || isInvoiced) && "mt-4")}>
+      {(isReadyToInvoice || isInvoiced) && (
+        <div
+          className={cn(
+            "absolute -top-3 left-0 right-0 z-10 flex justify-center",
+            isReadyToInvoice && "text-purple-600",
+            isInvoiced && "text-green-600"
+          )}
+        >
+          <span className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-semibold shadow-sm ring-1 ring-inset">
+            {isReadyToInvoice ? "Ready to Invoice" : "Invoiced"}
+          </span>
+        </div>
       )}
-      {...attributes}
-      {...listeners}
-    >
+      <Card
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          "hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing",
+          isDragging && "shadow-lg opacity-50",
+          isReadyToInvoice && "border-2 border-purple-500",
+          isInvoiced && "border-2 border-green-500",
+          !isReadyToInvoice && !isInvoiced && "border-neutral-200"
+        )}
+        {...attributes}
+        {...listeners}
+      >
       <CardContent className="p-2 sm:p-3 space-y-1.5 sm:space-y-2" onClick={handleClick}>
         <div className="flex items-start justify-between gap-1.5 sm:gap-2">
           <div className="flex-1 min-w-0">
@@ -331,8 +353,13 @@ function KanbanJobCard({
         </div>
 
         <div className="flex items-center justify-between gap-1.5 sm:gap-2 pt-1 border-t border-neutral-100">
-          <div className="flex items-center gap-0.5 sm:gap-1">
-            <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-neutral-400" />
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            {(job.internalNotesCount ?? 0) > 0 && (
+              <span title={`${job.internalNotesCount} note${job.internalNotesCount !== 1 ? "s" : ""}`}>
+                <StickyNote className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-600 flex-shrink-0" />
+              </span>
+            )}
+            <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-neutral-400 flex-shrink-0" />
             <span
               className={cn(
                 "text-[9px] sm:text-[10px] font-medium",
@@ -348,6 +375,7 @@ function KanbanJobCard({
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
 
@@ -565,7 +593,13 @@ export function WorkshopJobsKanban({
         <DragOverlay>
           {draggedJob ? (
             <div className="rotate-3 opacity-90 shadow-xl w-[200px] sm:w-[240px]">
-              <Card className="border-neutral-200">
+              <Card
+                className={cn(
+                  draggedJob.invoiceStatus === "ready_to_invoice" && "border-2 border-purple-500",
+                  draggedJob.invoiceStatus === "invoiced" && "border-2 border-green-500",
+                  draggedJob.invoiceStatus !== "ready_to_invoice" && draggedJob.invoiceStatus !== "invoiced" && "border-neutral-200"
+                )}
+              >
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">

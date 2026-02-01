@@ -1,4 +1,4 @@
-import { InsertLabourEntry, LabourEntry, InsertPartUsed, PartUsed, InsertJobNote, JobNote, InsertJobAttachment, JobAttachment } from "@shared/schema";
+import { InsertLabourEntry, LabourEntry, InsertPartUsed, PartUsed, InsertJobNote, JobNote, InsertJobInternalNote, JobInternalNote, InsertJobAttachment, JobAttachment } from "@shared/schema";
 import { IStorage, storage } from "../storage";
 
 export class JobSheetRepository {
@@ -49,6 +49,19 @@ export class JobSheetRepository {
 
   deleteJobNote(jobId: number, businessId: number): Promise<boolean> {
     return this.store.deleteJobNote(jobId, businessId);
+  }
+
+  // Job Internal Notes
+  findJobInternalNotes(jobId: number, businessId: number) {
+    return this.store.getJobInternalNotes(jobId, businessId);
+  }
+
+  createJobInternalNote(data: InsertJobInternalNote): Promise<JobInternalNote> {
+    return this.store.createJobInternalNote(data);
+  }
+
+  getInternalNotesCountByJobIds(jobIds: number[], businessId: number) {
+    return this.store.getInternalNotesCountByJobIds(jobIds, businessId);
   }
 
   // Job Attachments

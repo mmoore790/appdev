@@ -11,7 +11,14 @@ import {
 import { logActivity } from "./services/activityService";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
+import multer from "multer";
+import { uploadPublicFile } from "./services/fileStorageService";
 
+// Multer for profile avatar upload (memory storage)
+const profileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
 
 // Middleware to check if user is authenticated with token fallback
 export const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
@@ -440,8 +447,8 @@ export const initAuthRoutes = (app: any) => {
     }
   });
 
-  // Update user profile
-  app.put("/api/auth/profile", isAuthenticated, async (req: Request, res: Response) => {
+  // Update user profile (multipart for avatar upload; fullName/email from req.body)
+  app.put("/api/auth/profile", isAuthenticated, profileUpload.single("avatarImage"), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId as number;
 
@@ -449,28 +456,46 @@ export const initAuthRoutes = (app: any) => {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { fullName, email, avatarUrl } = req.body;
+      // Multer parses multipart: text fields in req.body, file in req.file
+      const fullName = req.body?.fullName;
+      const email = req.body?.email;
 
-      // Only allow updating specific fields
       const updateData: Partial<InsertUser> = {};
-      if (fullName !== undefined) updateData.fullName = fullName;
-      if (email !== undefined) updateData.email = email;
-      if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+      if (fullName !== undefined && fullName !== "") updateData.fullName = fullName;
+      if (email !== undefined && email !== "") updateData.email = email;
 
-      // Get businessId from session
-      const businessId = req.session.businessId as number;
-      
-      // Add activity logging for profile update
-      await logActivity({
-        businessId: businessId,
-        userId: userId,
-        activityType: 'profile_update',
-        description: `User updated their profile`,
-        entityType: 'user',
-        entityId: userId,
-        metadata: {
-          ...updateData // Include the fields that were updated
+      // If avatar file uploaded, store in R2 and set avatarUrl for this user only
+      if (req.file && req.file.buffer) {
+        const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+        const contentType = req.file.mimetype || "image/png";
+        if (!allowedTypes.includes(contentType)) {
+          return res.status(400).json({
+            message: `Invalid image type. Allowed: ${allowedTypes.join(", ")}`,
+          });
         }
+        const businessId = (req.session.businessId as number) || 0;
+        const avatarUrl = await uploadPublicFile(req.file.buffer, contentType, {
+          businessId,
+          folder: "avatars",
+          filename: req.file.originalname,
+        });
+        updateData.avatarUrl = avatarUrl;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+
+      const businessId = req.session.businessId as number;
+
+      await logActivity({
+        businessId,
+        userId,
+        activityType: "profile_update",
+        description: "User updated their profile",
+        entityType: "user",
+        entityId: userId,
+        metadata: { ...updateData },
       });
 
       const updatedUser = await storage.updateUser(userId, updateData);
@@ -479,16 +504,17 @@ export const initAuthRoutes = (app: any) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Don't return password
       const { password, ...userInfo } = updatedUser;
 
       return res.json({
         message: "Profile updated successfully",
-        user: userInfo
+        user: userInfo,
       });
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      return res.status(500).json({ message: "Failed to update profile" });
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      return res.status(500).json({
+        message: error?.message || "Failed to update profile",
+      });
     }
   });
 

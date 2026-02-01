@@ -33,6 +33,9 @@ export const businesses = pgTable("businesses", {
   jobTrackerEnabled: boolean("job_tracker_enabled").notNull().default(true),
   // Hourly labour fee in pence (e.g., 5000 = £50.00 per hour)
   hourlyLabourFee: integer("hourly_labour_fee"),
+  // Subscription tier (Starter, Pro, Pro Plus) and user limit set at onboarding
+  subscriptionTier: text("subscription_tier"),
+  userLimit: integer("user_limit"),
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: 'string' }),
   isActive: boolean("is_active").notNull().default(true),
@@ -51,6 +54,8 @@ export const insertBusinessSchema = createInsertSchema(businesses).pick({
   jobTrackerEnabled: true,
   secondaryColor: true,
   hourlyLabourFee: true,
+  subscriptionTier: true,
+  userLimit: true,
 });
 
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
@@ -347,6 +352,7 @@ export const jobs = pgTable("jobs", {
   equipmentModel: text("equipment_model"), // Model of equipment
   equipmentSerial: text("equipment_serial"), // Serial number of equipment
   roboticMowerPinCode: text("robotic_mower_pin_code"), // PIN code for robotic mowers
+  machineImageUrl: text("machine_image_url"), // URL of machine photo taken/uploaded when booking
   customerId: integer("customer_id"),
   customerName: text("customer_name"), // For custom customer entries (name-only mode)
   customerEmail: text("customer_email"), // For storing email when customer profile not saved
@@ -365,6 +371,7 @@ export const jobs = pgTable("jobs", {
   paymentStatus: text("payment_status").default("unpaid"), // unpaid, paid, partial, pending_payment_request
   paymentAmount: integer("payment_amount"), // Amount in pence
   invoiceNumber: text("invoice_number"),
+  invoiceStatus: text("invoice_status"), // null, ready_to_invoice, invoiced
   paymentMethod: text("payment_method"), // cash, card, bank_transfer, stripe, etc.
   paymentNotes: text("payment_notes"),
   paidAt: timestamp("paid_at", { mode: 'string' }),
@@ -385,6 +392,7 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   equipmentModel: true,
   equipmentSerial: true,
   roboticMowerPinCode: true,
+  machineImageUrl: true,
   customerId: true,
   assignedTo: true,
   status: true,
@@ -394,6 +402,7 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   paymentStatus: true,
   paymentAmount: true,
   invoiceNumber: true,
+  invoiceStatus: true,
   paymentMethod: true,
   paymentNotes: true,
   businessId: true,
@@ -411,12 +420,14 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   equipmentModel: true,
   equipmentSerial: true,
   roboticMowerPinCode: true,
+  machineImageUrl: true,
   assignedTo: true,
   taskDetails: true,
   estimatedHours: true,
   paymentStatus: true,
   paymentAmount: true,
   invoiceNumber: true,
+  invoiceStatus: true,
   paymentMethod: true,
   paymentNotes: true,
 });
@@ -721,6 +732,27 @@ export const insertJobAttachmentSchema = createInsertSchema(jobAttachments).pick
 
 export type InsertJobAttachment = z.infer<typeof insertJobAttachmentSchema>;
 export type JobAttachment = typeof jobAttachments.$inferSelect;
+
+// Job Internal Notes (multiple timestamped notes per job with author)
+export const jobInternalNotes = pgTable("job_internal_notes", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull(),
+  userId: integer("user_id").notNull(),
+  noteText: text("note_text").notNull(),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+});
+
+
+export const insertJobInternalNoteSchema = createInsertSchema(jobInternalNotes).pick({
+  businessId: true,
+  jobId: true,
+  userId: true,
+  noteText: true,
+});
+
+export type InsertJobInternalNote = z.infer<typeof insertJobInternalNoteSchema>;
+export type JobInternalNote = typeof jobInternalNotes.$inferSelect;
 
 // Payment Requests
 export const paymentRequests = pgTable("payment_requests", {

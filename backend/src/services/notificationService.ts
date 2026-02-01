@@ -366,7 +366,7 @@ export class NotificationService implements NotificationProvider {
       entityType: 'job',
       entityId: jobId,
       priority: 'high',
-      link: `/jobs/${jobId}`,
+      link: `/workshop/jobs/${jobId}`,
       metadata: null,
     });
   }
@@ -390,7 +390,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'job',
         entityId: jobId,
         priority: 'high',
-        link: `/jobs/${jobId}`,
+        link: `/workshop/jobs/${jobId}`,
         metadata: null,
       });
     }
@@ -406,7 +406,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'job',
         entityId: jobId,
         priority: 'high',
-        link: `/jobs/${jobId}`,
+        link: `/workshop/jobs/${jobId}`,
         metadata: null,
       });
     }

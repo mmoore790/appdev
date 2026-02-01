@@ -13,6 +13,7 @@ import {
   labourEntries, LabourEntry, InsertLabourEntry,
   partsUsed, PartUsed, InsertPartUsed,
   jobNotes, JobNote, InsertJobNote,
+  jobInternalNotes, JobInternalNote, InsertJobInternalNote,
   jobAttachments, JobAttachment, InsertJobAttachment,
   paymentRequests, PaymentRequest, InsertPaymentRequest,
   jobCounter, JobCounter,
@@ -190,6 +191,11 @@ export interface IStorage {
   getJobNoteByJobId(jobId: number, businessId: number): Promise<JobNote | undefined>;
   createOrUpdateJobNote(noteData: InsertJobNote): Promise<JobNote>;
   deleteJobNote(jobId: number, businessId: number): Promise<boolean>;
+
+  // Job Sheet operations - Job Internal Notes (multiple timestamped notes per job)
+  getJobInternalNotes(jobId: number, businessId: number): Promise<(JobInternalNote & { userName?: string })[]>;
+  createJobInternalNote(noteData: InsertJobInternalNote): Promise<JobInternalNote>;
+  getInternalNotesCountByJobIds(jobIds: number[], businessId: number): Promise<Record<number, number>>;
 
   // Job Sheet operations - Job Attachments
   getJobAttachmentsByJobId(jobId: number, businessId: number): Promise<JobAttachment[]>;
@@ -1909,6 +1915,55 @@ export class DatabaseStorage implements IStorage {
       )
       .returning();
     return !!deleted;
+  }
+
+  // Job Sheet operations - Job Internal Notes
+  async getJobInternalNotes(jobId: number, businessId: number): Promise<(JobInternalNote & { userName?: string })[]> {
+    const notes = await db
+      .select()
+      .from(jobInternalNotes)
+      .where(
+        and(eq(jobInternalNotes.jobId, jobId), eq(jobInternalNotes.businessId, businessId))
+      )
+      .orderBy(desc(jobInternalNotes.createdAt));
+
+    // Enrich with user names
+    const enriched = await Promise.all(
+      notes.map(async (note) => {
+        const user = await this.getUser(note.userId, businessId);
+        return { ...note, userName: user?.fullName || user?.username || "Unknown" };
+      })
+    );
+    return enriched;
+  }
+
+  async createJobInternalNote(noteData: InsertJobInternalNote): Promise<JobInternalNote> {
+    const [note] = await db
+      .insert(jobInternalNotes)
+      .values({
+        ...noteData,
+        createdAt: new Date().toISOString(),
+      })
+      .returning();
+    return note;
+  }
+
+  async getInternalNotesCountByJobIds(jobIds: number[], businessId: number): Promise<Record<number, number>> {
+    if (jobIds.length === 0) return {};
+    const counts = await db
+      .select({
+        jobId: jobInternalNotes.jobId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(jobInternalNotes)
+      .where(
+        and(
+          inArray(jobInternalNotes.jobId, jobIds),
+          eq(jobInternalNotes.businessId, businessId)
+        )
+      )
+      .groupBy(jobInternalNotes.jobId);
+    return Object.fromEntries(counts.map((r) => [r.jobId, r.count]));
   }
 
   // Job Sheet operations - Job Attachments

@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { insertJobSchema } from "@shared/schema";
 import { jobService } from "../services/domains/jobService";
 import { orderService } from "../services/domains/orderService";
@@ -6,21 +7,50 @@ import { isAuthenticated } from "../auth";
 import { getBusinessIdFromRequest } from "../utils/requestHelpers";
 import { getJobUpdates } from "../services/jobUpdateService";
 import { EmailService } from "../services/emailService";
+import { uploadPublicFile } from "../services/fileStorageService";
 import { z } from "zod";
 
 const emailServiceInstance = new EmailService();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = /^image\/(jpeg|jpg|png|gif|webp)$/i.test(file.mimetype);
+    cb(null, allowed);
+  },
+});
 
 export class JobController {
   public readonly router = Router();
 
   constructor() {
     this.router.get("/", isAuthenticated, this.listJobs);
+    this.router.post("/upload-machine-image", isAuthenticated, upload.single("file"), this.uploadMachineImage);
     this.router.get("/:id/updates", isAuthenticated, this.getJobUpdates);
     this.router.get("/:id", isAuthenticated, this.getJob);
     this.router.post("/", isAuthenticated, this.createJob);
     this.router.put("/:id", isAuthenticated, this.updateJob);
     this.router.post("/:id/send-email", isAuthenticated, this.sendEmail);
     this.router.delete("/:id", isAuthenticated, this.deleteJob);
+  }
+
+  private async uploadMachineImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded. Send the image in a multipart field named 'file'." });
+      }
+      const businessId = getBusinessIdFromRequest(req);
+      const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer as ArrayBuffer);
+      const publicUrl = await uploadPublicFile(fileBuffer, req.file.mimetype, {
+        businessId,
+        folder: "machine-images",
+        filename: req.file.originalname,
+      });
+      res.json({ url: publicUrl });
+    } catch (error) {
+      next(error);
+    }
   }
 
   private async listJobs(req: Request, res: Response, next: NextFunction) {

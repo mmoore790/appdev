@@ -28,6 +28,7 @@ import {
   SheetTrigger,
   SheetOverlay 
 } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoPath from "@/assets/logo-m.png";
 
 interface SidebarProps {
@@ -170,22 +171,25 @@ export function Sidebar({ className }: SidebarProps) {
         </div>
       )}
       <div className="flex items-center">
-        <Link href="/account">
-          <div className={cn(
-            "rounded-full bg-green-100 flex items-center justify-center text-green-700 cursor-pointer hover:bg-green-200 transition-colors duration-200",
-            isMobile ? "h-7 w-7" : "h-8 w-8"
-          )} onClick={() => setMobileMenuOpen(false)} title="Go to Account">
-            {user?.fullName ? (
-              <span className={cn(
-                "font-semibold",
-                isMobile ? "text-xs" : "text-sm"
-              )}>
-                {user.fullName.split(' ').map(name => name[0]).join('')}
-              </span>
-            ) : (
-              <User size={isMobile ? 16 : 18} />
+        <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
+          <Avatar
+            className={cn(
+              "cursor-pointer hover:opacity-90 transition-opacity border-2 border-green-100",
+              isMobile ? "h-7 w-7" : "h-8 w-8"
             )}
-          </div>
+            title="Go to Account"
+          >
+            <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.fullName ?? "User"} />
+            <AvatarFallback className="bg-green-100 text-green-700 font-semibold">
+              {user?.fullName ? (
+                <span className={cn(isMobile ? "text-xs" : "text-sm")}>
+                  {user.fullName.split(" ").map((name) => name[0]).join("")}
+                </span>
+              ) : (
+                <User size={isMobile ? 16 : 18} />
+              )}
+            </AvatarFallback>
+          </Avatar>
         </Link>
         <Link href="/account" onClick={() => setMobileMenuOpen(false)} className={cn("flex-1", isMobile ? "ml-2" : "ml-3")}>
           <p className={cn(

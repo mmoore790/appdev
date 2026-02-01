@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoPath from "@/assets/logo-m.png";
 
 interface HorizontalNavProps {
@@ -293,15 +294,16 @@ export function HorizontalNav({ className }: HorizontalNavProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center space-x-1 sm:space-x-1.5 px-1.5 sm:px-2 py-1.5 rounded-md hover:bg-emerald-100 transition-colors duration-200 focus:outline-none">
-                <div className="h-7 w-7 rounded-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 flex items-center justify-center text-white font-semibold text-xs shadow-sm shadow-emerald-500/30 flex-shrink-0">
-                  {user?.fullName ? (
-                    <span>
-                      {user.fullName.split(' ').map(name => name[0]).join('')}
-                    </span>
-                  ) : (
-                    <User size={14} />
-                  )}
-                </div>
+                <Avatar className="h-7 w-7 flex-shrink-0 shadow-sm">
+                  <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.fullName ?? "User"} />
+                  <AvatarFallback className="bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-700 text-white text-xs font-semibold">
+                    {user?.fullName ? (
+                      user.fullName.split(" ").map((name) => name[0]).join("")
+                    ) : (
+                      <User size={14} />
+                    )}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="hidden lg:block text-left">
                   <p className="text-xs font-medium text-slate-900 leading-tight">
                     {user?.fullName?.split(' ')[0] || user?.username || 'User'}

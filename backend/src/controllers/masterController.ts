@@ -123,7 +123,7 @@ export class MasterController {
 
   private async createBusiness(req: Request, res: Response, next: NextFunction) {
     try {
-      const { name, email, phone, address } = req.body;
+      const { name, email, phone, address, subscriptionTier, userLimit } = req.body;
 
       if (!name) {
         return res.status(400).json({ message: "Business name is required" });
@@ -139,7 +139,9 @@ export class MasterController {
         name,
         email,
         phone,
-        address
+        address,
+        subscriptionTier: subscriptionTier || undefined,
+        userLimit: userLimit != null && userLimit !== "" ? Number(userLimit) : undefined,
       };
 
       const business = await storage.createBusiness(businessData);
@@ -166,7 +168,7 @@ export class MasterController {
   private async updateBusiness(req: Request, res: Response, next: NextFunction) {
     try {
       const id = Number(req.params.id);
-      const { name, email, phone, address, isActive } = req.body;
+      const { name, email, phone, address, isActive, subscriptionTier, userLimit } = req.body;
 
       const business = await storage.getBusiness(id);
       if (!business) {
@@ -186,6 +188,8 @@ export class MasterController {
       if (email !== undefined) updateData.email = email;
       if (phone !== undefined) updateData.phone = phone;
       if (address !== undefined) updateData.address = address;
+      if (subscriptionTier !== undefined) updateData.subscriptionTier = subscriptionTier || undefined;
+      if (userLimit !== undefined) updateData.userLimit = userLimit !== "" && userLimit != null ? Number(userLimit) : undefined;
 
       const updated = await storage.updateBusiness(id, updateData);
       

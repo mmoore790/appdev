@@ -48,9 +48,13 @@ export class BusinessController {
   private async updateCurrentBusiness(req: Request, res: Response, next: NextFunction) {
     try {
       const businessId = getBusinessIdFromRequest(req);
-      const parsed = updateBusinessSchema.parse(req.body);
+      const parsed = updateBusinessSchema.parse(req.body) as Record<string, unknown>;
+      // Only master dashboard can change subscription and user limit; strip them from business profile updates
+      delete parsed.subscriptionTier;
+      delete parsed.userLimit;
+      const updates = parsed as Parameters<typeof storage.updateBusiness>[1];
 
-      const updated = await storage.updateBusiness(businessId, parsed);
+      const updated = await storage.updateBusiness(businessId, updates);
       if (!updated) {
         return res.status(404).json({ message: "Business not found" });
       }

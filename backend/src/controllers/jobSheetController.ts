@@ -1,7 +1,14 @@
 import { Router, Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { jobSheetService } from "../services/domains/jobSheetService";
 import { isAuthenticated } from "../auth";
-import { getBusinessIdFromRequest } from "../utils/requestHelpers";
+import { getBusinessIdFromRequest, getUserIdFromRequest } from "../utils/requestHelpers";
+import { uploadPublicFile } from "../services/fileStorageService";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
 
 export class JobSheetController {
   public readonly router = Router();
@@ -24,9 +31,13 @@ export class JobSheetController {
     this.router.post("/:jobId/notes", isAuthenticated, this.createOrUpdateJobNote);
     this.router.delete("/:jobId/notes", isAuthenticated, this.deleteJobNote);
 
+    // Job Internal Notes (multiple timestamped notes per job)
+    this.router.get("/:jobId/internal-notes", isAuthenticated, this.listJobInternalNotes);
+    this.router.post("/:jobId/internal-notes", isAuthenticated, this.createJobInternalNote);
+
     // Job Attachments
     this.router.get("/:jobId/attachments", isAuthenticated, this.listJobAttachments);
-    this.router.post("/:jobId/attachments", isAuthenticated, this.createJobAttachment);
+    this.router.post("/:jobId/attachments", isAuthenticated, upload.single("file"), this.createJobAttachment);
     this.router.delete("/attachments/:id", isAuthenticated, this.deleteJobAttachment);
   }
 
@@ -182,6 +193,34 @@ export class JobSheetController {
     }
   }
 
+  // Job Internal Notes
+  private async listJobInternalNotes(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const jobId = Number(req.params.jobId);
+      const notes = await jobSheetService.listJobInternalNotes(jobId, businessId);
+      res.json(notes);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private async createJobInternalNote(req: Request, res: Response, next: NextFunction) {
+    try {
+      const businessId = getBusinessIdFromRequest(req);
+      const jobId = Number(req.params.jobId);
+      const userId = (req.session as any)?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const data = { ...req.body, businessId, jobId, userId };
+      const note = await jobSheetService.createJobInternalNote(data);
+      res.status(201).json(note);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Job Attachments
   private async listJobAttachments(req: Request, res: Response, next: NextFunction) {
     try {
@@ -196,9 +235,27 @@ export class JobSheetController {
 
   private async createJobAttachment(req: Request, res: Response, next: NextFunction) {
     try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded. Send the file in a multipart field named 'file'." });
+      }
       const businessId = getBusinessIdFromRequest(req);
       const jobId = Number(req.params.jobId);
-      const data = { ...req.body, businessId, jobId };
+      const uploadedBy = getUserIdFromRequest(req);
+      const fileBuffer = Buffer.isBuffer(req.file.buffer) ? req.file.buffer : Buffer.from(req.file.buffer as ArrayBuffer);
+      const publicUrl = await uploadPublicFile(fileBuffer, req.file.mimetype, {
+        businessId,
+        folder: "job-attachments",
+        filename: req.file.originalname,
+      });
+      const data = {
+        businessId,
+        jobId,
+        fileName: req.file.originalname,
+        fileUrl: publicUrl,
+        fileType: req.file.mimetype,
+        fileSize: req.file.size,
+        uploadedBy,
+      };
       const attachment = await jobSheetService.createJobAttachment(data);
       res.status(201).json(attachment);
     } catch (error) {

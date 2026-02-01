@@ -8,12 +8,14 @@ import { Button } from "./ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "./ui/form";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { useToast } from "../hooks/use-toast";
 import { formatDate } from "../lib/utils";
-import { Plus, Clock, Package, FileText, Image as ImageIcon, Trash2, Edit2, Upload, Printer, X, Check } from "lucide-react";
+import { Plus, Clock, Package, FileText, Image as ImageIcon, Trash2, Edit2, Upload, Printer, X, Check, User } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import { Dialog, DialogContent } from "./ui/dialog";
 import { PrintJobSheet } from "./print-job-sheet";
 import { Separator } from "./ui/separator";
 
@@ -52,11 +54,14 @@ interface Job {
   customerPhone?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  invoiceStatus?: string | null;
+  invoiceNumber?: string | null;
 }
 
 interface User {
   id: number;
   fullName: string;
+  avatarUrl?: string | null;
 }
 
 interface Business {
@@ -107,11 +112,33 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
   const [deletingLabourId, setDeletingLabourId] = useState<number | null>(null);
   const [deletingPartId, setDeletingPartId] = useState<number | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
+  const [enlargedImage, setEnlargedImage] = useState<{ url: string; name: string } | null>(null);
 
   // Get job data
   const { data: job } = useQuery<Job>({
     queryKey: [`/api/jobs/${jobId}`],
     enabled: !!jobId,
+  });
+
+  // Sync invoice number input when job loads/updates
+  useEffect(() => {
+    setInvoiceNumberInput(job?.invoiceNumber ?? "");
+  }, [job?.invoiceNumber]);
+
+  // Update job invoice status and invoice number
+  const updateInvoiceMutation = useMutation({
+    mutationFn: async (data: { invoiceStatus?: string | null; invoiceNumber?: string | null }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Invoice details updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update invoice details", variant: "destructive" });
+    },
   });
 
   // Get users for technician dropdown
@@ -503,16 +530,13 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
 
     setUploadingFile(true);
     try {
-      const fileUrl = URL.createObjectURL(file);
-      const userResponse = await apiRequest<{ id: number }>("GET", "/api/user");
-      const uploadedBy = userResponse?.id || 1;
+      const formData = new FormData();
+      formData.append("file", file);
 
-      await apiRequest("POST", `/api/job-sheet/${jobId}/attachments`, {
-        fileName: file.name,
-        fileUrl: fileUrl,
-        fileType: file.type,
-        fileSize: file.size,
-        uploadedBy: uploadedBy,
+      await apiRequest({
+        method: "POST",
+        url: `/api/job-sheet/${jobId}/attachments`,
+        data: formData,
       });
 
       toast({ title: "File uploaded", description: "File has been successfully uploaded." });
@@ -594,9 +618,11 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
     return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
+  const invoiceStatusDisplay = job?.invoiceStatus && job.invoiceStatus !== "" ? job.invoiceStatus : "not_ready";
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm text-xs sm:text-sm">
-      {/* Header with Print Button */}
+      {/* Header: title and print */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-0 px-3 sm:px-4 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 border-b border-gray-200">
         <div className="min-w-0 flex-1">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-1">Job Sheet</h2>
@@ -610,7 +636,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
         </div>
       </div>
 
-      {/* Document Header */}
+      {/* Job details (industry standard: key identifiers + status + invoicing together) */}
       <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 border-b border-gray-200 bg-gray-50/50">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 text-xs sm:text-sm">
           <div>
@@ -640,6 +666,71 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
           <div>
             <span className="text-gray-500 font-medium">Status:</span>
             <span className="ml-2 text-gray-900">{job?.status ? formatStatus(job.status) : "—"}</span>
+          </div>
+          {/* Invoicing: status and number with other job metadata */}
+          <div className="sm:col-span-2 md:col-span-3 pt-3 mt-3 border-t border-gray-200 rounded-lg bg-amber-50/60 border border-amber-200/70 px-3 py-3">
+            <span className="text-amber-800 font-semibold text-sm block mb-2">Invoicing</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Status:</span>
+                {readOnly ? (
+                  <span className="text-gray-900">
+                    {invoiceStatusDisplay === "not_ready"
+                      ? "Not ready to invoice"
+                      : invoiceStatusDisplay === "ready_to_invoice"
+                        ? "Ready to invoice"
+                        : invoiceStatusDisplay === "invoiced"
+                          ? "Invoiced"
+                          : "—"}
+                  </span>
+                ) : (
+                  <Select
+                    value={invoiceStatusDisplay}
+                    onValueChange={(value) =>
+                      updateInvoiceMutation.mutate({
+                        invoiceStatus: value === "not_ready" ? null : value,
+                        invoiceNumber: invoiceNumberInput.trim() || null,
+                      })
+                    }
+                    disabled={updateInvoiceMutation.isPending}
+                  >
+                    <SelectTrigger className="w-[160px] h-8 text-xs" aria-label="Invoice status">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="not_ready">Not ready to invoice</SelectItem>
+                      <SelectItem value="ready_to_invoice">Ready to invoice</SelectItem>
+                      <SelectItem value="invoiced">Invoiced</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {invoiceStatusDisplay === "invoiced" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 font-medium shrink-0">Invoice number:</span>
+                  {readOnly ? (
+                    <span className="text-gray-900">{job?.invoiceNumber || "—"}</span>
+                  ) : (
+                    <Input
+                      placeholder="e.g. INV-001"
+                      className="w-[140px] h-8 text-xs"
+                      value={invoiceNumberInput}
+                      onChange={(e) => setInvoiceNumberInput(e.target.value)}
+                      onBlur={() => {
+                        const v = invoiceNumberInput.trim() || null;
+                        if (v === (job?.invoiceNumber ?? null)) return;
+                        updateInvoiceMutation.mutate({
+                          invoiceStatus: job?.invoiceStatus ?? null,
+                          invoiceNumber: v,
+                        });
+                      }}
+                      disabled={updateInvoiceMutation.isPending}
+                      aria-label="Invoice number"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -673,6 +764,14 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
             <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
             <span className="text-gray-600">Attachments:</span>
             <span className="font-semibold text-gray-900">{attachments.length}</span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-gray-600">Total (Ex VAT):</span>
+            <span className="font-semibold text-gray-900">£{grandTotalExcludingVat.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-gray-600">Total (Inc VAT):</span>
+            <span className="font-semibold text-gray-900">£{grandTotalIncludingVat.toFixed(2)}</span>
           </div>
         </div>
         {hasPartsWithoutPrice && (
@@ -760,7 +859,15 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
                               {Array.isArray(users) &&
                                 users.map((user) => (
                                   <SelectItem key={user.id} value={user.id.toString()}>
-                                    {user.fullName}
+                                    <span className="flex items-center gap-2">
+                                      <Avatar className="h-6 w-6 shrink-0">
+                                        <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+                                        <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                                          <User className="h-3.5 w-3.5" />
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      {user.fullName}
+                                    </span>
                                   </SelectItem>
                                 ))}
                             </SelectContent>
@@ -868,7 +975,15 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
                                       {Array.isArray(users) &&
                                         users.map((user) => (
                                           <SelectItem key={user.id} value={user.id.toString()}>
-                                            {user.fullName}
+                                            <span className="flex items-center gap-2">
+                                              <Avatar className="h-6 w-6 shrink-0">
+                                                <AvatarImage src={user.avatarUrl ?? undefined} alt="" />
+                                                <AvatarFallback className="bg-neutral-200 text-neutral-600">
+                                                  <User className="h-3.5 w-3.5" />
+                                                </AvatarFallback>
+                                              </Avatar>
+                                              {user.fullName}
+                                            </span>
                                           </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -1468,17 +1583,26 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
                 <div key={attachment.id} className="relative flex-shrink-0 group">
                   {attachment.fileType?.startsWith("image/") ? (
                     <div className="relative">
-                      <img
-                        src={attachment.fileUrl}
-                        alt={attachment.fileName}
-                        className="w-32 h-32 object-cover rounded border border-gray-200"
-                      />
+                      <button
+                        type="button"
+                        onClick={() => setEnlargedImage({ url: attachment.fileUrl, name: attachment.fileName })}
+                        className="block w-32 h-32 rounded border border-gray-200 overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 cursor-zoom-in"
+                      >
+                        <img
+                          src={attachment.fileUrl}
+                          alt={attachment.fileName}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
                       {!readOnly && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white"
-                          onClick={() => deleteAttachmentMutation.mutate(attachment.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteAttachmentMutation.mutate(attachment.id);
+                          }}
                         >
                           <Trash2 className="h-3 w-3 text-red-600" />
                         </Button>
@@ -1539,6 +1663,26 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
           </div>
         </div>
       </div>
+
+      {/* Enlarged image lightbox */}
+      <Dialog open={!!enlargedImage} onOpenChange={(open) => !open && setEnlargedImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-2 border-0 bg-black/95 [&>button]:text-white [&>button]:hover:text-gray-200 [&>button]:opacity-90" aria-describedby="enlarged-image-description">
+          {enlargedImage && (
+            <>
+              <img
+                id="enlarged-image-description"
+                src={enlargedImage.url}
+                alt={enlargedImage.name}
+                className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <p className="text-center text-sm text-gray-300 mt-1 px-2 truncate max-w-full" title={enlargedImage.name}>
+                {enlargedImage.name}
+              </p>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialogs */}
       <AlertDialog open={deletingLabourId !== null} onOpenChange={() => setDeletingLabourId(null)}>
