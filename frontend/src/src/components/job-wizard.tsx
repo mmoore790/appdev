@@ -37,6 +37,7 @@ interface User {
   username: string;
   fullName?: string;
   role: string;
+  avatarUrl?: string;
 }
 
 interface JobWizardProps {
