@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, CreditCard, AlertCircle, Loader2 } from "lucide-react";
+import { CheckCircle, CreditCard, AlertCircle, Loader2, Download } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface PaymentSessionStatus {
@@ -29,25 +29,33 @@ interface PaymentSessionStatus {
 export default function PaymentSuccess() {
   const [, navigate] = useLocation();
   const [sessionId, setSessionId] = useState<string>("");
+  const [paymentIntentId, setPaymentIntentId] = useState<string>("");
+  const [paymentIntentSuccess, setPaymentIntentSuccess] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   useEffect(() => {
-    // Extract session_id from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const sessionIdParam = urlParams.get('session_id');
-    
+    const paymentIntent = urlParams.get('payment_intent');
+    const redirectStatus = urlParams.get('redirect_status');
+
+    if (paymentIntent && redirectStatus === 'succeeded') {
+      setPaymentIntentId(paymentIntent);
+      setPaymentIntentSuccess(true);
+      return;
+    }
+
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
     } else {
-      // No session ID found, redirect to public tracker as a safe default
       navigate('/job-tracker');
     }
   }, [navigate]);
 
-  // Fetch payment session status
   const { data: sessionStatus, isLoading, error } = useQuery<PaymentSessionStatus>({
     queryKey: ['/api/stripe/session', sessionId],
     queryFn: () => apiRequest(`/api/stripe/session/${sessionId}`),
-    enabled: !!sessionId, // Only run query if sessionId exists
+    enabled: !!sessionId && !paymentIntentSuccess,
     retry: 3,
     retryDelay: 1000
   });
@@ -59,6 +67,72 @@ export default function PaymentSuccess() {
       currency: currency.toUpperCase() 
     }).format(amount);
   };
+
+  const handleDownloadReceipt = async () => {
+    const receiptPath = sessionId
+      ? `/api/payments/receipt/${encodeURIComponent(sessionId)}`
+      : paymentIntentId
+        ? `/api/payments/receipt/by-intent/${encodeURIComponent(paymentIntentId)}`
+        : "";
+    if (!receiptPath) return;
+    try {
+      setDownloadingReceipt(true);
+      const response = await fetch(receiptPath, {
+        method: "GET",
+      });
+      if (!response.ok) {
+        throw new Error("Could not download payment receipt");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const disposition = response.headers.get("content-disposition");
+      const match = disposition?.match(/filename="(.+)"/);
+      link.href = url;
+      link.download = match?.[1] || `payment-receipt-${sessionId || paymentIntentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Receipt download failed:", error);
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
+
+  if (paymentIntentSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/50 to-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center pb-2">
+            <CheckCircle className="h-16 w-16 text-emerald-600 mx-auto mb-4" />
+            <CardTitle className="text-2xl text-emerald-800">Payment successful</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-slate-600">
+              Thank you for your payment. Your transaction has been completed successfully.
+            </p>
+            <p className="text-sm text-slate-500">
+              A receipt has been sent to your email if provided.
+            </p>
+            <div className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={handleDownloadReceipt}
+                disabled={downloadingReceipt || !paymentIntentId}
+              >
+                <Download className="h-4 w-4" />
+                {downloadingReceipt ? "Downloading..." : "Download payment receipt"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -170,6 +244,18 @@ export default function PaymentSuccess() {
                 <strong>Thank you for your payment!</strong><br />
                 We've received your payment successfully and your service request will be processed.
               </p>
+              <div className="mt-4 flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleDownloadReceipt}
+                  disabled={downloadingReceipt}
+                >
+                  <Download className="h-4 w-4" />
+                  {downloadingReceipt ? "Downloading..." : "Download payment receipt"}
+                </Button>
+              </div>
             </div>
           )}
 

@@ -15,6 +15,141 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "@/hooks/use-toast";
+import { CreditCard, ExternalLink, Loader2, Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+
+function formatPence(amount: number, currency: string = "gbp") {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  }).format(amount / 100);
+}
+
+function BoltdownPayDashboard({
+  connectLoginLinkMutation,
+}: {
+  connectLoginLinkMutation: { mutate: () => void; isPending: boolean };
+}) {
+  const { data: balance, isLoading: balanceLoading } = useQuery<{
+    available: { amount: number; currency: string }[];
+    pending: { amount: number; currency: string }[];
+    configured: boolean;
+  }>({
+    queryKey: ["/api/boltdown-pay/balance"],
+  });
+
+  const { data: transactions, isLoading: txLoading } = useQuery<{
+    transactions: { id: string; amount: number; currency: string; type: string; status: string; created: string; description?: string }[];
+  }>({
+    queryKey: ["/api/boltdown-pay/transactions"],
+  });
+
+  const { data: payouts, isLoading: payoutsLoading } = useQuery<{
+    payouts: { id: string; amount: number; currency: string; status: string; arrival_date: number; created: string }[];
+  }>({
+    queryKey: ["/api/boltdown-pay/payouts"],
+  });
+
+  const availGbp = balance?.available?.find((b) => b.currency === "gbp");
+  const pendGbp = balance?.pending?.find((b) => b.currency === "gbp");
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <Badge className="bg-emerald-600">Accepting payments</Badge>
+      </div>
+
+      {/* Balance */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border bg-white p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ArrowDownToLine className="h-4 w-4" />
+            Available
+          </div>
+          <p className="mt-1 text-lg font-semibold">
+            {balanceLoading ? "—" : availGbp ? formatPence(availGbp.amount, availGbp.currency) : "£0.00"}
+          </p>
+          <p className="text-xs text-muted-foreground">Ready to pay out</p>
+        </div>
+        <div className="rounded-lg border bg-white p-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ArrowUpFromLine className="h-4 w-4" />
+            Pending
+          </div>
+          <p className="mt-1 text-lg font-semibold">
+            {balanceLoading ? "—" : pendGbp ? formatPence(pendGbp.amount, pendGbp.currency) : "£0.00"}
+          </p>
+          <p className="text-xs text-muted-foreground">Clearing to your account</p>
+        </div>
+      </div>
+
+      {/* Recent transactions */}
+      <div className="rounded-lg border bg-white p-4">
+        <h4 className="font-medium mb-2">Recent transactions</h4>
+        {txLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : transactions?.transactions?.length ? (
+          <ul className="space-y-2">
+            {transactions.transactions.slice(0, 5).map((t) => (
+              <li key={t.id} className="flex justify-between text-sm">
+                <span className="text-muted-foreground truncate">
+                  {t.type === "charge" ? "Payment" : t.type} {t.description ? `· ${t.description}` : ""}
+                </span>
+                <span className={t.amount >= 0 ? "text-emerald-600" : "text-slate-600"}>
+                  {t.amount >= 0 ? "+" : ""}{formatPence(t.amount, t.currency)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No transactions yet</p>
+        )}
+      </div>
+
+      {/* Payouts */}
+      <div className="rounded-lg border bg-white p-4">
+        <h4 className="font-medium mb-2">Payouts</h4>
+        {payoutsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : payouts?.payouts?.length ? (
+          <ul className="space-y-2">
+            {payouts.payouts.slice(0, 5).map((p) => (
+              <li key={p.id} className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {new Date(p.arrival_date * 1000).toLocaleDateString("en-GB")} · {p.status}
+                </span>
+                <span>{formatPence(p.amount, p.currency)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No payouts yet</p>
+        )}
+      </div>
+
+      {/* Manage bank account & payouts in Stripe Dashboard */}
+      <div className="rounded-lg border bg-white p-4">
+        <h4 className="font-medium mb-2">Account & bank details</h4>
+        <p className="text-sm text-muted-foreground mb-3">
+          Update bank details and view full payout history in your Stripe Express dashboard.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-fit"
+          disabled={connectLoginLinkMutation.isPending}
+          onClick={() => connectLoginLinkMutation.mutate()}
+        >
+          {connectLoginLinkMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <ExternalLink className="h-4 w-4 mr-2" />
+          )}
+          Manage bank & payouts (Stripe)
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 type Business = {
   id: number;
@@ -170,6 +305,64 @@ export default function Settings() {
 
   // Active settings tab (for loading user count when on Users tab)
   const [settingsTab, setSettingsTab] = useState("general");
+
+  // Stripe Connect status (optional payments for this business)
+  type ConnectStatus = {
+    connected: boolean;
+    configured: boolean;
+    chargesEnabled?: boolean;
+    payoutsEnabled?: boolean;
+    detailsSubmitted?: boolean;
+    status?: string;
+    stripeAccountId?: string;
+  };
+  const { data: connectStatus, isLoading: connectStatusLoading } = useQuery<ConnectStatus>({
+    queryKey: ["/api/stripe/connect/status"],
+  });
+  const connectOnboardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest<{ url: string | null; ready?: boolean; message?: string }>(
+        "/api/stripe/connect/onboard",
+        { method: "POST" }
+      );
+      return res;
+    },
+    onSuccess: (data) => {
+      if (data.ready) {
+        toast({ title: "Stripe payments", description: data.message ?? "Already set up." });
+        queryClient.invalidateQueries({ queryKey: ["/api/stripe/connect/status"] });
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe/connect/status"] });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Stripe setup failed",
+        description: (error as { message?: string })?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+  const connectLoginLinkMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest<{ url: string }>("/api/stripe/connect/login-link", { method: "POST" });
+    },
+    onSuccess: (data) => {
+      if (data.url) window.open(data.url, "_blank");
+      queryClient.invalidateQueries({ queryKey: ["/api/stripe/connect/status"] });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Could not open Stripe",
+        description: (error as { message?: string })?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Fetch user count and limits when on Users tab
   const { data: userCountData } = useQuery<{
@@ -337,9 +530,10 @@ export default function Settings() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
         <Tabs value={settingsTab} onValueChange={setSettingsTab} className="w-full">
           <div className="overflow-x-auto pb-2">
-            <TabsList className="inline-flex w-auto min-w-full h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground md:w-full md:grid md:grid-cols-2">
+            <TabsList className="inline-flex w-auto min-w-full h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground md:w-full md:grid md:grid-cols-3">
               <TabsTrigger value="general" className="whitespace-nowrap">General</TabsTrigger>
               <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
+              <TabsTrigger value="boltdown-pay" className="whitespace-nowrap">Boltdown Pay</TabsTrigger>
             </TabsList>
           </div>
           
@@ -526,6 +720,7 @@ export default function Settings() {
                         </div>
                       </AccordionContent>
                     </AccordionItem>
+
 
                     {/* Job tracker */}
                     <AccordionItem value="job-tracker">
@@ -901,6 +1096,74 @@ export default function Settings() {
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="boltdown-pay" className="mt-6 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
+                  Boltdown Pay
+                </CardTitle>
+                <CardDescription>
+                  Accept card payments from customers. Payments go through Boltdown Pay with a small platform fee; payouts go to your bank.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-lg border bg-muted/40 p-4 space-y-4">
+                  {connectStatusLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking status…
+                    </div>
+                  ) : !connectStatus?.configured ? (
+                    <p className="text-sm text-amber-700">
+                      Boltdown Pay is not configured for this platform. Contact support if you need payments.
+                    </p>
+                  ) : !connectStatus.connected ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm">Set up Boltdown Pay to start accepting card payments.</p>
+                      <Button
+                        type="button"
+                        className="bg-emerald-600 hover:bg-emerald-700 w-fit"
+                        disabled={connectOnboardMutation.isPending}
+                        onClick={() => connectOnboardMutation.mutate()}
+                      >
+                        {connectOnboardMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Wallet className="h-4 w-4 mr-2" />
+                        )}
+                        Set up Boltdown Pay
+                      </Button>
+                    </div>
+                  ) : connectStatus.status === "charges_enabled" ? (
+                    <BoltdownPayDashboard connectLoginLinkMutation={connectLoginLinkMutation} />
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm">
+                        {connectStatus.detailsSubmitted
+                          ? "Your account is being reviewed. You'll be able to accept payments once approved."
+                          : "Complete the setup to start accepting payments."}
+                      </p>
+                      <Button
+                        type="button"
+                        className="bg-emerald-600 hover:bg-emerald-700 w-fit"
+                        disabled={connectOnboardMutation.isPending}
+                        onClick={() => connectOnboardMutation.mutate()}
+                      >
+                        {connectOnboardMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Wallet className="h-4 w-4 mr-2" />
+                        )}
+                        Continue setup
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

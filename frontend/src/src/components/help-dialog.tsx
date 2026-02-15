@@ -61,7 +61,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
       title: "Task Board",
       description:
         "Create tasks, assign them to staff members, set priorities, and track completion. Organize your workflow efficiently.",
-      link: "/tasks",
+      link: "/actions",
     },
     {
       icon: <Users className="h-5 w-5" />,
@@ -89,7 +89,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
       title: "Callback Management",
       description:
         "Track customer callback requests, assign them to staff, and manage follow-up communications.",
-      link: "/callbacks",
+      link: "/actions",
     },
     {
       icon: <Calendar className="h-5 w-5" />,

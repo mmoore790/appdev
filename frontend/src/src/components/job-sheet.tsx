@@ -265,6 +265,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       labourForm.reset();
       setIsAddingLabour(false);
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/labour`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {
@@ -293,6 +294,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       setEditingLabourId(null);
       labourForm.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/labour`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {
@@ -308,6 +310,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       toast({ title: "Labour entry deleted", description: "Labour entry has been successfully deleted." });
       setDeletingLabourId(null);
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/labour`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {
@@ -348,6 +351,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       partForm.reset();
       setIsAddingPart(false);
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/parts`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {
@@ -388,6 +392,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       setEditingPartId(null);
       partForm.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/parts`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {
@@ -403,6 +408,7 @@ export function JobSheet({ jobId, readOnly = false, onWorkAdded }: JobSheetProps
       toast({ title: "Part deleted", description: "Part has been successfully deleted." });
       setDeletingPartId(null);
       queryClient.invalidateQueries({ queryKey: [`/api/job-sheet/${jobId}/parts`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/payments`] });
       if (onWorkAdded) onWorkAdded();
     },
     onError: (error: any) => {

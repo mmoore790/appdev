@@ -8,7 +8,7 @@ import { HorizontalNav } from "@/components/ui/horizontal-nav";
 import { Spinner } from "@/components/ui/spinner";
 import logLogo from "@/assets/logo-m.png";
 import Dashboard from "@/pages/dashboard";
-import Tasks from "@/pages/tasks";
+import Actions from "@/pages/actions";
 import Workshop from "@/pages/workshop";
 import WorkshopJobDetail from "@/pages/workshop-job-detail";
 import Analytics from "@/pages/analytics";
@@ -22,7 +22,7 @@ import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
 import PaymentSuccess from "@/pages/payment-success";
 import PaymentCancel from "@/pages/payment-cancel";
-import Callbacks from "@/pages/callbacks";
+import Pay from "@/pages/pay";
 import JobTracker from "@/pages/job-tracker";
 import Orders from "@/pages/orders";
 import OrderTracker from "@/pages/order-tracker";
@@ -106,6 +106,18 @@ function ProtectedRoute({ component: Component, allowedRoles, ...rest }: Protect
 
 const operationalRoles = ["admin", "staff", "mechanic"];
 
+function RedirectToActions({ redirectTab }: { redirectTab: "tasks" | "callbacks" }) {
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    navigate(`/actions?tab=${redirectTab}`, { replace: true });
+  }, [navigate, redirectTab]);
+  return (
+    <div className="flex justify-center items-center h-screen bg-gradient-to-r from-slate-50 to-blue-50/50">
+      <Spinner size="lg" text="Redirecting..." />
+    </div>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -131,8 +143,14 @@ function Router() {
       <Route path="/getting-started">
         {() => <ProtectedRoute component={GettingStarted} allowedRoles={operationalRoles} />}
       </Route>
+      <Route path="/actions">
+        {() => <ProtectedRoute component={Actions} allowedRoles={operationalRoles} />}
+      </Route>
       <Route path="/tasks">
-        {() => <ProtectedRoute component={Tasks} allowedRoles={operationalRoles} />}
+        {() => <ProtectedRoute component={RedirectToActions} allowedRoles={operationalRoles} redirectTab="tasks" />}
+      </Route>
+      <Route path="/callbacks">
+        {() => <ProtectedRoute component={RedirectToActions} allowedRoles={operationalRoles} redirectTab="callbacks" />}
       </Route>
       <Route path="/workshop/jobs/:jobId">
         {() => <ProtectedRoute component={WorkshopJobDetail} allowedRoles={operationalRoles} />}
@@ -159,9 +177,7 @@ function Router() {
         {() => <ProtectedRoute component={Account} />}
       </Route>
 
-      <Route path="/callbacks">
-        {() => <ProtectedRoute component={Callbacks} allowedRoles={operationalRoles} />}
-      </Route>
+      <Route path="/pay/:ref" component={Pay} />
       <Route path="/payments/success" component={PaymentSuccess} />
       <Route path="/payments/cancel" component={PaymentCancel} />
       <Route path="/orders">
@@ -207,10 +223,10 @@ function AuthAwareLayout() {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
   const publicRoutes = ['/login', '/forgot-password', '/onboarding/setup-account']; // Registration removed - now master-only
-  const customerPortalRoutes = ['/job-tracker', '/order-tracker', '/track-order', '/payments/success', '/payments/cancel']; // Customer-facing pages
+  const customerPortalRoutes = ['/pay', '/job-tracker', '/order-tracker', '/track-order', '/payments/success', '/payments/cancel']; // Customer-facing pages
   
   const isPublicRoute = publicRoutes.includes(location);
-  const isCustomerPortalRoute = customerPortalRoutes.includes(location);
+  const isCustomerPortalRoute = customerPortalRoutes.includes(location) || location.startsWith('/pay/');
   
   // For login, registration, job tracker, and payment pages, don't show the sidebar/header
   if (!isAuthenticated || isPublicRoute || isCustomerPortalRoute) {

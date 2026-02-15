@@ -8,6 +8,7 @@ import {
   BarChart3,
   PhoneCall,
   Users,
+  CheckSquare,
   CheckCircle2,
   AlertCircle,
   DollarSign,
@@ -71,9 +72,6 @@ import { TaskForm } from "@/components/task-form";
 import { CustomerForm } from "@/components/customer-form";
 import { JobWizard } from "@/components/job-wizard";
 import { ProductTour } from "@/components/product-tour";
-import { WelcomeModal } from "@/components/onboarding/welcome-modal";
-import { GuidedSetup } from "@/components/onboarding/guided-setup";
-import { OnboardingChecklist } from "@/components/onboarding/onboarding-checklist";
 
 // Define types for analytics data
 interface AnalyticsSummaryData {
@@ -96,10 +94,6 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isTourOpen, setIsTourOpen] = useState(false);
-  
-  // Onboarding states
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [showGuidedSetup, setShowGuidedSetup] = useState(false);
   
   // Dialog states
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
@@ -231,7 +225,7 @@ export default function Dashboard() {
   });
 
   // State for active tab
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "jobs" | "callbacks">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "actions" | "jobs">("overview");
 
   // State for task filtering and expansion
   const [taskFilter, setTaskFilter] = useState<{
@@ -362,48 +356,13 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
-
-
-
-
-  // Determine if user has completed setup (used in multiple places)
-  const hasCompletedSetup = Boolean((user as any)?.onboardingSetupCompletedAt);
-
-  // Check if user needs onboarding
+  // Dashboard onboarding behavior (non-modal)
   useEffect(() => {
-    // Don't run onboarding logic until we know whether this user is the first in the business
-    if (!user || isUsersLoading) return;
+    if (!user) return;
 
     const hasCompletedOnboarding = Boolean((user as any).onboardingCompletedAt);
-    const hasDismissedWelcome = Boolean((user as any).onboardingWelcomeDismissedAt);
-
-    // If setup is completed for this user, or this is NOT the first business user,
-    // hide all business-level onboarding elements
-    if (hasCompletedSetup || !isFirstBusinessUser) {
-      setShowWelcomeModal(false);
-      setShowGuidedSetup(false);
-      // Clear any saved onboarding step from localStorage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("guided_setup_current_step");
-      }
-    } else {
-      // Check if user is in the middle of guided setup (has saved step)
-      const savedStep = typeof window !== "undefined" 
-        ? localStorage.getItem("guided_setup_current_step") 
-        : null;
-      const savedStepNum = savedStep ? parseInt(savedStep, 10) : 0;
-      const isInGuidedSetup = savedStepNum > 0 && savedStepNum <= 5;
-
-      // Show welcome modal on first login if onboarding not completed
-      if (!hasCompletedOnboarding && !hasDismissedWelcome && !isInGuidedSetup) {
-        setShowWelcomeModal(true);
-      }
-
-      // Auto-open guided setup if user is in the middle of it (including step 5)
-      if (isInGuidedSetup && !hasCompletedSetup) {
-        setShowGuidedSetup(true);
-      }
-    }
+    // Clear legacy guided setup state from older onboarding flow.
+    localStorage.removeItem("guided_setup_current_step");
 
     // Auto-open the product tour the first time this user lands on the dashboard
     // Only if they've completed onboarding
@@ -420,10 +379,10 @@ export default function Dashboard() {
         localStorage.setItem(storageKey, "true");
       }
     }
-  }, [user, hasCompletedSetup, isUsersLoading, isFirstBusinessUser]);
+  }, [user]);
 
   // Determine if user is new (only first user in a business should see full onboarding)
-  const isNewUser = !!(user && isFirstBusinessUser && !(user as any).onboardingCompletedAt && !hasCompletedSetup);
+  const isNewUser = !!(user && isFirstBusinessUser && !(user as any).onboardingCompletedAt);
 
   // Calculate additional metrics
   const metrics = useMemo(() => {
@@ -753,11 +712,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-5 pb-4 sm:pb-6">
-      {/* Onboarding Checklist for New Users */}
-      {isNewUser && (
-        <OnboardingChecklist />
-      )}
-
       {/* Header Section - Clean and Simple */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200">
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -905,7 +859,7 @@ export default function Dashboard() {
                     <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/tasks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-amber-600 hover:text-amber-700 font-medium">
+                <Link href="/actions?tab=tasks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-amber-600 hover:text-amber-700 font-medium">
                   Manage tasks →
                 </Link>
               </CardContent>
@@ -941,7 +895,7 @@ export default function Dashboard() {
                     <PhoneCall className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 </div>
-                <Link href="/callbacks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
+                <Link href="/actions?tab=callbacks" className="block mt-2 sm:mt-3 text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
                   View callbacks →
                 </Link>
               </CardContent>
@@ -1052,17 +1006,17 @@ export default function Dashboard() {
             <CardContent className="p-0">
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
                 <div className="px-2 sm:px-4 pt-2 sm:pt-3">
-                  <TabsList className="grid w-full grid-cols-4 h-8 sm:h-9 gap-1 sm:gap-0">
+                  <TabsList className="grid w-full grid-cols-3 h-8 sm:h-9 gap-1 sm:gap-0">
                     <TabsTrigger value="overview" className="text-[10px] sm:text-xs px-1 sm:px-2">
                       <span className="hidden sm:inline">Overview</span>
                       <span className="sm:hidden">All</span>
                     </TabsTrigger>
-                    <TabsTrigger value="tasks" className="text-[10px] sm:text-xs px-1 sm:px-2">
-                      <span className="hidden sm:inline">My Tasks</span>
-                      <span className="sm:hidden">Tasks</span>
-                      {metrics.myTasks.active > 0 && (
+                    <TabsTrigger value="actions" className="text-[10px] sm:text-xs px-1 sm:px-2">
+                      <span className="hidden sm:inline">Actions</span>
+                      <span className="sm:hidden">Actions</span>
+                      {(metrics.myTasks.active > 0 || metrics.myCallbacks.total > 0) && (
                         <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
-                          {metrics.myTasks.active}
+                          {metrics.myTasks.active + metrics.myCallbacks.total}
                         </Badge>
                       )}
                     </TabsTrigger>
@@ -1072,15 +1026,6 @@ export default function Dashboard() {
                       {metrics.myJobs.total > 0 && (
                         <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
                           {metrics.myJobs.total}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger value="callbacks" className="text-[10px] sm:text-xs px-1 sm:px-2">
-                      <span className="hidden sm:inline">My Callbacks</span>
-                      <span className="sm:hidden">Calls</span>
-                      {metrics.myCallbacks.total > 0 && (
-                        <Badge variant="outline" className="ml-1 sm:ml-1.5 text-[9px] sm:text-[10px] px-0.5 sm:px-1 py-0">
-                          {metrics.myCallbacks.total}
                         </Badge>
                       )}
                     </TabsTrigger>
@@ -1207,31 +1152,36 @@ export default function Dashboard() {
                   </CardContent>
                 </TabsContent>
 
-                {/* Tasks Tab */}
-                <TabsContent value="tasks" className="mt-0">
+                {/* Actions Tab (Tasks + Callbacks) */}
+                <TabsContent value="actions" className="mt-0">
                   <CardContent className="p-3 sm:p-4">
-                    <div className="space-y-2 sm:space-y-3">
-                      {/* Summary Metrics */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {metrics.myTasks.overdue > 0 && (
-                          <div className="p-2.5 sm:p-2 bg-red-50 rounded border border-red-200">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs sm:text-sm text-red-700 font-medium">Overdue</span>
-                              <Badge variant="destructive" className="text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.overdue}</Badge>
+                    <div className="space-y-4 sm:space-y-6">
+                      {/* My Tasks section */}
+                      <div className="space-y-2 sm:space-y-3">
+                        <h3 className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                          <CheckSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          My Tasks
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {metrics.myTasks.overdue > 0 && (
+                            <div className="p-2.5 sm:p-2 bg-red-50 rounded border border-red-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs sm:text-sm text-red-700 font-medium">Overdue</span>
+                                <Badge variant="destructive" className="text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.overdue}</Badge>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {metrics.myTasks.dueSoon > 0 && (
-                          <div className="p-2.5 sm:p-2 bg-amber-50 rounded border border-amber-200">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs sm:text-sm text-amber-700 font-medium">Due Soon</span>
-                              <Badge className="bg-amber-500 text-white text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.dueSoon}</Badge>
+                          )}
+                          {metrics.myTasks.dueSoon > 0 && (
+                            <div className="p-2.5 sm:p-2 bg-amber-50 rounded border border-amber-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs sm:text-sm text-amber-700 font-medium">Due Soon</span>
+                                <Badge className="bg-amber-500 text-white text-[10px] sm:text-xs flex-shrink-0 ml-2">{metrics.myTasks.dueSoon}</Badge>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
 
-                      {metrics.myTasks.active > 0 && (
+                        {metrics.myTasks.active > 0 && (
                         <>
                           {/* Filters */}
                           <div className="space-y-2">
@@ -1444,17 +1394,81 @@ export default function Dashboard() {
                         </>
                       )}
 
-                      {metrics.myTasks.active > 0 && (
-                        <Link href="/tasks">
-                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
-                            View all tasks
-                            <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
-                          </Button>
-                        </Link>
-                      )}
-                      {metrics.myTasks.active === 0 && (
-                        <p className="text-xs sm:text-sm text-slate-500 italic text-center py-3 sm:py-2">No active tasks assigned</p>
-                      )}
+                        {metrics.myTasks.active > 0 && (
+                          <Link href="/actions?tab=tasks">
+                            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
+                              View all tasks
+                              <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
+                            </Button>
+                          </Link>
+                        )}
+                        {metrics.myTasks.active === 0 && (
+                          <p className="text-xs sm:text-sm text-slate-500 italic text-center py-3 sm:py-2">No active tasks assigned</p>
+                        )}
+                      </div>
+
+                      {/* My Callbacks section */}
+                      <div className="space-y-2 sm:space-y-3 border-t border-slate-200 pt-4">
+                        <h3 className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                          <PhoneCall className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          My Callbacks
+                        </h3>
+                        {metrics.myCallbacks.total > 0 ? (
+                          <ScrollArea className="h-[240px] sm:h-[300px]">
+                            <div className="space-y-2 sm:space-y-2 pr-2">
+                              {metrics.myCallbacks.activeList.map((callback: any) => (
+                                <div
+                                  key={callback.id}
+                                  className="p-2.5 sm:p-2 bg-blue-50 border border-blue-200 rounded mb-2 hover:bg-blue-100 transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedCallbackForDialog(callback);
+                                    setIsCallbackDetailDialogOpen(true);
+                                  }}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs sm:text-sm font-medium text-blue-900 truncate mb-1">
+                                        {callback.customerName || "Unknown Customer"}
+                                      </p>
+                                      <p className="text-[10px] sm:text-xs text-blue-700 mt-0.5 line-clamp-2 break-words">
+                                        {callback.subject || callback.details || "No details"}
+                                      </p>
+                                      {callback.phoneNumber && (
+                                        <a
+                                          href={`tel:${callback.phoneNumber}`}
+                                          className="text-[10px] sm:text-xs text-blue-600 mt-1 block hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {callback.phoneNumber}
+                                        </a>
+                                      )}
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 sm:h-3 sm:w-3 text-blue-600 flex-shrink-0 mt-0.5" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        ) : (
+                          <p className="text-xs sm:text-sm text-slate-500 italic text-center py-3 sm:py-2">No callbacks to do or follow up</p>
+                        )}
+
+                        {metrics.myCallbacks.total > 0 && (
+                          <Link href="/actions?tab=callbacks">
+                            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
+                              View callbacks
+                              <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+
+                      <Link href="/actions">
+                        <Button variant="outline" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
+                          View all actions
+                          <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
+                        </Button>
+                      </Link>
                     </div>
                   </CardContent>
                 </TabsContent>
@@ -1542,89 +1556,11 @@ export default function Dashboard() {
                   </CardContent>
                 </TabsContent>
 
-                {/* Callbacks Tab */}
-                <TabsContent value="callbacks" className="mt-0">
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="space-y-2 sm:space-y-3">
-                      {metrics.myCallbacks.total > 0 ? (
-                        <ScrollArea className="h-[300px] sm:h-[500px]">
-                          <div className="space-y-2 sm:space-y-2 pr-2">
-                            {metrics.myCallbacks.activeList.map((callback: any) => (
-                                <div
-                                  key={callback.id}
-                                  className="p-2.5 sm:p-2 bg-blue-50 border border-blue-200 rounded mb-2 hover:bg-blue-100 transition-colors cursor-pointer"
-                                  onClick={() => {
-                                    setSelectedCallbackForDialog(callback);
-                                    setIsCallbackDetailDialogOpen(true);
-                                  }}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs sm:text-sm font-medium text-blue-900 truncate mb-1">
-                                        {callback.customerName || "Unknown Customer"}
-                                      </p>
-                                      <p className="text-[10px] sm:text-xs text-blue-700 mt-0.5 line-clamp-2 break-words">
-                                        {callback.subject || callback.details || "No details"}
-                                      </p>
-                                      {callback.phoneNumber && (
-                                        <a 
-                                          href={`tel:${callback.phoneNumber}`}
-                                          className="text-[10px] sm:text-xs text-blue-600 mt-1 block hover:underline"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          {callback.phoneNumber}
-                                        </a>
-                                      )}
-                                    </div>
-                                    <ChevronRight className="h-4 w-4 sm:h-3 sm:w-3 text-blue-600 flex-shrink-0 mt-0.5" />
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </ScrollArea>
-                      ) : (
-                        <p className="text-xs sm:text-sm text-slate-500 italic text-center py-4 sm:py-6">No callbacks to do or follow up</p>
-                      )}
-
-                      {metrics.myCallbacks.total > 0 && (
-                        <Link href="/callbacks">
-                          <Button variant="ghost" size="sm" className="w-full mt-2 text-xs sm:text-sm h-9 sm:h-7">
-                            View callbacks
-                            <ChevronRight className="h-3.5 w-3.5 sm:h-3 sm:w-3 ml-1" />
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </CardContent>
-                </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Onboarding Modals - Only show if setup not completed AND this is the first user for the business */}
-      {!hasCompletedSetup && isFirstBusinessUser && (
-        <>
-          <WelcomeModal
-            open={showWelcomeModal}
-            onOpenChange={setShowWelcomeModal}
-            onStartSetup={() => setShowGuidedSetup(true)}
-            userName={user?.fullName || user?.username}
-          />
-          <GuidedSetup
-            open={showGuidedSetup}
-            onOpenChange={setShowGuidedSetup}
-            onComplete={() => {
-              queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-              toast({
-                title: "Setup complete!",
-                description: "You're all set to start using Boltdown.",
-              });
-            }}
-          />
-        </>
-      )}
 
       {/* Product Tour */}
       <ProductTour

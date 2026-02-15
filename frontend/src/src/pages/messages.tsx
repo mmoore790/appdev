@@ -1219,7 +1219,7 @@ export default function Messages() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         // Navigate to tasks page - could add task detail view later
-                                        navigate('/tasks');
+                                        navigate('/actions?tab=tasks');
                                       }}
                                       className="mt-2 flex items-center gap-2 text-xs opacity-90 hover:opacity-100 transition-opacity group cursor-pointer"
                                     >

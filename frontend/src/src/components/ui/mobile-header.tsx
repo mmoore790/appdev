@@ -20,7 +20,7 @@ export function MobileHeader() {
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
-    { path: "/tasks", label: "Tasks", icon: <CheckSquare size={20} /> },
+    { path: "/actions", label: "Actions", icon: <CheckSquare size={20} /> },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
     { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/analytics", label: "Analytics", icon: <BarChart3 size={20} /> },

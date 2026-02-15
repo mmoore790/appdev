@@ -126,7 +126,7 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
       </div>
 
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/tasks" className="block w-full">
+        <Link href="/actions?tab=tasks" className="block w-full">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 flex items-center shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-750 hover:shadow-md">
             <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 mr-3">
               <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -172,7 +172,7 @@ export function WelcomeBanner({ userName, userRole, className }: WelcomeBannerPr
           </div>
         </Link>
 
-        <Link href="/callbacks" className="block w-full">
+        <Link href="/actions?tab=callbacks" className="block w-full">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 flex items-center shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-750 hover:shadow-md">
             <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 mr-3">
               <PhoneCall className="h-5 w-5 text-amber-600 dark:text-amber-400" />

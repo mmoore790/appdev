@@ -303,7 +303,7 @@ export class NotificationService implements NotificationProvider {
       entityType: 'callback',
       entityId: callbackId,
       priority: priority || 'medium',
-      link: `/callbacks/${callbackId}`,
+      link: `/actions?tab=callbacks`,
         metadata: null,
     });
   }
@@ -328,7 +328,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'callback',
         entityId: callbackId,
         priority: priority || 'medium',
-        link: `/callbacks/${callbackId}`,
+        link: `/actions?tab=callbacks`,
         metadata: null,
       });
     }
@@ -344,7 +344,7 @@ export class NotificationService implements NotificationProvider {
         entityType: 'callback',
         entityId: callbackId,
         priority: priority || 'medium',
-        link: `/callbacks/${callbackId}`,
+        link: `/actions?tab=callbacks`,
         metadata: null,
       });
     }

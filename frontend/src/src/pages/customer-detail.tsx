@@ -922,7 +922,7 @@ export default function CustomerDetailPage() {
                 <Button
                   onClick={() => {
                     setIsCallbackDetailOpen(false);
-                    setLocation(`/callbacks`);
+                    setLocation(`/actions?tab=callbacks`);
                   }}
                 >
                   View in Callbacks
@@ -1007,7 +1007,7 @@ export default function CustomerDetailPage() {
                 <Button
                   onClick={() => {
                     setIsCallbackDetailOpen(false);
-                    setLocation(`/callbacks`);
+                    setLocation(`/actions?tab=callbacks`);
                   }}
                 >
                   View in Callbacks

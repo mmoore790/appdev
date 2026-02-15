@@ -13,7 +13,6 @@ import { Link, useLocation } from "wouter";
     Menu,
     X,
     Mail,
-    PhoneCall,
     Bug,
     Package,
     Calendar
@@ -72,8 +71,7 @@ export function Sidebar({ className }: SidebarProps) {
   const navItems: NavItem[] = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} />, allowedRoles: ["admin"] },
     { path: "/workshop", label: "Workshop", icon: <Wrench size={20} /> },
-    { path: "/tasks", label: "Task Board", icon: <CheckSquare size={20} /> },
-    { path: "/callbacks", label: "Callbacks", icon: <PhoneCall size={20} /> },
+    { path: "/actions", label: "Actions", icon: <CheckSquare size={20} /> },
     { path: "/customers", label: "Customers", icon: <Users size={20} /> },
     { path: "/orders", label: "Orders", icon: <Package size={20} /> },
     { path: "/calendar", label: "Calendar", icon: <Calendar size={20} /> },

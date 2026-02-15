@@ -624,38 +624,353 @@ export async function sendJobCompletedEmail(job: any, customer: any, business?: 
   }
 }
 
+function escapeHtmlPayment(text: string | null | undefined): string {
+  if (!text) return '';
+  const map: Record<string, string> = {
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+function generatePaymentRequestHTML(params: {
+  customerName: string;
+  amount: string;
+  description: string;
+  paymentLink: string | null;
+  business?: any;
+  customBody?: string | null;
+  jobId?: string;
+  jobSummary?: string;
+}): string {
+  const companyName = params.business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = params.business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = params.business?.phone || '02897510804';
+  const companyAddress = params.business?.address || '9 Drumalig Road, BT27 6UD';
+  const customerName = params.customerName || 'Valued Customer';
+  const defaultBody = params.paymentLink
+    ? `We're writing to request payment for the following. Please use the secure link below to pay £${escapeHtmlPayment(params.amount)}.`
+    : `We're writing to request payment of £${escapeHtmlPayment(params.amount)} for: ${escapeHtmlPayment(params.description)}. Please contact us to arrange payment.`;
+  const bodyContent = params.customBody
+    ? params.customBody
+        .replace(/\{\{amount\}\}/g, escapeHtmlPayment(params.amount))
+        .replace(/\{\{description\}\}/g, escapeHtmlPayment(params.description))
+        .replace(/\{\{paymentLink\}\}/g, params.paymentLink || '')
+        .replace(/\{\{jobId\}\}/g, escapeHtmlPayment(params.jobId || ''))
+        .replace(/\{\{jobSummary\}\}/g, escapeHtmlPayment(params.jobSummary || ''))
+    : defaultBody;
+  const paymentLinkBlock = params.paymentLink
+    ? `<div style="margin:24px 0"><a href="${escapeHtmlPayment(params.paymentLink)}" style="display:inline-block;background-color:#1B1B1B;color:#fff !important;padding:14px 28px;text-decoration:none;font-weight:800;border-radius:6px;font-family:'Fira Sans',Arial,sans-serif">Pay £${escapeHtmlPayment(params.amount)} securely</a></div>`
+    : '';
+  const jobSummaryBlock = params.jobSummary
+    ? `<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-radius:6px;font-size:14px;line-height:1.5;color:#334155;white-space:pre-wrap">${escapeHtmlPayment(params.jobSummary).replace(/\n/g, '<br/>')}</div>`
+    : '';
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link href="https://fonts.googleapis.com/css?family=Fira+Sans:400,800" rel="stylesheet"/><title>Payment Request</title></head><body style="margin:0;padding:0;background:#f4f4f4;font-family:'Fira Sans',Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4"><tr><td align="center" style="padding:20px 0">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+<tr><td style="padding:37px 40px;background:#1B1B1B"><div style="font-size:36px;line-height:128%;color:#fff;font-weight:800">Payment Request</div></td></tr>
+<tr><td style="padding:32px 40px">
+<div style="font-size:15px;line-height:140%;color:#333">
+<p style="margin:0 0 16px">Hi, ${escapeHtmlPayment(customerName)}</p>
+<div style="margin:16px 0">${bodyContent.replace(/\n/g, '<br/>')}</div>
+${jobSummaryBlock}
+${params.paymentLink ? `<p style="margin:16px 0">Amount due: <strong>£${escapeHtmlPayment(params.amount)}</strong></p>` : ''}
+${paymentLinkBlock}
+</div>
+</td></tr>
+<tr><td style="padding:24px 40px 32px;border-top:1px solid #eee;font-size:15px;line-height:140%;color:#333">
+<div>Kind Regards,</div><div style="margin-top:8px"><strong>${escapeHtmlPayment(companyName)}</strong></div><div>${escapeHtmlPayment(companyAddress)}</div><div>${escapeHtmlPayment(companyEmail)}</div><div>${escapeHtmlPayment(companyPhone)}</div>
+<div style="margin-top:16px;font-size:12px;color:#6b7280">THIS EMAIL HAS BEEN SENT BY BOLTDOWN. THIS MAILBOX IS NOT MONITORED - DO NOT REPLY TO THIS EMAIL.</div>
+</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+function generatePaymentRequestText(params: {
+  customerName: string;
+  amount: string;
+  description: string;
+  paymentLink: string | null;
+  business?: any;
+  customBody?: string | null;
+  jobId?: string;
+  jobSummary?: string;
+}): string {
+  const companyName = params.business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = params.business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = params.business?.phone || '02897510804';
+  const companyAddress = params.business?.address || '9 Drumalig Road, BT27 6UD';
+  const defaultBody = params.paymentLink
+    ? `We're writing to request payment. Please use the secure link below to pay £${params.amount}.\n\nAmount: £${params.amount}\nDescription: ${params.description}\n\nPay securely: ${params.paymentLink}`
+    : `We're writing to request payment of £${params.amount} for: ${params.description}. Please contact us to arrange payment.`;
+  const bodyContent = params.customBody
+    ? params.customBody
+        .replace(/\{\{amount\}\}/g, params.amount)
+        .replace(/\{\{description\}\}/g, params.description)
+        .replace(/\{\{paymentLink\}\}/g, params.paymentLink || '')
+        .replace(/\{\{jobId\}\}/g, params.jobId || '')
+        .replace(/\{\{jobSummary\}\}/g, params.jobSummary || '')
+    : defaultBody;
+  const jobSummarySection = params.jobSummary ? `\n\nJOB SUMMARY:\n${params.jobSummary}\n` : '';
+
+  return `${companyName.toUpperCase()}\nPayment Request\n\nDear ${params.customerName},\n\n${bodyContent}${jobSummarySection}\n\nKind Regards,\n${companyName}\n${companyAddress}\n${companyEmail}\n${companyPhone}\n\n---\nTHIS EMAIL HAS BEEN SENT BY BOLTDOWN. DO NOT REPLY TO THIS EMAIL.`;
+}
+
+export type SendPaymentRequestEmailParams = {
+  customerEmail: string;
+  paymentLink: string | null;
+  description: string;
+  amount: string;
+  checkoutReference: string;
+  business?: any;
+  customSubject?: string | null;
+  customBody?: string | null;
+  customerName?: string;
+  jobId?: string;
+  jobSummary?: string;
+  businessId?: number;
+  metadata?: Record<string, unknown>;
+};
+
 export async function sendPaymentRequestEmail(
   customerEmail: string,
   paymentLink: string,
   description: string,
   amount: string,
-  checkoutReference: string
+  checkoutReference: string,
+  options?: Partial<SendPaymentRequestEmailParams>
 ): Promise<boolean> {
-  // This function is not implemented yet but exported for compatibility
-  console.log('sendPaymentRequestEmail called', {
+  return sendPaymentRequestEmailInternal({
     customerEmail,
     paymentLink,
     description,
     amount,
-    checkoutReference
+    checkoutReference,
+    ...options,
   });
-  return false;
 }
 
 export async function sendPaymentRequestEmailNoLink(
   customerEmail: string,
   description: string,
   amount: string,
-  checkoutReference: string
+  checkoutReference: string,
+  options?: Partial<SendPaymentRequestEmailParams>
 ): Promise<boolean> {
-  // This function is not implemented yet but exported for compatibility
-  console.log('sendPaymentRequestEmailNoLink called', {
+  return sendPaymentRequestEmailInternal({
     customerEmail,
+    paymentLink: null,
     description,
     amount,
-    checkoutReference
+    checkoutReference,
+    ...options,
   });
-  return false;
+}
+
+async function sendPaymentRequestEmailInternal(params: SendPaymentRequestEmailParams): Promise<boolean> {
+  try {
+    const customerName = params.customerName || 'Valued Customer';
+    const subject = params.customSubject || `Payment request - £${params.amount}`;
+    const html = generatePaymentRequestHTML({
+      customerName,
+      amount: params.amount,
+      description: params.description,
+      paymentLink: params.paymentLink,
+      business: params.business,
+      customBody: params.customBody,
+      jobId: params.jobId,
+      jobSummary: params.jobSummary,
+    });
+    const text = generatePaymentRequestText({
+      customerName,
+      amount: params.amount,
+      description: params.description,
+      paymentLink: params.paymentLink,
+      business: params.business,
+      customBody: params.customBody,
+      jobId: params.jobId,
+      jobSummary: params.jobSummary,
+    });
+
+    if (process.env.RESEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithResend({
+        from: 'noreply@boltdown.co.uk',
+        to: params.customerEmail,
+        subject,
+        text,
+        html,
+      });
+      if (params.businessId) {
+        await logEmailToHistory({
+          businessId: params.businessId,
+          customerEmail: params.customerEmail,
+          subject,
+          body: text,
+          emailType: 'payment_request',
+          metadata: { checkoutReference: params.checkoutReference, ...params.metadata },
+        });
+      }
+      return true;
+    }
+    if (process.env.MAILERSEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithMailerSend({
+        from: 'noreply@boltdown.co.uk',
+        to: params.customerEmail,
+        subject,
+        text,
+        html,
+      });
+      if (params.businessId) {
+        await logEmailToHistory({
+          businessId: params.businessId,
+          customerEmail: params.customerEmail,
+          subject,
+          body: text,
+          emailType: 'payment_request',
+          metadata: { checkoutReference: params.checkoutReference, ...params.metadata },
+        });
+      }
+      return true;
+    }
+    console.log('📧 Payment request email (demo):', { to: params.customerEmail, subject });
+    if (params.businessId) {
+      await logEmailToHistory({
+        businessId: params.businessId,
+        customerEmail: params.customerEmail,
+        subject,
+        body: text,
+        emailType: 'payment_request',
+        metadata: { checkoutReference: params.checkoutReference, ...params.metadata },
+      });
+    }
+    return true;
+  } catch (error) {
+    console.error('sendPaymentRequestEmail error:', error);
+    return false;
+  }
+}
+
+export type SendProofOfPaymentEmailParams = {
+  customerEmail: string;
+  customerName?: string;
+  amount: string; // e.g. "45.00" in pounds
+  description: string;
+  jobId?: string; // job reference e.g. "MH-2024-001"
+  business?: any;
+  businessId?: number;
+};
+
+function generateProofOfPaymentHTML(params: SendProofOfPaymentEmailParams): string {
+  const companyName = params.business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = params.business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = params.business?.phone || '02897510804';
+  const companyAddress = params.business?.address || '9 Drumalig Road, BT27 6UD';
+  const customerName = params.customerName || 'Valued Customer';
+  const jobBlock = params.jobId
+    ? `<p style="margin:16px 0">Job reference: <strong>${escapeHtmlPayment(params.jobId)}</strong></p>`
+    : '';
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><link href="https://fonts.googleapis.com/css?family=Fira+Sans:400,800" rel="stylesheet"/><title>Proof of Payment</title></head><body style="margin:0;padding:0;background:#f4f4f4;font-family:'Fira Sans',Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4"><tr><td align="center" style="padding:20px 0">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+<tr><td style="padding:37px 40px;background:#1B1B1B"><div style="font-size:36px;line-height:128%;color:#fff;font-weight:800">Proof of Payment</div></td></tr>
+<tr><td style="padding:32px 40px">
+<div style="font-size:15px;line-height:140%;color:#333">
+<p style="margin:0 0 16px">Hi, ${escapeHtmlPayment(customerName)}</p>
+<p style="margin:16px 0">Thank you for your payment. This email confirms that we have received the following payment.</p>
+<div style="margin:16px 0;padding:12px 16px;background:#f0fdf4;border-radius:6px;border-left:4px solid #22c55e">
+<p style="margin:0 0 8px"><strong>Amount paid: £${escapeHtmlPayment(params.amount)}</strong></p>
+<p style="margin:0;color:#334155">${escapeHtmlPayment(params.description)}</p>
+</div>
+${jobBlock}
+</div>
+</td></tr>
+<tr><td style="padding:24px 40px 32px;border-top:1px solid #eee;font-size:15px;line-height:140%;color:#333">
+<div>Kind Regards,</div><div style="margin-top:8px"><strong>${escapeHtmlPayment(companyName)}</strong></div><div>${escapeHtmlPayment(companyAddress)}</div><div>${escapeHtmlPayment(companyEmail)}</div><div>${escapeHtmlPayment(companyPhone)}</div>
+<div style="margin-top:16px;font-size:12px;color:#6b7280">THIS EMAIL HAS BEEN SENT BY BOLTDOWN. THIS MAILBOX IS NOT MONITORED - DO NOT REPLY TO THIS EMAIL.</div>
+</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+function generateProofOfPaymentText(params: SendProofOfPaymentEmailParams): string {
+  const companyName = params.business?.name || 'Moore Horticulture Equipment';
+  const companyEmail = params.business?.email || 'info@mooresmowers.co.uk';
+  const companyPhone = params.business?.phone || '02897510804';
+  const companyAddress = params.business?.address || '9 Drumalig Road, BT27 6UD';
+  const customerName = params.customerName || 'Valued Customer';
+  const jobLine = params.jobId ? `\nJob reference: ${params.jobId}\n` : '';
+  return `${companyName.toUpperCase()}\nProof of Payment\n\nDear ${customerName},\n\nThank you for your payment. This email confirms that we have received the following payment.\n\nAmount paid: £${params.amount}\nDescription: ${params.description}${jobLine}\n\nKind Regards,\n${companyName}\n${companyAddress}\n${companyEmail}\n${companyPhone}\n\n---\nTHIS EMAIL HAS BEEN SENT BY BOLTDOWN. DO NOT REPLY TO THIS EMAIL.`;
+}
+
+export async function sendProofOfPaymentEmail(params: SendProofOfPaymentEmailParams): Promise<boolean> {
+  try {
+    const customerName = params.customerName || 'Valued Customer';
+    const subject = params.jobId
+      ? `Payment received - Job ${params.jobId}`
+      : `Payment received - £${params.amount}`;
+    const html = generateProofOfPaymentHTML(params);
+    const text = generateProofOfPaymentText(params);
+
+    if (process.env.RESEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithResend({
+        from: 'noreply@boltdown.co.uk',
+        to: params.customerEmail,
+        subject,
+        text,
+        html,
+      });
+      if (params.businessId) {
+        await logEmailToHistory({
+          businessId: params.businessId,
+          customerEmail: params.customerEmail,
+          subject,
+          body: text,
+          emailType: 'proof_of_payment',
+          metadata: { amount: params.amount, jobId: params.jobId },
+        });
+      }
+      console.log(`✅ Proof of payment email sent via Resend to ${params.customerEmail}`);
+      return true;
+    }
+    if (process.env.MAILERSEND_API_KEY) {
+      const emailService = new EmailService();
+      await emailService.sendEmailWithMailerSend({
+        from: 'noreply@boltdown.co.uk',
+        to: params.customerEmail,
+        subject,
+        text,
+        html,
+      });
+      if (params.businessId) {
+        await logEmailToHistory({
+          businessId: params.businessId,
+          customerEmail: params.customerEmail,
+          subject,
+          body: text,
+          emailType: 'proof_of_payment',
+          metadata: { amount: params.amount, jobId: params.jobId },
+        });
+      }
+      console.log(`✅ Proof of payment email sent via MailerSend to ${params.customerEmail}`);
+      return true;
+    }
+    console.log('📧 Proof of payment email (demo):', { to: params.customerEmail, subject });
+    if (params.businessId) {
+      await logEmailToHistory({
+        businessId: params.businessId,
+        customerEmail: params.customerEmail,
+        subject,
+        body: text,
+        emailType: 'proof_of_payment',
+        metadata: { amount: params.amount, jobId: params.jobId },
+      });
+    }
+    return true;
+  } catch (error) {
+    console.error('sendProofOfPaymentEmail error:', error);
+    return false;
+  }
 }
 
 export async function sendPartReadyEmail(part: any): Promise<boolean> {

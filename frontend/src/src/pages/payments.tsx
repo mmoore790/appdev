@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CreditCard, ExternalLink, Copy, Check, RefreshCw, AlertCircle } from "lucide-react";
+import { CreditCard, ExternalLink, Copy, Check, RefreshCw, AlertCircle, Send, CheckCircle2, FileText } from "lucide-react";
+import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 
 interface PaymentRequest {
@@ -78,6 +79,8 @@ const statusColors: Record<string, string> = {
   expired: "bg-gray-100 text-gray-800"
 };
 
+type PaymentFilter = "all" | "sent" | "paid";
+
 export default function Payments() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string>("");
@@ -85,7 +88,9 @@ export default function Payments() {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [copiedStates, setCopiedStates] = useState<Record<number, boolean>>({});
+  const [filter, setFilter] = useState<PaymentFilter>("all");
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // Fetch payment requests
   const { data: paymentRequests = [], isLoading: isLoadingPayments, refetch: refetchPayments } = useQuery<PaymentRequest[]>({
@@ -230,6 +235,15 @@ export default function Payments() {
     return (amountInPence / 100).toFixed(2);
   };
 
+  const filteredRequests = (() => {
+    if (filter === "sent") return paymentRequests.filter((p) => p.status === "pending");
+    if (filter === "paid") return paymentRequests.filter((p) => p.status === "paid");
+    return paymentRequests;
+  })();
+
+  const sentCount = paymentRequests.filter((p) => p.status === "pending").length;
+  const paidCount = paymentRequests.filter((p) => p.status === "paid").length;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -357,6 +371,43 @@ export default function Payments() {
 
       {/* Payment Requests List */}
       <div className="space-y-4">
+        {paymentRequests.length > 0 && (
+          <div className="flex items-center gap-2 border-b pb-2">
+            <span className="text-sm font-medium text-muted-foreground">Show:</span>
+            <div className="flex rounded-lg border bg-muted/30 p-0.5">
+              <button
+                type="button"
+                onClick={() => setFilter("all")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filter === "all" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All ({paymentRequests.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter("sent")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  filter === "sent" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Send size={14} />
+                Sent ({sentCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter("paid")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  filter === "paid" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <CheckCircle2 size={14} />
+                Paid ({paidCount})
+              </button>
+            </div>
+          </div>
+        )}
+
         {isLoadingPayments ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
@@ -375,8 +426,17 @@ export default function Payments() {
               </Button>
             </CardContent>
           </Card>
+        ) : filteredRequests.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <p className="text-muted-foreground">
+                {filter === "sent" && "No pending payment requests."}
+                {filter === "paid" && "No successful payments yet."}
+              </p>
+            </CardContent>
+          </Card>
         ) : (
-          paymentRequests.map((payment) => (
+          filteredRequests.map((payment) => (
             <Card key={payment.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -434,6 +494,20 @@ export default function Payments() {
                       <span className="font-medium text-sm">Customer Email:</span>
                       <br />
                       <span className="text-sm text-muted-foreground">{payment.customerEmail}</span>
+                    </div>
+                  )}
+
+                  {payment.jobId && (
+                    <div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLocation(`/workshop/jobs/${payment.jobId}`)}
+                        className="gap-2"
+                      >
+                        <FileText size={14} />
+                        View Job
+                      </Button>
                     </div>
                   )}
 

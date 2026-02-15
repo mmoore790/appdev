@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, CreditCard, Mail, DollarSign, AlertCircle, RefreshCw } from "lucide-react";
+import { CheckCircle2, CreditCard, Mail, PoundSterling, AlertCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/utils";
@@ -191,7 +191,7 @@ export function JobPaymentForm({ job, open, onClose }: JobPaymentFormProps) {
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center">
-                <DollarSign className="h-5 w-5 mr-2" />
+                <PoundSterling className="h-5 w-5 mr-2" />
                 Payment Management - Job {job.jobId}
                 {getPaymentStatusBadge()}
               </DialogTitle>

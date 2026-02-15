@@ -42,6 +42,9 @@ When payment is detected:
 ### Environment Variables
 - `STRIPE_SECRET_KEY` → Your Stripe secret key (sk_...)
 - `STRIPE_WEBHOOK_SECRET` → Webhook endpoint secret (whsec_...) - Optional for development
+- **Stripe Connect (optional per-business):**
+  - `STRIPE_PLATFORM_FEE_BPS` → Platform fee in basis points (default 40 = 0.4%). Used when businesses accept payments via Connect.
+  - `FRONTEND_DOMAIN` or `FRONTEND_URL` → Used for Connect return URLs and checkout success/cancel (e.g. `app.boltdown.co.uk`). Must not include `https://` if using `FRONTEND_DOMAIN`.
 
 ### Security Features
 - **Signature verification**: Validates webhook authenticity (when STRIPE_WEBHOOK_SECRET is set)
@@ -103,6 +106,14 @@ curl -X POST "http://localhost:5000/api/stripe/webhook" \
 - Monitor payment_requests table for status updates
 - Verify jobs table payment_status changes
 - Review activities table for payment completion logs
+
+## Stripe Connect (optional per-business)
+
+Businesses can optionally connect Stripe from **Settings → General → Payments (Stripe)** to accept card payments for jobs. Each business gets an Express account; payouts go to their bank; the platform takes a configurable fee (default 0.4%).
+
+- **Database:** Run migration `0029_add_stripe_connect.sql` to add `stripe_account_id` and `stripe_account_status` to `businesses`.
+- **Flow:** Admin opens Settings → Payments (Stripe) → "Set up Stripe payments" → Stripe onboarding → return to Settings. Once charges are enabled, job payment requests use destination charges to the connected account.
+- **Webhook:** Checkout session metadata includes `businessId` so completed payments are attributed to the correct business.
 
 ## Status: ✅ FULLY OPERATIONAL
 - Webhook endpoint: `/api/stripe/webhook` ✅ Working

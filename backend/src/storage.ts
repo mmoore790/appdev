@@ -16,6 +16,7 @@ import {
   jobInternalNotes, JobInternalNote, InsertJobInternalNote,
   jobAttachments, JobAttachment, InsertJobAttachment,
   paymentRequests, PaymentRequest, InsertPaymentRequest,
+  payments, Payment, InsertPayment,
   jobCounter, JobCounter,
   orderCounter, OrderCounter,
   partsOnOrder, PartOnOrder, InsertPartOnOrder,
@@ -38,6 +39,14 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { db, pool } from "./db";
 import { and, desc, eq, ne, lt, gte, lte, isNull, isNotNull, or, sql, inArray } from "drizzle-orm";
+
+type StripePaymentCompletionDetails = {
+  stripeReceiptUrl?: string;
+  stripePaymentIntentId?: string;
+  paidAt?: string;
+  notes?: string;
+  paymentMethod?: string;
+};
 
 /**
  * Normalize phone number by removing all non-digit characters
@@ -129,7 +138,12 @@ export interface IStorage {
   createJobPaymentRequest(jobId: number, requestData: any, createdBy: number): Promise<PaymentRequest>;
   markJobAsPaid(jobId: number, paymentData: any, recordedBy: number): Promise<Job | undefined>;
   getJobPaymentStatus(jobId: number): Promise<any>;
-  completeJobPaymentFromStripe(paymentRequestId: number): Promise<Job | undefined>;
+  completeJobPaymentFromStripe(paymentRequestId: number, details?: StripePaymentCompletionDetails): Promise<Job | undefined>;
+  getPaymentsByJobId(jobId: number, businessId: number): Promise<Payment[]>;
+  getPaymentById(id: number, businessId: number): Promise<Payment | undefined>;
+  updatePaymentById(id: number, data: Partial<InsertPayment>, businessId: number): Promise<Payment | undefined>;
+  createPayment(data: InsertPayment): Promise<Payment>;
+  getJobTotalCost(jobId: number, businessId: number): Promise<number>;
 
   // Service operations
   getService(id: number, businessId: number): Promise<Service | undefined>;
@@ -206,6 +220,7 @@ export interface IStorage {
   // Payment Request operations
   getPaymentRequest(id: number, businessId: number): Promise<PaymentRequest | undefined>;
   getPaymentRequestByReference(reference: string, businessId: number): Promise<PaymentRequest | undefined>;
+  getPaymentRequestByReferenceOnly(reference: string): Promise<PaymentRequest | undefined>;
   getPaymentRequestsByJob(jobId: number, businessId: number): Promise<PaymentRequest[]>;
   getAllPaymentRequests(businessId: number): Promise<PaymentRequest[]>;
   createPaymentRequest(paymentData: InsertPaymentRequest): Promise<PaymentRequest>;
@@ -458,6 +473,7 @@ export class DatabaseStorage implements IStorage {
       
       // Delete payment requests
       await tx.delete(paymentRequests).where(eq(paymentRequests.businessId, id));
+      await tx.delete(payments).where(eq(payments.businessId, id));
       
       // Delete work completed
       await tx.delete(workCompleted).where(eq(workCompleted.businessId, id));
@@ -1115,6 +1131,10 @@ export class DatabaseStorage implements IStorage {
       // Then delete related payment requests
       await db.delete(paymentRequests).where(
         and(eq(paymentRequests.jobId, id), eq(paymentRequests.businessId, businessId))
+      );
+      // Delete related job payments
+      await db.delete(payments).where(
+        and(eq(payments.jobId, id), eq(payments.businessId, businessId))
       );
       
       // Delete related work completed records
@@ -2021,6 +2041,13 @@ export class DatabaseStorage implements IStorage {
     return paymentRequest;
   }
 
+  async getPaymentRequestByReferenceOnly(reference: string): Promise<PaymentRequest | undefined> {
+    const [paymentRequest] = await db.select().from(paymentRequests).where(
+      eq(paymentRequests.checkoutReference, reference)
+    ).limit(1);
+    return paymentRequest;
+  }
+
   async getPaymentRequestsByJob(jobId: number, businessId: number): Promise<PaymentRequest[]> {
     return await db.select().from(paymentRequests).where(
       and(eq(paymentRequests.jobId, jobId), eq(paymentRequests.businessId, businessId))
@@ -2082,15 +2109,7 @@ export class DatabaseStorage implements IStorage {
     };
 
     if (status === 'paid') {
-      updateData.paidAt = new Date().toLocaleString('en-GB', { 
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
+      updateData.paidAt = new Date().toISOString();
     }
 
     if (transactionData) {
@@ -2109,49 +2128,141 @@ export class DatabaseStorage implements IStorage {
     return paymentRequest;
   }
 
-  // Job payment operations
-  async recordJobPayment(jobId: number, paymentData: any, recordedBy: number): Promise<Job | undefined> {
-    // Get job to find businessId
-    const job = await this.getJob(jobId, (paymentData as any).businessId || 0);
+  async getJobTotalCost(jobId: number, businessId: number): Promise<number> {
+    const [labour, parts, business] = await Promise.all([
+      this.getLabourEntriesByJobId(jobId, businessId),
+      this.getPartsUsedByJobId(jobId, businessId),
+      this.getBusiness(businessId),
+    ]);
+    const VAT_MULTIPLIER = 1.2; // 20% VAT
+
+    // Prefer business hourly rate; otherwise infer from first labour entry that has cost + time
+    let hourlyRatePence = business?.hourlyLabourFee ?? 0;
+    if (hourlyRatePence <= 0 && labour.length > 0) {
+      const withCost = labour.find(
+        (e) => (e.costIncludingVat ?? e.costExcludingVat ?? e.cost ?? 0) > 0 && e.timeSpent > 0
+      );
+      if (withCost) {
+        const incVat = withCost.costIncludingVat ?? Math.round((withCost.costExcludingVat ?? withCost.cost ?? 0) * VAT_MULTIPLIER);
+        const hours = withCost.timeSpent / 60;
+        hourlyRatePence = hours > 0 ? Math.round(incVat / VAT_MULTIPLIER / hours) : 0; // ex VAT per hour in pence
+      }
+    }
+
+    const backfills: { id: number; exVatPence: number; incVatPence: number }[] = [];
+    let labourTotal = 0;
+
+    for (const e of labour) {
+      // Use stored cost (inc VAT preferred; else derive from ex VAT)
+      const incVatStored = e.costIncludingVat ?? (e.costExcludingVat != null ? Math.round((e.costExcludingVat ?? 0) * VAT_MULTIPLIER) : null) ?? (e.cost != null ? Math.round((e.cost ?? 0) * VAT_MULTIPLIER) : null);
+      if (incVatStored != null) {
+        labourTotal += incVatStored;
+        continue;
+      }
+      // No stored cost: compute from timeSpent and hourly rate (business or inferred)
+      if (hourlyRatePence > 0 && e.timeSpent) {
+        const hours = e.timeSpent / 60;
+        const exVatPence = Math.round(hours * hourlyRatePence);
+        const incVatPence = Math.round(exVatPence * VAT_MULTIPLIER);
+        labourTotal += incVatPence;
+        backfills.push({ id: e.id, exVatPence, incVatPence });
+      }
+    }
+
+    // Persist computed costs so Job Sheet and Payments stay in sync
+    for (const { id, exVatPence, incVatPence } of backfills) {
+      await this.updateLabourEntry(id, { costExcludingVat: exVatPence, costIncludingVat: incVatPence }, businessId);
+    }
+
+    const partsTotal = parts.reduce((sum, p) => {
+      const inc = p.costIncludingVat ?? (p.costExcludingVat != null ? Math.round((p.costExcludingVat ?? 0) * VAT_MULTIPLIER) : null) ?? (p.cost != null ? Math.round((p.cost ?? 0) * VAT_MULTIPLIER) : null);
+      return sum + (inc ?? 0);
+    }, 0);
+    return labourTotal + partsTotal;
+  }
+
+  async getPaymentsByJobId(jobId: number, businessId: number): Promise<Payment[]> {
+    return await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.jobId, jobId), eq(payments.businessId, businessId)))
+      .orderBy(desc(payments.createdAt));
+  }
+
+  async getPaymentById(id: number, businessId: number): Promise<Payment | undefined> {
+    const [row] = await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.id, id), eq(payments.businessId, businessId)))
+      .limit(1);
+    return row;
+  }
+
+  async updatePaymentById(id: number, data: Partial<InsertPayment>, businessId: number): Promise<Payment | undefined> {
+    const [row] = await db
+      .update(payments)
+      .set(data)
+      .where(and(eq(payments.id, id), eq(payments.businessId, businessId)))
+      .returning();
+    return row;
+  }
+
+  async createPayment(data: InsertPayment): Promise<Payment> {
+    const [row] = await db.insert(payments).values(data).returning();
+    return row;
+  }
+
+  private async syncJobPaymentFromPayments(jobId: number, businessId: number): Promise<Job | undefined> {
+    const job = await this.getJob(jobId, businessId);
     if (!job) return undefined;
-    
-    const [updatedJob] = await db
+    const paymentRows = await this.getPaymentsByJobId(jobId, businessId);
+    const totalPaid = paymentRows.reduce((sum, p) => sum + p.amount, 0);
+    const totalCost = await this.getJobTotalCost(jobId, businessId);
+    let paymentStatus: string = 'unpaid';
+    if (totalPaid >= totalCost && totalCost > 0) paymentStatus = 'paid';
+    else if (totalPaid > 0) paymentStatus = 'partial';
+    const lastPayment = paymentRows[0];
+    const [updated] = await db
       .update(jobs)
       .set({
-        paymentStatus: 'paid',
-        paymentAmount: Math.round(paymentData.paymentAmount * 100), // Convert to pence
-        invoiceNumber: paymentData.invoiceNumber,
-        paymentMethod: paymentData.paymentMethod,
-        paymentNotes: paymentData.paymentNotes,
-        paidAt: new Date().toLocaleString('en-GB', { 
-          timeZone: 'Europe/London',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        }),
-        paymentRecordedBy: recordedBy
+        paymentStatus,
+        paymentAmount: totalPaid,
+        paymentMethod: lastPayment?.paymentMethod ?? job.paymentMethod,
+        paymentNotes: lastPayment?.notes ?? job.paymentNotes,
+        paidAt: lastPayment?.paidAt ?? job.paidAt,
+        paymentRecordedBy: lastPayment?.recordedBy ?? job.paymentRecordedBy,
       })
-      .where(
-        and(eq(jobs.id, jobId), eq(jobs.businessId, job.businessId))
-      )
+      .where(and(eq(jobs.id, jobId), eq(jobs.businessId, businessId)))
       .returning();
-    
-    if (updatedJob) {
-      // Create activity log for payment recording
+    return updated;
+  }
+
+  // Job payment operations
+  async recordJobPayment(jobId: number, paymentData: any, recordedBy: number): Promise<Job | undefined> {
+    const job = await this.getJob(jobId, (paymentData as any).businessId || 0);
+    if (!job) return undefined;
+    const amountPence = Math.round((paymentData.paymentAmount ?? 0) * 100);
+    const paidAt = new Date().toISOString();
+    await this.createPayment({
+      businessId: job.businessId,
+      jobId,
+      amount: amountPence,
+      paymentMethod: paymentData.paymentMethod || 'other',
+      recordedBy,
+      paidAt,
+      notes: [paymentData.invoiceNumber, paymentData.paymentNotes].filter(Boolean).join(' | ') || undefined,
+    });
+    if (job) {
       await this.createActivity({
         businessId: job.businessId,
         userId: recordedBy,
         activityType: 'job_payment_recorded',
-        description: `Payment recorded for job ${updatedJob.jobId} - £${paymentData.paymentAmount} via ${paymentData.paymentMethod}`,
+        description: `Payment recorded for job ${job.jobId} - £${paymentData.paymentAmount} via ${paymentData.paymentMethod}`,
         entityType: 'job',
-        entityId: updatedJob.id
+        entityId: job.id
       });
     }
-    
-    return updatedJob;
+    return this.syncJobPaymentFromPayments(jobId, job.businessId);
   }
 
   async createJobPaymentRequest(jobId: number, requestData: any, createdBy: number): Promise<PaymentRequest> {
@@ -2201,43 +2312,78 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Method to handle automatic payment completion from Stripe
-  async completeJobPaymentFromStripe(paymentRequestId: number): Promise<Job | undefined> {
-    // We need businessId - try to get it from payment request
-    const paymentRequest = await db.select().from(paymentRequests).where(eq(paymentRequests.id, paymentRequestId)).limit(1);
-    if (!paymentRequest[0] || !paymentRequest[0].jobId) {
-      return undefined;
+  async completeJobPaymentFromStripe(paymentRequestId: number, details?: StripePaymentCompletionDetails): Promise<Job | undefined> {
+    const [paymentRequest] = await db.select().from(paymentRequests).where(eq(paymentRequests.id, paymentRequestId)).limit(1);
+    if (!paymentRequest || !paymentRequest.jobId) return undefined;
+
+    const businessId = paymentRequest.businessId;
+    const jobId = paymentRequest.jobId;
+    const paidAt = details?.paidAt ?? new Date().toISOString();
+    const stripePaymentIntentId =
+      details?.stripePaymentIntentId ??
+      (paymentRequest.checkoutId?.startsWith('pi_') ? paymentRequest.checkoutId : undefined);
+    const notes =
+      details?.notes ??
+      `Paid via Stripe - Reference: ${paymentRequest.checkoutReference}${stripePaymentIntentId ? ` - Intent: ${stripePaymentIntentId}` : ''}`;
+
+    const [existingPayment] = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.paymentRequestId, paymentRequest.id),
+          eq(payments.businessId, businessId)
+        )
+      )
+      .limit(1);
+    if (existingPayment) {
+      const patch: Partial<InsertPayment> = {};
+      if (details?.stripeReceiptUrl && !existingPayment.stripeReceiptUrl) {
+        patch.stripeReceiptUrl = details.stripeReceiptUrl;
+      }
+      if (stripePaymentIntentId && !existingPayment.stripePaymentIntentId) {
+        patch.stripePaymentIntentId = stripePaymentIntentId;
+      }
+      if (details?.paidAt && !existingPayment.paidAt) {
+        patch.paidAt = details.paidAt;
+      }
+      if (details?.notes && (!existingPayment.notes || existingPayment.notes.length === 0)) {
+        patch.notes = details.notes;
+      }
+      if (Object.keys(patch).length > 0) {
+        await db
+          .update(payments)
+          .set(patch)
+          .where(eq(payments.id, existingPayment.id));
+      }
+      return this.syncJobPaymentFromPayments(jobId, businessId);
     }
 
-    const businessId = paymentRequest[0].businessId;
-    const jobId = paymentRequest[0].jobId;
+    await this.createPayment({
+      businessId,
+      jobId,
+      amount: paymentRequest.amount,
+      paymentMethod: details?.paymentMethod || 'stripe',
+      stripeReceiptUrl: details?.stripeReceiptUrl ?? undefined,
+      stripePaymentIntentId,
+      paymentRequestId: paymentRequest.id,
+      recordedBy: paymentRequest.createdBy ?? undefined,
+      paidAt,
+      notes,
+    });
 
-    const [job] = await db
-      .update(jobs)
-      .set({
-        paymentStatus: 'paid',
-        paymentAmount: paymentRequest[0].amount,
-        paymentMethod: 'stripe',
-        paidAt: new Date().toISOString(),
-        paymentNotes: `Paid via Stripe - Reference: ${paymentRequest[0].checkoutReference}`
-      })
-      .where(
-        and(eq(jobs.id, jobId), eq(jobs.businessId, businessId))
-      )
-      .returning();
-
-    if (job) {
-      // Create activity log
+    if (paymentRequest.businessId) {
       await this.createActivity({
-        businessId: businessId,
-        userId: paymentRequest[0].createdBy || 1,
+        businessId: paymentRequest.businessId,
+        userId: paymentRequest.createdBy || 1,
         activityType: 'job_payment_completed',
-        description: `Payment completed via Stripe for job ${job.jobId} - £${paymentRequest[0].amount / 100}`,
+        description: `Payment completed via Stripe for job - £${paymentRequest.amount / 100}`,
         entityType: 'job',
-        entityId: job.id
+        entityId: jobId
       });
     }
 
-    return job;
+    return this.syncJobPaymentFromPayments(jobId, businessId);
   }
 
   // Additional job payment methods

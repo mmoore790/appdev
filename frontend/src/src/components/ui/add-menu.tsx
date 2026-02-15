@@ -52,7 +52,7 @@ export function AddMenu({
     {
       label: "New Task",
       icon: <ClipboardList size={16} />,
-      onClick: onNewTask || (() => navigate("/tasks")),
+      onClick: onNewTask || (() => navigate("/actions?tab=tasks")),
       permission: "all" // Everyone can create tasks
     },
     {

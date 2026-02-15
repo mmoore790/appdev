@@ -27,17 +27,22 @@ export class NotificationController {
 
       // Add relative time and format
       const enrichedNotifications = notifications.slice(0, 50).map(notif => {
-        // Normalize task links - convert /tasks/:id to /tasks?taskId=:id format
+        // Normalize task links - use /actions?tab=tasks&taskId=:id format
         let link = notif.link || this.getDefaultLink(notif.type, notif.entityId);
         if (notif.type === 'task') {
-          // Convert old /tasks/:id format to new query parameter format
           if (link.startsWith('/tasks/') && link !== '/tasks') {
             const taskId = link.replace('/tasks/', '');
-            link = `/tasks?taskId=${taskId}`;
-          } else if (link === '/tasks' && notif.entityId) {
-            // If link is just /tasks but we have entityId, add it as query param
-            link = `/tasks?taskId=${notif.entityId}`;
+            link = `/actions?tab=tasks&taskId=${taskId}`;
+          } else if (link.startsWith('/actions')) {
+            // Already in actions format
+          } else if ((link === '/tasks' || link?.startsWith('/tasks?')) && notif.entityId) {
+            link = `/actions?tab=tasks&taskId=${notif.entityId}`;
+          } else if (link === '/tasks') {
+            link = '/actions?tab=tasks';
           }
+        }
+        if (notif.type === 'callback') {
+          link = link?.startsWith('/actions') ? link : '/actions?tab=callbacks';
         }
         // Normalize order links - convert /orders/:id to /orders?orderId=:id format
         if (notif.type === 'order') {
@@ -95,9 +100,9 @@ export class NotificationController {
       case "job_unassigned":
         return entityId ? `/workshop/jobs/${entityId}` : "/workshop";
       case "callback":
-        return `/callbacks`;
+        return `/actions?tab=callbacks`;
       case "task":
-        return entityId ? `/tasks?taskId=${entityId}` : `/tasks`;
+        return entityId ? `/actions?tab=tasks&taskId=${entityId}` : `/actions?tab=tasks`;
       case "order":
         return entityId ? `/orders?orderId=${entityId}` : `/orders`;
       case "calendar":

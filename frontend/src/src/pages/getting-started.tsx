@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { resolveApiUrl } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +15,6 @@ import {
   CheckSquare,
   Users,
   MessageSquare,
-  PhoneCall,
   BarChart3,
   Calendar,
   Package,
@@ -29,10 +26,8 @@ import {
   Mail,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 export default function GettingStarted() {
-  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -95,10 +90,10 @@ export default function GettingStarted() {
     },
     {
       icon: <CheckSquare className="h-6 w-6" />,
-      title: "Task Board",
+      title: "Actions",
       description:
-        "Create tasks, assign them to staff members, set priorities, and track completion. Organise your workflow efficiently.",
-      link: "/tasks",
+        "Manage tasks and customer callbacks in one place. Create and assign tasks, track callbacks, and complete follow-ups.",
+      link: "/actions",
     },
     {
       icon: <Users className="h-6 w-6" />,
@@ -113,13 +108,6 @@ export default function GettingStarted() {
       description:
         "Communicate with your team members through the built-in messaging system. Share updates and co-ordinate work.",
       link: "/messages",
-    },
-    {
-      icon: <PhoneCall className="h-6 w-6" />,
-      title: "Callback Management",
-      description:
-        "Track customer callback requests, assign them to staff, and manage follow-up communications.",
-      link: "/callbacks",
     },
     {
       icon: <Calendar className="h-6 w-6" />,
@@ -252,124 +240,6 @@ export default function GettingStarted() {
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Start Guide */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <Clock className="h-6 w-6 text-emerald-600" />
-            Quick Start Guide
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold">
-                1
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 mb-1">
-                  Create Your First Customer
-                </h4>
-                <p className="text-slate-600 text-sm">
-                  Go to the{" "}
-                  <Link href="/customers" className="text-emerald-600 hover:underline">
-                    Customers
-                  </Link>{" "}
-                  page and add your first customer with their contact information and
-                  any notes.
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold">
-                2
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 mb-1">
-                  Create a Workshop Job
-                </h4>
-                <p className="text-slate-600 text-sm">
-                  Navigate to{" "}
-                  <Link href="/workshop" className="text-emerald-600 hover:underline">
-                    Workshop
-                  </Link>{" "}
-                  and use the job wizard to create a new job. Link it to a customer,
-                  add equipment details, and assign it to a staff member.
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold">
-                3
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 mb-1">
-                  Track Job Progress
-                </h4>
-                <p className="text-slate-600 text-sm">
-                  From the{" "}
-                  <Link href="/workshop" className="text-emerald-600 hover:underline">
-                    Workshop
-                  </Link>{" "}
-                  or{" "}
-                  <Link href="/orders" className="text-emerald-600 hover:underline">
-                    Orders
-                  </Link>{" "}
-                  view, update job statuses as work progresses, add job updates, record work
-                  completed, and track time spent on each job.
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold">
-                4
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 mb-1">
-                  Manage Tasks & Communication
-                </h4>
-                <p className="text-slate-600 text-sm">
-                  Use the{" "}
-                  <Link href="/tasks" className="text-emerald-600 hover:underline">
-                    Task Board
-                  </Link>{" "}
-                  to assign tasks and the{" "}
-                  <Link href="/messages" className="text-emerald-600 hover:underline">
-                    Messages
-                  </Link>{" "}
-                  feature to communicate with your team.
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-semibold">
-                5
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 mb-1">
-                  View Orders & Schedule
-                </h4>
-                <p className="text-slate-600 text-sm">
-                  Use the{" "}
-                  <Link href="/orders" className="text-emerald-600 hover:underline">
-                    Orders
-                  </Link>{" "}
-                  page to monitor all jobs and the{" "}
-                  <Link href="/calendar" className="text-emerald-600 hover:underline">
-                    Calendar
-                  </Link>{" "}
-                  to schedule work and track time entries.
-                </p>
-              </div>
-            </div>
           </div>
         </CardContent>
       </Card>

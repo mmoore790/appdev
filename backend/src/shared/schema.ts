@@ -37,6 +37,9 @@ export const businesses = pgTable("businesses", {
   subscriptionTier: text("subscription_tier"),
   userLimit: integer("user_limit"),
   textCredits: integer("text_credits").notNull().default(0),
+  // Stripe Connect (optional per-business)
+  stripeAccountId: text("stripe_account_id"),
+  stripeAccountStatus: text("stripe_account_status"),
   createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: 'string' }),
   isActive: boolean("is_active").notNull().default(true),
@@ -58,6 +61,8 @@ export const insertBusinessSchema = createInsertSchema(businesses).pick({
   subscriptionTier: true,
   userLimit: true,
   textCredits: true,
+  stripeAccountId: true,
+  stripeAccountStatus: true,
 });
 
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
@@ -211,9 +216,6 @@ export const users = pgTable("users", {
   gettingStartedDismissedAt: timestamp("getting_started_dismissed_at", { mode: 'string' }),
   // Onboarding status tracking
   onboardingCompletedAt: timestamp("onboarding_completed_at", { mode: 'string' }),
-  onboardingWelcomeDismissedAt: timestamp("onboarding_welcome_dismissed_at", { mode: 'string' }),
-  onboardingSetupCompletedAt: timestamp("onboarding_setup_completed_at", { mode: 'string' }),
-  onboardingChecklist: json("onboarding_checklist").$type<Record<string, boolean>>().default({}),
 }, (table) => {
   return {
     usernameBusinessIdx: index("IDX_user_username_business").on(table.username, table.businessId),
@@ -234,9 +236,6 @@ export const insertUserSchema = createInsertSchema(users).pick({
   businessId: true,
   gettingStartedDismissedAt: true,
   onboardingCompletedAt: true,
-  onboardingWelcomeDismissedAt: true,
-  onboardingSetupCompletedAt: true,
-  onboardingChecklist: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -449,6 +448,8 @@ export const jobPaymentRequestSchema = z.object({
   amount: z.number().positive("Amount must be positive"),
   customerEmail: z.string().email("Valid email required").optional(),
   description: z.string().optional(),
+  customSubject: z.string().optional(),
+  customBody: z.string().optional(), // HTML or plain text; if provided, used as the email body (user-editable template)
 });
 
 export type InsertJob = z.infer<typeof insertJobSchema>;
@@ -814,6 +815,44 @@ export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).pi
 
 export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
 export type PaymentRequest = typeof paymentRequests.$inferSelect;
+
+// Job Payments - multiple transactions per job (deposit via Stripe, balance via Cash)
+// balance_remaining = total cost (labour + parts) - sum(payments.amount); computed in API
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  jobId: integer("job_id").notNull(),
+  amount: integer("amount").notNull(), // pence
+  paymentMethod: text("payment_method").notNull(), // cash, card, bank_transfer, stripe, etc.
+  stripeReceiptUrl: text("stripe_receipt_url"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  paymentRequestId: integer("payment_request_id"), // link to payment_requests when paid via Stripe
+  recordedBy: integer("recorded_by"),
+  paidAt: timestamp("paid_at", { mode: 'string' }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: 'string' }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    jobIdIdx: index("IDX_payments_job_id").on(table.jobId),
+    businessIdIdx: index("IDX_payments_business_id").on(table.businessId),
+  };
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).pick({
+  businessId: true,
+  jobId: true,
+  amount: true,
+  paymentMethod: true,
+  stripeReceiptUrl: true,
+  stripePaymentIntentId: true,
+  paymentRequestId: true,
+  recordedBy: true,
+  paidAt: true,
+  notes: true,
+});
+
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
 
 // Parts on Order
 export const partsOnOrder = pgTable("parts_on_order", {

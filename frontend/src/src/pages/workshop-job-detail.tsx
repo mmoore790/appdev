@@ -15,7 +15,11 @@ import {
   UserCheck,
   Wrench,
   Trash2,
+  PoundSterling,
+  CreditCard,
+  Mail,
 } from "lucide-react";
+import { JobPaymentForm } from "@/components/job-payment-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +88,46 @@ interface OrderEntity {
   notes?: string | null;
 }
 
+interface JobPaymentDetails {
+  id: number;
+  amount: number;
+  paymentMethod: string;
+  paidAt?: string | null;
+  createdAt: string;
+  notes?: string | null;
+  paymentRequestId?: number | null;
+  proofUrl?: string | null;
+  request?: {
+    id: number;
+    checkoutReference: string;
+    description: string;
+    customerEmail: string;
+    status: string;
+    transactionId?: string | null;
+    transactionCode?: string | null;
+    authCode?: string | null;
+  } | null;
+  stripe?: {
+    paymentIntentId?: string | null;
+    paymentIntentStatus?: string | null;
+    chargeId?: string | null;
+    amount?: number | null;
+    currency?: string | null;
+    cardBrand?: string | null;
+    cardLast4?: string | null;
+    cardExpMonth?: number | null;
+    cardExpYear?: number | null;
+    cardFunding?: string | null;
+    cardCountry?: string | null;
+    cardNetwork?: string | null;
+    cardWalletType?: string | null;
+    billingName?: string | null;
+    billingEmail?: string | null;
+    billingPhone?: string | null;
+    receiptUrl?: string | null;
+  } | null;
+}
+
 export default function WorkshopJobDetail() {
   const [, params] = useRoute<{ jobId: string }>("/workshop/jobs/:jobId");
   const [, navigate] = useLocation();
@@ -119,6 +163,18 @@ export default function WorkshopJobDetail() {
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [machineImageEnlargedOpen, setMachineImageEnlargedOpen] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState("");
+  const [paymentFormOpen, setPaymentFormOpen] = useState(false);
+  const [paymentRequestDialogOpen, setPaymentRequestDialogOpen] = useState(false);
+  const [paymentRequestEditMode, setPaymentRequestEditMode] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<number | null>(null);
+  const [paymentDetailsOpen, setPaymentDetailsOpen] = useState(false);
+  const [paymentRequestForm, setPaymentRequestForm] = useState({
+    customerEmail: "",
+    amount: "",
+    description: "",
+    customSubject: "",
+    customBody: "",
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const printOverviewRef = useRef<HTMLDivElement>(null);
@@ -177,6 +233,16 @@ export default function WorkshopJobDetail() {
   const { data: companyInfo } = useQuery<any>({
     queryKey: ["/api/business/me"],
   });
+  const { data: connectStatus } = useQuery<{
+    configured?: boolean;
+    connected?: boolean;
+    chargesEnabled?: boolean;
+  }>({
+    queryKey: ["/api/stripe/connect/status"],
+  });
+  const paymentsEnabled = Boolean(
+    connectStatus?.configured && connectStatus?.connected && connectStatus?.chargesEnabled
+  );
 
   // Internal job notes
   const { data: internalNotes = [], isLoading: internalNotesLoading } = useQuery<Array<{
@@ -188,6 +254,79 @@ export default function WorkshopJobDetail() {
     queryKey: [`/api/job-sheet/${numericJobId}/internal-notes`],
     enabled: Number.isFinite(numericJobId) && numericJobId > 0,
   });
+
+  // Payment history (payments table + total cost, balance remaining)
+  const { data: paymentHistory, refetch: refetchPaymentHistory } = useQuery<{
+    job: any;
+    totalCost: number;
+    totalPaid: number;
+    balanceRemaining: number;
+    payments: Array<{
+      id: number;
+      amount: number;
+      paymentMethod: string;
+      stripeReceiptUrl?: string;
+      stripePaymentIntentId?: string;
+      paidAt?: string;
+      notes?: string;
+      createdAt: string;
+    }>;
+    paymentRequests: any[];
+  } | null>({
+    queryKey: [`/api/jobs/${numericJobId}/payments`],
+    enabled: Number.isFinite(numericJobId) && numericJobId > 0,
+    staleTime: 0, // Always refetch so balance due stays in sync with Job Sheet
+    refetchInterval: 15000,
+  });
+
+  const refreshJobPaymentsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/jobs/${numericJobId}/payments/refresh`);
+    },
+  });
+
+  const { data: paymentDetails, isLoading: paymentDetailsLoading } = useQuery<JobPaymentDetails | null>({
+    queryKey: [`/api/jobs/${numericJobId}/payments/${selectedPaymentId}/details`],
+    queryFn: () => apiRequest<JobPaymentDetails>(`/api/jobs/${numericJobId}/payments/${selectedPaymentId}/details`),
+    enabled: Number.isFinite(numericJobId) && numericJobId > 0 && paymentDetailsOpen && selectedPaymentId !== null,
+    staleTime: 0,
+    retry: 1,
+  });
+
+  const handleOpenPaymentDetails = (paymentId: number) => {
+    setSelectedPaymentId(paymentId);
+    setPaymentDetailsOpen(true);
+  };
+
+  useEffect(() => {
+    if (!Number.isFinite(numericJobId) || numericJobId <= 0) return;
+    const hasPendingRequest = (paymentHistory?.paymentRequests ?? []).some(
+      (request: any) => request.status === "pending" && !!request.checkoutId
+    );
+    if (!hasPendingRequest) return;
+
+    const refreshStatuses = async () => {
+      if (refreshJobPaymentsMutation.isPending) return;
+      try {
+        await refreshJobPaymentsMutation.mutateAsync();
+        await refetchPaymentHistory();
+      } catch {
+        // Silent fail; periodic polling will retry.
+      }
+    };
+
+    void refreshStatuses();
+    const timer = setInterval(() => {
+      void refreshStatuses();
+    }, 15000);
+
+    return () => clearInterval(timer);
+  }, [
+    numericJobId,
+    paymentHistory?.paymentRequests,
+    refreshJobPaymentsMutation,
+    refetchPaymentHistory,
+  ]);
 
   const createInternalNoteMutation = useMutation({
     mutationFn: async (noteText: string) => {
@@ -204,6 +343,55 @@ export default function WorkshopJobDetail() {
       toast({ title: "Error", description: error?.message ?? "Failed to add note", variant: "destructive" });
     },
   });
+
+  const sendPaymentRequestMutation = useMutation({
+    mutationFn: async (data: {
+      customerEmail: string;
+      amount: number;
+      description?: string;
+      customSubject?: string;
+      customBody?: string;
+    }) => {
+      return apiRequest("POST", `/api/jobs/${numericJobId}/payments/request`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Payment request sent", description: "Customer has been emailed." });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${numericJobId}/payments`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${numericJobId}`] });
+      void refetchPaymentHistory();
+      void refetchJob();
+      setPaymentRequestDialogOpen(false);
+      setPaymentRequestEditMode(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message ?? "Failed to send payment request", variant: "destructive" });
+    },
+  });
+
+  const openPaymentRequestDialog = () => {
+    if (!job) return;
+    if (!paymentsEnabled) {
+      toast({
+        title: "Payments unavailable",
+        description: "Payments need to be set up.",
+      });
+      return;
+    }
+    const email = job.customerEmail || "";
+    const defaultDescription = `Service payment for job ${job.jobId}`;
+    setPaymentRequestForm({
+      customerEmail: email,
+      amount: paymentHistory?.balanceRemaining != null && paymentHistory.balanceRemaining > 0
+        ? String(paymentHistory.balanceRemaining.toFixed(2))
+        : (paymentHistory?.totalCost != null ? String(paymentHistory.totalCost.toFixed(2)) : ""),
+      description: defaultDescription,
+      customSubject: `Payment request - Job ${job.jobId}`,
+      customBody: "",
+    });
+    setPaymentRequestEditMode(false);
+    setPaymentRequestDialogOpen(true);
+  };
 
   // Print overview handler
   const handlePrintOverview = useReactToPrint({
@@ -1213,6 +1401,25 @@ export default function WorkshopJobDetail() {
                     equipmentDescription={job.equipmentDescription}
                   />
                 )}
+                {job && (
+                  <PaymentsPanel
+                    job={job}
+                    paymentHistory={paymentHistory}
+                    onRequestPayment={openPaymentRequestDialog}
+                    onRecordPayment={() => {
+                      if (!paymentsEnabled) {
+                        toast({
+                          title: "Payments unavailable",
+                          description: "Payments need to be set up.",
+                        });
+                        return;
+                      }
+                      setPaymentFormOpen(true);
+                    }}
+                    onOpenPaymentDetails={handleOpenPaymentDetails}
+                    paymentsEnabled={paymentsEnabled}
+                  />
+                )}
                 <StatusTimeline
                   job={job ? {
                     id: job.id,
@@ -1258,6 +1465,7 @@ export default function WorkshopJobDetail() {
                     jobId={job.id}
                     onWorkAdded={() => {
                       refetchJob();
+                      void refetchPaymentHistory();
                     }}
                   />
                 )}
@@ -1282,6 +1490,25 @@ export default function WorkshopJobDetail() {
                     }
                     customerName={job.customerName}
                     equipmentDescription={job.equipmentDescription}
+                  />
+                )}
+                {job && (
+                  <PaymentsPanel
+                    job={job}
+                    paymentHistory={paymentHistory}
+                    onRequestPayment={openPaymentRequestDialog}
+                    onRecordPayment={() => {
+                      if (!paymentsEnabled) {
+                        toast({
+                          title: "Payments unavailable",
+                          description: "Payments need to be set up.",
+                        });
+                        return;
+                      }
+                      setPaymentFormOpen(true);
+                    }}
+                    onOpenPaymentDetails={handleOpenPaymentDetails}
+                    paymentsEnabled={paymentsEnabled}
                   />
                 )}
                 <StatusTimeline
@@ -1484,6 +1711,182 @@ export default function WorkshopJobDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Dialog
+        open={paymentDetailsOpen}
+        onOpenChange={(open) => {
+          setPaymentDetailsOpen(open);
+          if (!open) setSelectedPaymentId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payment details</DialogTitle>
+            <DialogDescription>
+              Details recorded for this transaction.
+            </DialogDescription>
+          </DialogHeader>
+          {paymentDetailsLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          ) : paymentDetails ? (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-lg border border-neutral-200 p-3 space-y-1">
+                <p><span className="text-neutral-500">Amount:</span> <span className="font-medium">£{paymentDetails.amount.toFixed(2)}</span></p>
+                <p><span className="text-neutral-500">Method:</span> {paymentDetails.paymentMethod}</p>
+                <p><span className="text-neutral-500">Paid at:</span> {paymentDetails.paidAt ? formatDate(paymentDetails.paidAt) : "—"}</p>
+                <p><span className="text-neutral-500">Recorded:</span> {formatDate(paymentDetails.createdAt)}</p>
+              </div>
+
+              {paymentDetails.request && (
+                <div className="rounded-lg border border-neutral-200 p-3 space-y-1">
+                  <p className="font-medium text-neutral-900 mb-1">Request linkage</p>
+                  <p><span className="text-neutral-500">Reference:</span> {paymentDetails.request.checkoutReference}</p>
+                  <p><span className="text-neutral-500">Customer email:</span> {paymentDetails.request.customerEmail || "—"}</p>
+                  <p><span className="text-neutral-500">Request status:</span> {paymentDetails.request.status || "—"}</p>
+                  <p><span className="text-neutral-500">Transaction code:</span> {paymentDetails.request.transactionCode || "—"}</p>
+                  <p><span className="text-neutral-500">Auth code:</span> {paymentDetails.request.authCode || "—"}</p>
+                </div>
+              )}
+
+              {paymentDetails.notes && (
+                <div className="rounded-lg border border-neutral-200 p-3">
+                  <p className="text-neutral-500 text-xs uppercase font-semibold mb-1">Notes</p>
+                  <p className="text-neutral-700 whitespace-pre-wrap">{paymentDetails.notes}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-neutral-500">Could not load payment details.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Request Email Dialog - preview with editable template */}
+      <Dialog open={paymentRequestDialogOpen} onOpenChange={setPaymentRequestDialogOpen}>
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send payment request</DialogTitle>
+            <DialogDescription>
+              The customer will receive an email. You can edit the subject and message below before sending.
+            </DialogDescription>
+          </DialogHeader>
+          {paymentRequestEditMode ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase text-neutral-500 mb-1 block">Customer email</label>
+                <Input
+                  value={paymentRequestForm.customerEmail}
+                  onChange={(e) => setPaymentRequestForm((f) => ({ ...f, customerEmail: e.target.value }))}
+                  placeholder="customer@example.com"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase text-neutral-500 mb-1 block">Amount (£)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={paymentRequestForm.amount}
+                  onChange={(e) => setPaymentRequestForm((f) => ({ ...f, amount: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase text-neutral-500 mb-1 block">Description</label>
+                <Input
+                  value={paymentRequestForm.description}
+                  onChange={(e) => setPaymentRequestForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="Service payment for job"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase text-neutral-500 mb-1 block">Email subject</label>
+                <Input
+                  value={paymentRequestForm.customSubject}
+                  onChange={(e) => setPaymentRequestForm((f) => ({ ...f, customSubject: e.target.value }))}
+                  placeholder="Payment request - Job ..."
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase text-neutral-500 mb-1 block">Email message (optional)</label>
+                <Textarea
+                  value={paymentRequestForm.customBody}
+                  onChange={(e) => setPaymentRequestForm((f) => ({ ...f, customBody: e.target.value }))}
+                  placeholder="Type your message (or leave blank to use the default message)."
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm">
+              <p className="text-neutral-600 mb-2">
+                <strong>To:</strong> {paymentRequestForm.customerEmail || "(enter email)"}
+              </p>
+              <p className="text-neutral-600 mb-2">
+                <strong>Amount:</strong> £{paymentRequestForm.amount || "0.00"}
+              </p>
+              <p className="text-neutral-600 mb-2">
+                <strong>Subject:</strong> {paymentRequestForm.customSubject || `Payment request - £${paymentRequestForm.amount || "0"}`}
+              </p>
+              <p className="text-neutral-700 whitespace-pre-wrap">
+                {paymentRequestForm.customBody
+                  || `We're writing to request payment. Please use the secure link in the email to pay £${paymentRequestForm.amount || "0"}.\n\nDescription: ${paymentRequestForm.description || "Service payment"}.`}
+              </p>
+            </div>
+          )}
+          <div className="flex justify-between pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPaymentRequestEditMode((v) => !v)}
+            >
+              {paymentRequestEditMode ? "Preview" : "Edit"}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPaymentRequestDialogOpen(false)}>Cancel</Button>
+              <Button
+                className="bg-green-700 hover:bg-green-800"
+                disabled={!paymentRequestForm.customerEmail || !paymentRequestForm.amount || sendPaymentRequestMutation.isPending}
+                onClick={() => {
+                  sendPaymentRequestMutation.mutate({
+                    customerEmail: paymentRequestForm.customerEmail,
+                    amount: parseFloat(paymentRequestForm.amount) || 0,
+                    description: paymentRequestForm.description || undefined,
+                    customSubject: paymentRequestForm.customSubject || undefined,
+                    customBody: paymentRequestForm.customBody || undefined,
+                  });
+                }}
+              >
+                {sendPaymentRequestMutation.isPending ? "Sending…" : "Send email"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record payment / full payment form */}
+      {job && (
+        <JobPaymentForm
+          job={{
+            ...job,
+            paymentStatus: (job as any).paymentStatus,
+            paymentAmount: (job as any).paymentAmount,
+            paymentMethod: (job as any).paymentMethod,
+            paymentNotes: (job as any).paymentNotes,
+            invoiceNumber: (job as any).invoiceNumber,
+            paidAt: (job as any).paidAt,
+          }}
+          open={paymentFormOpen}
+          onClose={() => {
+            setPaymentFormOpen(false);
+            void refetchPaymentHistory();
+            void refetchJob();
+          }}
+        />
+      )}
+
       {/* Hidden print overview component */}
       {job && (
         <div className="hidden">
@@ -1518,6 +1921,137 @@ function MetaItem({ icon, label, value, subValue, className }: MetaItemProps) {
       <div className="mt-2 text-sm font-medium text-neutral-600 break-words">{value || "—"}</div>
       {subValue && <div className="mt-1 text-xs text-neutral-500 break-words">{subValue}</div>}
     </div>
+  );
+}
+
+interface PaymentsPanelProps {
+  job: JobEntity;
+  paymentHistory: {
+    totalCost: number;
+    totalPaid: number;
+    balanceRemaining: number;
+    payments: Array<{
+      id: number;
+      amount: number;
+      paymentMethod: string;
+      stripeReceiptUrl?: string;
+      stripePaymentIntentId?: string;
+      paidAt?: string;
+      notes?: string;
+      createdAt: string;
+    }>;
+  } | null;
+  onRequestPayment: () => void;
+  onRecordPayment: () => void;
+  onOpenPaymentDetails: (paymentId: number) => void;
+  paymentsEnabled: boolean;
+}
+
+function PaymentsPanel({
+  job,
+  paymentHistory,
+  onRequestPayment,
+  onRecordPayment,
+  onOpenPaymentDetails,
+  paymentsEnabled,
+}: PaymentsPanelProps) {
+  const totalCost = paymentHistory?.totalCost ?? 0;
+  const totalPaid = paymentHistory?.totalPaid ?? 0;
+  const balanceRemaining = paymentHistory?.balanceRemaining ?? 0;
+  const payments = paymentHistory?.payments ?? [];
+  const paymentStatusLabel =
+    totalCost > 0 && balanceRemaining <= 0
+      ? "Paid in full"
+      : totalPaid > 0
+        ? "Part paid"
+        : "Unpaid";
+
+  return (
+    <Card
+      className={`border-green-100 ${!paymentsEnabled ? "bg-neutral-50 border-neutral-300 opacity-60 grayscale-[0.2]" : ""}`}
+      aria-disabled={!paymentsEnabled}
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-base font-semibold text-neutral-800 flex items-center gap-2">
+          <PoundSterling size={16} />
+          Payments
+        </CardTitle>
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1 text-green-700 hover:bg-green-50"
+            onClick={onRequestPayment}
+            disabled={!paymentsEnabled}
+          >
+            <Mail size={14} />
+            Request
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1 text-green-700 hover:bg-green-50"
+            onClick={onRecordPayment}
+            disabled={!paymentsEnabled}
+          >
+            <CreditCard size={14} />
+            Record
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!paymentsEnabled && (
+          <div className="rounded-md border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm text-neutral-700">
+            Payments need to be set up.
+          </div>
+        )}
+        {totalCost > 0 && (
+          <div className="text-sm">
+            <span className="text-neutral-500">Total cost</span>
+            <p className="font-medium text-base">£{totalCost.toFixed(2)}</p>
+          </div>
+        )}
+        <div className="text-sm">
+          <span className="text-neutral-500">Balance due</span>
+          <p className="font-medium text-lg">
+            {balanceRemaining > 0
+              ? `£${balanceRemaining.toFixed(2)}`
+              : totalCost > 0
+                ? "£0.00 (Paid)"
+                : "—"}
+          </p>
+          {totalCost > 0 && (
+            <p className="text-xs text-neutral-500 mt-1">
+              {paymentStatusLabel} {totalPaid > 0 ? `• Paid £${totalPaid.toFixed(2)}` : ""}
+            </p>
+          )}
+        </div>
+        {payments.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-neutral-100">
+            <span className="text-xs font-semibold uppercase text-neutral-500">Transactions</span>
+            {payments.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => paymentsEnabled && onOpenPaymentDetails(p.id)}
+                className="w-full text-left rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 text-sm hover:border-green-300 hover:bg-green-50/40 transition-colors"
+                disabled={!paymentsEnabled}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <span className="font-medium">£{p.amount.toFixed(2)}</span>
+                  <Badge variant="outline" className="text-xs capitalize">{p.paymentMethod}</Badge>
+                </div>
+                {p.paidAt && <p className="text-xs text-neutral-500 mt-1">{formatDate(p.paidAt)}</p>}
+                {p.stripePaymentIntentId && (
+                  <p className="text-xs text-neutral-500 mt-1">Ref: {p.stripePaymentIntentId}</p>
+                )}
+                {p.notes && <p className="text-xs text-neutral-500 mt-1">{p.notes}</p>}
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

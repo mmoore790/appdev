@@ -1,4 +1,4 @@
-import { InsertPaymentRequest, PaymentRequest } from "@shared/schema";
+import { InsertPaymentRequest, PaymentRequest, Payment, InsertPayment } from "@shared/schema";
 import { IStorage, storage } from "../storage";
 
 export class PaymentRepository {
@@ -10,6 +10,10 @@ export class PaymentRepository {
 
   findByReference(reference: string, businessId: number): Promise<PaymentRequest | undefined> {
     return this.store.getPaymentRequestByReference(reference, businessId);
+  }
+
+  findByReferenceOnly(reference: string): Promise<PaymentRequest | undefined> {
+    return this.store.getPaymentRequestByReferenceOnly(reference);
   }
 
   findByJob(jobId: number, businessId: number): Promise<PaymentRequest[]> {
@@ -40,8 +44,33 @@ export class PaymentRepository {
     return this.store.createJobPaymentRequest(jobId, requestData, createdBy);
   }
 
-  completeJobPaymentFromStripe(paymentRequestId: number) {
-    return this.store.completeJobPaymentFromStripe(paymentRequestId);
+  completeJobPaymentFromStripe(
+    paymentRequestId: number,
+    details?: {
+      stripeReceiptUrl?: string;
+      stripePaymentIntentId?: string;
+      paidAt?: string;
+      notes?: string;
+      paymentMethod?: string;
+    }
+  ) {
+    return this.store.completeJobPaymentFromStripe(paymentRequestId, details);
+  }
+
+  getPaymentsByJobId(jobId: number, businessId: number): Promise<Payment[]> {
+    return this.store.getPaymentsByJobId(jobId, businessId);
+  }
+
+  getPaymentById(id: number, businessId: number): Promise<Payment | undefined> {
+    return this.store.getPaymentById(id, businessId);
+  }
+
+  updatePaymentById(id: number, data: Partial<InsertPayment>, businessId: number): Promise<Payment | undefined> {
+    return this.store.updatePaymentById(id, data, businessId);
+  }
+
+  getJobTotalCost(jobId: number, businessId: number): Promise<number> {
+    return this.store.getJobTotalCost(jobId, businessId);
   }
 
   markJobAsPaid(jobId: number, paymentData: any, recordedBy: number) {

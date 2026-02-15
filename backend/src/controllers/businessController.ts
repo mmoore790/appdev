@@ -53,6 +53,9 @@ export class BusinessController {
       delete parsed.subscriptionTier;
       delete parsed.userLimit;
       delete parsed.textCredits;
+      // Stripe Connect fields are set only by backend (Connect onboarding)
+      delete parsed.stripeAccountId;
+      delete parsed.stripeAccountStatus;
       const updates = parsed as Parameters<typeof storage.updateBusiness>[1];
 
       const updated = await storage.updateBusiness(businessId, updates);
